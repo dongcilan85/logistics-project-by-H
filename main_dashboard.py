@@ -2,7 +2,14 @@ import streamlit as st
 from supabase import create_client, Client
 import pandas as pd
 import plotly.express as px
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+KST = timezone(timedelta(hours=9))
+today_kst = datetime.now(KST).date()
+
+# 데이터 필터링 시
+df['work_date'] = pd.to_datetime(df['work_date']).dt.date
+today_df = df[df['work_date'] == today_kst]
 
 # 1. Supabase 연결 설정
 url = st.secrets["supabase"]["url"]
