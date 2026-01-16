@@ -1,6 +1,8 @@
 import streamlit as st
 from supabase import create_client, Client
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+
+KST = timezone(timedelta(hours=9))
 
 # 1. 연결 설정
 url = st.secrets["supabase"]["url"]
@@ -26,12 +28,14 @@ if not active_task:
         
         col_start, col_manual = st.columns(2)
         if col_start.button("🚀 작업 시작 (스톱워치)", use_container_width=True, type="primary"):
+            # 현재 한국 시간을 ISO 형식으로 저장
+            now_kst = datetime.now(KST).isoformat()
             supabase.table("active_tasks").upsert({
                 "id": 1,
                 "task_type": task_type,
                 "workers": workers,
                 "quantity": qty,
-                "last_started_at": datetime.now(timezone.utc).isoformat(),
+                "last_started_at": now_kst,
                 "status": "running",
                 "accumulated_seconds": 0
             }).execute()
@@ -95,7 +99,7 @@ else:
 
     # [작업 종료 및 자동 업로드]
     if col_end.button("🏁 작업 종료 및 업로드", use_container_width=True):
-        now = datetime.now(timezone.utc)
+        now_kst = datetime.now(KST)
         total_sec = accumulated
         if status == "running":
             total_sec += (now - last_start).total_seconds()
@@ -104,7 +108,7 @@ else:
         
         # 1. 즉시 업로드 (work_logs 테이블로 이동)
         supabase.table("work_logs").insert({
-            "work_date": datetime.now().strftime("%Y-%m-%d"),
+            "work_date": now_kst.strftime("%Y-%m-%d"),
             "task": active_task['task_type'],
             "workers": active_task['workers'],
             "quantity": active_task['quantity'],
