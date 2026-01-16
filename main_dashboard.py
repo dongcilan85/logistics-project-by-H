@@ -4,91 +4,114 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime, timedelta
 
-# 1. 연결 및 설정
+# 1. Supabase 연결 설정
 url = st.secrets["supabase"]["url"]
 key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 
-st.set_page_config(page_title="물류 생산성 분석 시스템", layout="wide")
+st.set_page_config(page_title="IWP 물류 통합 관리 시스템", layout="wide")
 
-# 사이드바 설정 (필터 및 변수)
-st.sidebar.header("🛠️ 대시보드 설정")
+# --- [사이드바: 대시보드 제어판] ---
+st.sidebar.header("🛠️ 관리자 설정")
 view_option = st.sidebar.selectbox("조회 단위", ["일간", "주간", "월간"])
-target_lph = st.sidebar.number_input("목표 LPH 설정", value=150)
-work_hours = st.sidebar.slider("표준 작업 시간 (시간)", 1, 12, 8)
+target_lph = st.sidebar.number_input("목표 LPH (EA/h)", value=150)
+std_work_hours = st.sidebar.slider("표준 작업 시간 (시간)", 1, 12, 8)
 
-st.title(f"📊 물류 생산성 {view_option} 리포트")
+st.title("🏰 물류 중앙 통제 및 생산성 대시보드")
 
-# 2. 데이터 로드 및 기본 전처리
-response = supabase.table("work_logs").select("*").execute()
-df = pd.DataFrame(response.data)
-
-if not df.empty:
-    df['work_date'] = pd.to_datetime(df['work_date'])
-    df['LPH'] = df['quantity'] / (df['workers'] * df['duration']).replace(0, 0.001)
+# --- [파트 1: 실시간 중앙 모니터링 & 제어] ---
+st.header("🕵️ 실시간 현장 작업 현황")
+try:
+    active_res = supabase.table("active_tasks").select("*").execute()
+    active_df = pd.DataFrame(active_res.data)
     
-    # --- [기능 1] 일/주/월 단위 그룹화 ---
-    if view_option == "주간":
-        df['display_date'] = df['work_date'].dt.to_period('W').apply(lambda r: r.start_time)
-    elif view_option == "월간":
-        df['display_date'] = df['work_date'].dt.to_period('M').apply(lambda r: r.start_time)
+    if not active_df.empty:
+        cols = st.columns(3)
+        for i, (_, row) in enumerate(active_df.iterrows()):
+            with cols[i % 3]:
+                status_color = "green" if row['status'] == 'running' else "orange"
+                st.info(f"👤 **{row['user_name']}**님: {row['task_type']}\n\n상태: :{status_color}[{row['status'].upper()}]")
+                if st.button(f"⚠️ {row['user_name']} 세션 강제 종료", key=f"del_{row['id']}"):
+                    supabase.table("active_tasks").delete().eq("id", row['id']).execute()
+                    st.warning(f"{row['user_name']}님의 세션이 종료되었습니다.")
+                    st.rerun()
     else:
-        df['display_date'] = df['work_date']
+        st.write("현재 현장에서 진행 중인 작업이 없습니다.")
+except Exception as e:
+    st.error(f"모니터링 데이터를 불러오는데 실패했습니다: {e}")
 
-    # --- [기능 2] 전월 대비 신장율 (LPH 기준) ---
-    st.subheader("🚀 전월 대비 성장 지표")
-    current_month = datetime.now().month
-    last_month = (datetime.now().replace(day=1) - timedelta(days=1)).month
-    
-    curr_m_lph = df[df['work_date'].dt.month == current_month]['LPH'].mean()
-    last_m_lph = df[df['work_date'].dt.month == last_month]['LPH'].mean()
-    
-    if last_m_lph > 0:
-        growth_rate = ((curr_m_lph - last_m_lph) / last_m_lph) * 100
+st.divider()
+
+# --- [파트 2: 생산성 데이터 분석] ---
+st.header(f"📈 {view_option} 생산성 분석 리포트")
+
+# 데이터 로드
+try:
+    res = supabase.table("work_logs").select("*").execute()
+    df = pd.DataFrame(res.data)
+
+    if not df.empty:
+        # 데이터 전처리
+        df['work_date'] = pd.to_datetime(df['work_date'])
+        df['LPH'] = df['quantity'] / (df['workers'] * df['duration']).replace(0, 0.001)
+        
+        # [지표 1] 전월 대비 신장율 계산
+        today = datetime.now()
+        this_month = today.month
+        last_month = (today.replace(day=1) - timedelta(days=1)).month
+        
+        curr_m_lph = df[df['work_date'].dt.month == this_month]['LPH'].mean()
+        last_m_lph = df[df['work_date'].dt.month == last_month]['LPH'].mean()
+        
+        growth_rate = ((curr_m_lph - last_m_lph) / last_m_lph * 100) if last_m_lph and not pd.isna(last_m_lph) else 0
+
+        # KPI 카드 표시
+        k1, k2, k3 = st.columns(3)
+        k1.metric("이번 달 평균 LPH", f"{curr_m_lph:.1f} EA/h", delta=f"{growth_rate:.1f}% (전월대비)")
+        k2.metric("총 누적 작업량", f"{df['quantity'].sum():,} EA")
+        k3.metric("평균 목표 달성률", f"{(df['LPH'].mean()/target_lph*100):.1f}%")
+
+        # [지표 2] 기간별 필터링 추이 그래프
+        if view_option == "주간":
+            df['display_date'] = df['work_date'].dt.to_period('W').apply(lambda r: r.start_time)
+        elif view_option == "월간":
+            df['display_date'] = df['work_date'].dt.to_period('M').apply(lambda r: r.start_time)
+        else:
+            df['display_date'] = df['work_date']
+
+        chart_data = df.groupby('display_date')['LPH'].mean().reset_index()
+        fig_trend = px.line(chart_data, x='display_date', y='LPH', markers=True, title=f"{view_option} 생산성 추이")
+        fig_trend.add_hline(y=target_lph, line_dash="dash", line_color="red", annotation_text="목표 LPH")
+        st.plotly_chart(fig_trend, use_container_width=True)
+
+        # --- [파트 3: 인력 배치 시뮬레이션] ---
+        st.divider()
+        st.header("💡 작업별 필요 인력 예측 계산기")
+        
+        task_stats = df.groupby('task')['LPH'].mean().reset_index()
+        
+        col_calc1, col_calc2 = st.columns([1, 2])
+        with col_calc1:
+            sel_task = st.selectbox("분석 대상 작업", task_stats['task'].unique())
+            target_qty = st.number_input("목표 물량 입력 (EA)", min_value=0, value=1000)
+            
+            task_lph = task_stats[task_stats['task'] == sel_task]['LPH'].values[0]
+            # 필요 인원 = 물량 / (LPH * 작업시간)
+            needed_p = target_qty / (task_lph * std_work_hours)
+            
+            st.success(f"✅ **{sel_task}** {target_qty:,}EA 처리 시\n\n**필요 인원: 약 {needed_p:.1f}명**")
+            st.caption(f"(근거: 해당 작업 과거 평균 LPH {task_lph:.1f} 기준)")
+
+        with col_calc2:
+            task_stats['필요인원(1000EA기준)'] = 1000 / (task_stats['LPH'] * std_work_hours)
+            fig_bar = px.bar(task_stats, x='task', y='필요인원(1000EA기준)', color='task', title="작업별 1,000개 처리 시 투입 인원 비교")
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+        # 상세 로그
+        st.subheader("📋 전체 작업 로그")
+        st.dataframe(df.sort_values('work_date', ascending=False), use_container_width=True)
+
     else:
-        growth_rate = 0
-
-    c1, c2, c3 = st.columns(3)
-    c1.metric("이번 달 평균 LPH", f"{curr_m_lph:.1f} EA/h")
-    c2.metric("지난 달 평균 LPH", f"{last_m_lph:.1f} EA/h")
-    c3.metric("전월 대비 신장율", f"{growth_rate:.1f}%", delta=f"{growth_rate:.1f}%")
-
-    st.divider()
-
-    # --- [기능 3] 작업별 필요 인력 계산 (Planning) ---
-    st.subheader("💡 작업별 필요 인력 예측")
-    st.info(f"선택된 단위({view_option})의 평균 LPH를 기반으로, 목표 물량을 처리하기 위한 인원을 계산합니다.")
-    
-    # 작업별 평균 LPH 추출
-    task_avg_lph = df.groupby('task')['LPH'].mean().reset_index()
-    
-    plan_col1, plan_col2 = st.columns([1, 2])
-    with plan_col1:
-        selected_task = st.selectbox("분석할 작업 선택", task_avg_lph['task'].unique())
-        planned_qty = st.number_input("내일 예상 물량 (EA)", min_value=0, value=1000)
-        
-        current_task_lph = task_avg_lph[task_avg_lph['task'] == selected_task]['LPH'].values[0]
-        # 필요 인원 = 목표물량 / (평균LPH * 작업시간)
-        needed_manpower = planned_qty / (current_task_lph * work_hours)
-        
-        st.success(f"**추천 인원: 약 {needed_manpower:.1f} 명**")
-        st.caption(f"(기준: {selected_task} 평균 LPH {current_task_lph:.1f} 기준)")
-
-    with plan_col2:
-        # 작업별 필요 인원 시뮬레이션 차트
-        task_avg_lph['필요인원(1000EA기준)'] = 1000 / (task_avg_lph['LPH'] * work_hours)
-        fig_plan = px.bar(task_avg_lph, x='task', y='필요인원(1000EA기준)', 
-                          title="작업별 1,000개 처리 시 필요 인원 비교", color='task')
-        st.plotly_chart(fig_plan, use_container_width=True)
-
-    st.divider()
-
-    # --- [기능 4] 추이 그래프 ---
-    st.subheader(f"{view_option} 생산성 추이")
-    chart_data = df.groupby('display_date')['LPH'].mean().reset_index()
-    fig_line = px.line(chart_data, x='display_date', y='LPH', markers=True)
-    fig_line.add_hline(y=target_lph, line_dash="dash", line_color="red")
-    st.plotly_chart(fig_line, use_container_width=True)
-
-else:
-    st.info("데이터가 부족하여 분석을 시작할 수 없습니다.")
+        st.info("저장된 데이터가 없습니다. 현장 페이지에서 입력을 먼저 진행해 주세요.")
+except Exception as e:
+    st.error(f"데이터 로드 중 오류가 발생했습니다: {e}")
