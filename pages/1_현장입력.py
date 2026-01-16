@@ -23,7 +23,7 @@ if session_name:
         # --- [1단계: 정보 입력 및 시작] ---
         st.subheader(f"📝 [{session_name}] 새 작업 시작")
         with st.container(border=True):
-            task_type = st.selectbox("작업 구분", ["입고", "출고", "패키징", "소분", "기타"])
+            task_type = st.selectbox("작업 구분", ["홈쇼핑", "올리브영", "면세점", "기획팩", "로켓/컬리", "선물세트"])
             workers = st.number_input("작업 인원 (명)", min_value=1, value=1)
             qty = st.number_input("작업량 (Box/EA)", min_value=0, value=0)
             
@@ -95,4 +95,3 @@ if session_name:
             st.rerun()
 else:
     st.warning("⚠️ 기록을 시작하거나 불러오려면 이름을 입력해 주세요.")
-
