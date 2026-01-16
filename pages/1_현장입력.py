@@ -12,7 +12,7 @@ st.title("📱 현장 작업 기록 (다중 모드)")
 
 # --- [세션 식별 단계] ---
 # 개인 정보가 아니라, 단순히 "어떤 기록"인지를 구분하는 용도입니다.
-session_name = st.text_input("작업자 성함 또는 작업대 번호를 입력하세요", placeholder="예: 동혁, A조, 1번라인")
+session_name = st.text_input("작업자 성함 또는 작업대 번호를 입력하세요", placeholder="예: A동, B동, 허브")
 
 if session_name:
     # 해당 식별자로 진행 중인 작업이 있는지 조회
@@ -95,3 +95,4 @@ if session_name:
             st.rerun()
 else:
     st.warning("⚠️ 기록을 시작하거나 불러오려면 이름을 입력해 주세요.")
+
