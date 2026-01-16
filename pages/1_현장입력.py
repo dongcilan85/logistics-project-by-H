@@ -57,4 +57,3 @@ with st.form("input_form", clear_on_submit=True):
         supabase.table("work_logs").insert(data).execute()
         st.success("현장 데이터가 서버로 전송되었습니다! ✅")
         if "calc_time" in st.session_state: del st.session_state.calc_time
-
