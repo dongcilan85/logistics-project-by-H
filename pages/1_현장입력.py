@@ -9,23 +9,32 @@ supabase: Client = create_client(url, key)
 
 st.title("📱 현장 작업 입력 (서브)")
 
-# 스톱워치 로직 (기존과 동일)
-if "start_time" not in st.session_state: st.session_state.start_time = None
-if "is_running" not in st.session_state: st.session_state.is_running = False
-
-st.subheader("⏱️ 시간 측정")
-c1, c2 = st.columns(2)
-with c1:
-    if st.button("🚀 시작", use_container_width=True, disabled=st.session_state.is_running):
+# 시작/종료 통합 버튼
+if not st.session_state.is_running:
+    # 1. 시작 전 상태
+    if st.button("🚀 작업 시작", use_container_width=True, type="secondary"):
         st.session_state.start_time = datetime.now()
         st.session_state.is_running = True
         st.rerun()
-with c2:
-    if st.button("🛑 종료", use_container_width=True, disabled=not st.session_state.is_running):
+else:
+    # 2. 진행 중 상태 (버튼을 누르면 종료됨)
+    # type="primary"를 쓰면 강조 색상(보통 빨간색 또는 파란색)이 적용됩니다.
+    if st.button("🛑 작업 종료 (진행 중...)", use_container_width=True, type="primary"):
         duration = (datetime.now() - st.session_state.start_time).total_seconds() / 3600
         st.session_state.calc_time = round(duration, 2)
         st.session_state.is_running = False
         st.rerun()
+
+# 진행 상태 메시지 표시
+if st.session_state.is_running:
+    # 작업 시작 후 얼마나 지났는지 보여주면 작업자가 더 안심합니다.
+    elapsed = datetime.now() - st.session_state.start_time
+    minutes = int(elapsed.total_seconds() // 60)
+    st.info(f"⏳ 현재 {minutes}분째 작업 중입니다... (시작: {st.session_state.start_time.strftime('%H:%M')})")
+elif "calc_time" in st.session_state:
+    st.success(f"✅ 측정 완료: {st.session_state.calc_time} 시간")
+
+st.divider()
 
 # 입력 폼
 with st.form("input_form", clear_on_submit=True):
@@ -48,3 +57,4 @@ with st.form("input_form", clear_on_submit=True):
         supabase.table("work_logs").insert(data).execute()
         st.success("현장 데이터가 서버로 전송되었습니다! ✅")
         if "calc_time" in st.session_state: del st.session_state.calc_time
+
