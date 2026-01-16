@@ -4,56 +4,45 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime, timedelta
 
-# 1. Supabase 연결 설정
+# 1. 연결
 url = st.secrets["supabase"]["url"]
 key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 
-st.set_page_config(page_title="IWP 물류 통합 관리 시스템", layout="wide")
+st.set_page_config(page_title="물류 관리 대시보드", layout="wide")
 
-# --- [사이드바: 대시보드 제어판] ---
-st.sidebar.header("🛠️ 관리자 설정")
-view_option = st.sidebar.selectbox("조회 단위", ["일간", "주간", "월간"])
-target_lph = st.sidebar.number_input("목표 LPH (EA/h)", value=150)
-std_work_hours = st.sidebar.slider("표준 작업 시간 (시간)", 1, 12, 8)
+st.title("🏰 물류 통합 관리 대시보드")
 
-st.title("🏰 물류 중앙 통제 및 생산성 대시보드")
+# --- [파트 1: 실시간 현장 모니터링 (중앙 통제)] ---
+st.subheader("🕵️ 실시간 현장 상황")
+res_active = supabase.table("active_tasks").select("*").eq("id", 1).execute()
 
-# --- [파트 1: 실시간 중앙 모니터링 & 제어] ---
-st.header("🕵️ 실시간 현장 작업 현황")
-try:
-    active_res = supabase.table("active_tasks").select("*").execute()
-    active_df = pd.DataFrame(active_res.data)
-    
-    if not active_df.empty:
-        cols = st.columns(3)
-        for i, (_, row) in enumerate(active_df.iterrows()):
-            with cols[i % 3]:
-                status_color = "green" if row['status'] == 'running' else "orange"
-                st.info(f"👤 **{row['user_name']}**님: {row['task_type']}\n\n상태: :{status_color}[{row['status'].upper()}]")
-                if st.button(f"⚠️ {row['user_name']} 세션 강제 종료", key=f"del_{row['id']}"):
-                    supabase.table("active_tasks").delete().eq("id", row['id']).execute()
-                    st.warning(f"{row['user_name']}님의 세션이 종료되었습니다.")
-                    st.rerun()
-    else:
-        st.write("현재 현장에서 진행 중인 작업이 없습니다.")
-except Exception as e:
-    st.error(f"모니터링 데이터를 불러오는데 실패했습니다: {e}")
+if res_active.data:
+    task = res_active.data[0]
+    col_a, col_b = st.columns([3, 1])
+    with col_a:
+        st.warning(f"현재 현장에서 **{task['task_type']}** 작업을 진행 중입니다. (상태: {task['status']})")
+    with col_b:
+        if st.button("⚠️ 작업 강제 초기화"):
+            supabase.table("active_tasks").delete().eq("id", 1).execute()
+            st.rerun()
+else:
+    st.info("현재 현장에서 기록 중인 작업이 없습니다.")
 
 st.divider()
 
-# --- [파트 2: 생산성 데이터 분석] ---
-st.header(f"📈 {view_option} 생산성 분석 리포트")
+# --- [파트 2: 생산성 분석 (필터링, 신장율, 예측)] ---
+st.sidebar.header("설정")
+view_option = st.sidebar.selectbox("조회 단위", ["일간", "주간", "월간"])
+target_lph = st.sidebar.number_input("목표 LPH", value=150)
 
 # 데이터 로드
-try:
-    res = supabase.table("work_logs").select("*").execute()
-    df = pd.DataFrame(res.data)
+res_logs = supabase.table("work_logs").select("*").execute()
+df = pd.DataFrame(res_logs.data)
 
-    if not df.empty:
-        # 데이터 전처리
-        df['work_date'] = pd.to_datetime(df['work_date'])
-        df['LPH'] = df['quantity'] / (df['workers'] * df['duration']).replace(0, 0.001)
+if not df.empty:
+    df['work_date'] = pd.to_datetime(df['work_date'])
+    df['LPH'] = df['quantity'] / (df['workers'] * df['duration']).replace(0, 0.001)
         
         # [지표 1] 전월 대비 신장율 계산
         today = datetime.now()
@@ -80,10 +69,10 @@ try:
             df['display_date'] = df['work_date']
 
         chart_data = df.groupby('display_date')['LPH'].mean().reset_index()
-        fig_trend = px.line(chart_data, x='display_date', y='LPH', markers=True, title=f"{view_option} 생산성 추이")
-        fig_trend.add_hline(y=target_lph, line_dash="dash", line_color="red", annotation_text="목표 LPH")
-        st.plotly_chart(fig_trend, use_container_width=True)
-
+        st.subheader(f"{view_option} 생산성 추이")
+        fig = px.line(df, x='work_date', y='LPH', markers=True)
+        fig.add_hline(y=target_lph, line_dash="dash", line_color="red")
+        st.plotly_chart(fig, use_container_width=True)
         # --- [파트 3: 인력 배치 시뮬레이션] ---
         st.divider()
         st.header("💡 작업별 필요 인력 예측 계산기")
