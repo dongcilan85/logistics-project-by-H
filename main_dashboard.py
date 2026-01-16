@@ -23,23 +23,25 @@ std_work_hours = st.sidebar.slider("표준 작업 시간 (시간)", 1, 12, 8)
 st.title("🏰 물류 중앙 통제 및 생산성 대시보드")
 
 # --- [파트 1: 실시간 현장 모니터링] ---
-st.header("🕵️ 실시간 현장 작업 현황")
+st.header("🕵️ 실시간 현장 작업 현황 (전체)")
+
 try:
-    active_res = supabase.table("active_tasks").select("*").eq("id", 1).execute()
-    if active_res.data:
-        task = active_res.data[0]
-        status_color = "green" if task['status'] == 'running' else "orange"
-        col_s, col_a = st.columns([3, 1])
-        with col_s:
-            st.warning(f"현재 현장에서 **{task['task_type']}** 작업을 진행 중입니다. (상태: :{status_color}[{task['status'].upper()}])")
-        with col_a:
-            if st.button("⚠️ 작업 강제 초기화"):
-                supabase.table("active_tasks").delete().eq("id", 1).execute()
-                st.rerun()
+    active_res = supabase.table("active_tasks").select("*").execute()
+    active_df = pd.DataFrame(active_res.data)
+    
+    if not active_df.empty:
+        # 진행 중인 작업들을 카드로 나열
+        cols = st.columns(3)
+        for i, (_, row) in enumerate(active_df.iterrows()):
+            with cols[i % 3]:
+                st.info(f"👤 **{row['session_name']}**\n\n**{row['task_type']}** ({row['status']})")
+                if st.button(f"강제 종료 ({row['session_name']})", key=row['id']):
+                    supabase.table("active_tasks").delete().eq("id", row['id']).execute()
+                    st.rerun()
     else:
-        st.info("현재 현장에서 기록 중인 작업이 없습니다.")
+        st.write("진행 중인 작업이 없습니다.")
 except Exception as e:
-    st.error(f"모니터링 데이터 로드 실패: {e}")
+    st.error(f"데이터 로드 오류: {e}")
 
 st.divider()
 
