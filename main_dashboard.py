@@ -20,6 +20,10 @@ if "role" not in st.session_state:
 def show_admin_dashboard():
     """관리자 전용: 모니터링, 나란히 배치된 그래프, 인력예측, 보고서 출력"""
     st.title("🏰 관리자 통합 통제실")
+
+    # 사이드바에 평균 시급 설정 추가
+    st.sidebar.header("💰 비용 설정")
+    hourly_wage = st.sidebar.number_input("평균 시급 (원)", value=10000, step=100)
     
     # [A. 실시간 모니터링]
     st.header("🕵️ 실시간 현장 작업 현황")
@@ -66,39 +70,39 @@ def show_admin_dashboard():
         res = supabase.table("work_logs").select("*").execute()
         df = pd.DataFrame(res.data)
         if not df.empty:
-            # 💡 LPH 반올림 소수점 2자리 적용
             df['work_date'] = pd.to_datetime(df['work_date']).dt.date
-            df['LPH'] = (df['quantity'] / (df['workers'] * df['duration']).replace(0, 0.001)).round(2)
+            # 소요 시간(인원 * 시간) 계산
+            df['total_man_hours'] = df['workers'] * df['duration']
+            # 💡 인건비 계산 로직 추가
+            df['total_labor_cost'] = df['total_man_hours'] * hourly_wage
+            df['unit_labor_cost'] = (df['total_labor_cost'] / df['quantity']).round(2)
+            df['LPH'] = (df['quantity'] / df['total_man_hours']).round(2)
 
-            # KPI 카드
-            k1, k2, k3 = st.columns(3)
-            k1.metric("누적 총 작업량", f"{df['quantity'].sum():,} EA")
-            k2.metric("평균 LPH", f"{df['LPH'].mean():.2f}")
-            k3.metric("평균 목표 달성률", f"{(df['LPH'].mean()/target_lph*100):.1f}%")
+            # KPI 카드에 비용 지표 추가
+            k1, k2, k3, k4 = st.columns(4)
+            k1.metric("총 투입 인건비", f"{df['total_labor_cost'].sum():,.0f} 원")
+            k2.metric("평균 CPU (개당 인건비)", f"{df['unit_labor_cost'].mean():.1f} 원")
+            k3.metric("누적 총 작업량", f"{df['quantity'].sum():,} EA")
+            k4.metric("평균 LPH", f"{df['LPH'].mean():.2f}")
 
-            # --- 💡 그래프 나란히 배치 로직 (2열 구성) ---
+            # --- 그래프 나란히 배치 ---
             col_chart1, col_chart2 = st.columns(2)
-            
             with col_chart1:
-                st.subheader(f"📅 {view_option} 생산성 추이")
-                df['display_date'] = pd.to_datetime(df['work_date'])
-                chart_df = df.groupby('work_date')['LPH'].mean().reset_index()
-                fig_trend = px.line(chart_df, x='work_date', y='LPH', markers=True)
-                fig_trend.add_hline(y=target_lph, line_dash="dash", line_color="red", annotation_text="목표선")
-                st.plotly_chart(fig_trend, use_container_width=True)
+                st.subheader("📅 날짜별 CPU(개당 인건비) 추이")
+                cost_trend = df.groupby('work_date')['unit_labor_cost'].mean().reset_index()
+                fig_cost = px.line(cost_trend, x='work_date', y='unit_labor_cost', markers=True)
+                st.plotly_chart(fig_cost, use_container_width=True)
             
             with col_chart2:
-                st.subheader("📊 작업별 생산성 비율")
-                task_stats = df.groupby('task')['LPH'].mean().reset_index()
-                task_stats['LPH'] = task_stats['LPH'].round(2)
-                # 💡 밴다이어그램과 유사한 시각적 효과를 주는 도넛 차트(Donut Chart) 적용
-                fig_donut = px.pie(task_stats, values='LPH', names='task', hole=0.4, title="작업별 평균 LPH 비교")
-                fig_donut.update_traces(textinfo='percent+label')
-                st.plotly_chart(fig_donut, use_container_width=True)
+                st.subheader("📊 작업별 인건비 비중")
+                # 2026-01-19 확정된 작업 종류별 비용 분석
+                task_cost = df.groupby('task')['total_labor_cost'].sum().reset_index()
+                fig_pie = px.pie(task_cost, values='total_labor_cost', names='task', hole=0.4)
+                st.plotly_chart(fig_pie, use_container_width=True)
 
-            # [C. 인력 배치 시뮬레이션]
+            # [인력 예측 계산기에도 비용 개념 도입]
             st.divider()
-            st.header("💡 작업별 필요 인력 예측")
+            st.header("💡 인력 배치 및 예상 비용 시뮬레이션")
             c_calc1, c_calc2 = st.columns([1, 2])
             with c_calc1:
                 sel_task = st.selectbox("분석 대상 작업", task_stats['task'].unique())
