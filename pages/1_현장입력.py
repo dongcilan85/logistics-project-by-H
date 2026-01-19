@@ -21,7 +21,7 @@ if worker_id:
 
     # --- [상태 1: 정보 선(先) 입력 및 시작] ---
     if not active_task:
-        st.subheader(f"📝 {worker_id}님의 새 작업 시작")
+        st.subheader(f"📝 {worker_id}의 새 작업 시작")
         with st.container(border=True):
             task_type = st.selectbox("작업 구분", ["올리브영 사전작업", "컬리/로켓배송", "면세점", "홈쇼핑합포", "기획팩", "선물세트", "소분"])
             workers = st.number_input("작업 인원 (명)", min_value=1, value=1)
@@ -47,7 +47,7 @@ if worker_id:
         accumulated = active_task['accumulated_seconds']
         last_start = datetime.fromisoformat(active_task['last_started_at'])
         
-        st.success(f"🟡 **{worker_id}**님은 현재 **{active_task['task_type']}** 기록 중")
+        st.success(f"🟡 **{worker_id}** 현재 **{active_task['task_type']}** 기록 중")
         
         # 입력된 정보 확인
         c1, c2, c3 = st.columns(3)
