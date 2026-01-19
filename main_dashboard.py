@@ -118,6 +118,63 @@ def show_admin_dashboard():
     except Exception as e:
         st.error(f"데이터 분석 실패: {e}")
 
+    # --- [D. 보고서 내보내기 (Export Report)] ---
+    st.divider()
+    st.header("📂 보고서 데이터 출력")
+    
+    try:
+        # 현재 화면에 필터링된 데이터를 보고서용으로 준비
+        # 1월 19일 정해진 작업 종류와 현장 리스트가 포함된 로그 사용
+        res = supabase.table("work_logs").select("*").execute()
+        report_df = pd.DataFrame(res.data)
+
+        if not report_df.empty:
+            # 데이터 가독성을 위한 전처리
+            report_df['work_date'] = pd.to_datetime(report_df['work_date']).dt.date
+            report_df['LPH'] = report_df['quantity'] / (report_df['workers'] * report_df['duration']).replace(0, 0.001)
+            
+            # 컬럼명 한글화 (보고서용)
+            report_df.columns = ['ID', '기록시간', '작업날짜', '작업종류', '투입인원', '작업량', '소요시간', '비고', 'LPH']
+            
+            # 엑셀 파일 생성 로직
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                # 1. 상세 로그 시트
+                report_df.to_excel(writer, index=False, sheet_name='상세작업로그')
+                
+                # 2. 작업종류별 요약 시트
+                summary_df = report_df.groupby('작업종류').agg({
+                    '투입인원': 'sum',
+                    '작업량': 'sum',
+                    '소요시간': 'sum',
+                    'LPH': 'mean'
+                }).reset_index()
+                summary_df.to_excel(writer, index=False, sheet_name='작업별요약')
+                
+                # 엑셀 서식 자동 조정을 위한 셋업 (xlsxwriter 활용 가능)
+                workbook = writer.book
+                worksheet = writer.sheets['상세작업로그']
+                header_format = workbook.add_format({'bold': True, 'bg_color': '#D7E4BC', 'border': 1})
+                
+            excel_data = output.getvalue()
+
+            st.write("💡 현재까지 기록된 모든 작업 데이터를 엑셀 보고서 형태로 내려받을 수 있습니다.")
+            
+            # 다운로드 버튼
+            st.download_button(
+                label="📥 엑셀 보고서 다운로드 (.xlsx)",
+                data=excel_data,
+                file_name=f"IWP_물류현장보고서_{datetime.now(KST).strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+        else:
+            st.info("출력할 데이터가 없습니다.")
+            
+    except Exception as e:
+        st.error(f"보고서 생성 중 오류 발생: {e}")
+        
+
 def show_login_page():
     """비밀번호 유무에 따른 자동 권한 분리 로그인 화면"""
     st.title("🔐 IWP 물류 시스템")
