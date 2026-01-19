@@ -5,7 +5,7 @@ import plotly.express as px
 from datetime import datetime, timedelta, timezone
 import io
 
-# 1. Supabase 연결 및 한국 시간(KST) 설정
+# 1. Supabase 및 한국 시간(KST) 설정
 url = st.secrets["supabase"]["url"]
 key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
@@ -15,8 +15,8 @@ KST = timezone(timedelta(hours=9))
 if "role" not in st.session_state:
     st.session_state.role = None
 
-# --- [관리자 대시보드 함수] ---
 def show_admin_dashboard():
+    """관리자 대시보드: 그래프 나란히 배치 및 그래프 포함 엑셀 출력"""
     st.title("🏰 관리자 통합 통제실")
     
     # 사이드바 설정
@@ -54,21 +54,18 @@ def show_admin_dashboard():
                         }).execute()
                         supabase.table("active_tasks").delete().eq("id", row['id']).execute()
                         st.rerun()
-        else:
-            st.write("진행 중인 실시간 작업자가 없습니다.")
     except Exception as e:
         st.error(f"실시간 데이터 로드 실패: {e}")
 
     st.divider()
 
     # [B. 통합 분석 섹션]
-    st.header("📈 생산성·비용·부하 리포트")
     try:
         res = supabase.table("work_logs").select("*").execute()
-        df = pd.DataFrame(res.data) # 💡 여기서 df가 정의됩니다.
+        df = pd.DataFrame(res.data)
         
         if not df.empty:
-            # 데이터 전처리 및 지표 계산
+            # 데이터 전처리 (LPH 소수점 2자리)
             df['work_date'] = pd.to_datetime(df['work_date']).dt.date
             df['total_man_hours'] = df['workers'] * df['duration']
             df['LPH'] = (df['quantity'] / df['total_man_hours']).replace([float('inf'), -float('inf')], 0).round(2)
@@ -78,81 +75,94 @@ def show_admin_dashboard():
             # 1. KPI 카드
             k1, k2, k3, k4 = st.columns(4)
             k1.metric("평균 LPH", f"{df['LPH'].mean():.2f}")
-            k2.metric("평균 CPU (개당 인건비)", f"{df['CPU'].mean():.2f} 원")
+            k2.metric("평균 CPU", f"{df['CPU'].mean():.2f} 원")
             k3.metric("누적 작업량", f"{df['quantity'].sum():,} EA")
             k4.metric("누적 인건비", f"{df['total_cost'].sum():,.0f} 원")
 
-            # 2. 생산성 분석 그래프 (나란히 배치)
-            chart_col1, chart_col2 = st.columns(2)
-            with chart_col1:
+            # 2. 그래프 나란히 배치 (생산성 추이 & 작업 비율)
+            st.write("---")
+            c1, c2 = st.columns(2)
+            with c1:
                 st.subheader(f"📅 {view_option} LPH 추이")
                 chart_df = df.groupby('work_date')['LPH'].mean().reset_index()
                 fig_lph = px.line(chart_df, x='work_date', y='LPH', markers=True)
                 fig_lph.add_hline(y=target_lph, line_dash="dash", line_color="red")
                 st.plotly_chart(fig_lph, use_container_width=True)
-            with chart_col2:
+            with c2:
                 st.subheader("📊 작업별 생산성 비율")
                 task_stats = df.groupby('task')['LPH'].mean().reset_index().round(2)
                 fig_donut = px.pie(task_stats, values='LPH', names='task', hole=0.4)
                 st.plotly_chart(fig_donut, use_container_width=True)
 
-            # 3. 💡 작업 부하(Workload) 및 인건비 분석 (나란히 배치)
-            st.divider()
-            st.header("⚖️ 작업 부하 및 비용 집중도 분석")
-            load_col1, load_col2 = st.columns(2)
-            
-            with load_col1:
-                st.subheader("🥇 작업별 부하(공수) 랭킹")
+            # 3. 부하 분석 및 인건비 추이 (나란히 배치)
+            c3, c4 = st.columns(2)
+            with c3:
+                st.subheader("⚖️ 작업별 부하(공수) 랭킹")
                 load_df = df.groupby('task')['total_man_hours'].sum().reset_index().sort_values(by='total_man_hours', ascending=True)
                 fig_load = px.bar(load_df, x='total_man_hours', y='task', orientation='h', color='total_man_hours', color_continuous_scale='Reds')
-                fig_load.update_layout(showlegend=False)
                 st.plotly_chart(fig_load, use_container_width=True)
-            
-            with load_col2:
-                st.subheader("💰 날짜별 개당 인건비(CPU) 추이")
+            with c4:
+                st.subheader("💰 날짜별 CPU(개당 인건비) 추이")
                 cpu_trend = df.groupby('work_date')['CPU'].mean().reset_index()
                 fig_cpu = px.bar(cpu_trend, x='work_date', y='CPU')
                 st.plotly_chart(fig_cpu, use_container_width=True)
 
-            # [C. 인력 예측 계산기]
-            st.divider()
-            st.header("💡 작업별 필요 인력 예측")
-            c_calc1, c_calc2 = st.columns([1, 2])
-            with c_calc1:
-                sel_task = st.selectbox("분석 대상 작업", task_stats['task'].unique())
-                target_qty = st.number_input("목표 물량 입력 (EA)", value=1000)
-                avg_lph = task_stats[task_stats['task'] == sel_task]['LPH'].values[0]
-                needed_p = target_qty / (avg_lph * std_work_hours) if avg_lph > 0 else 0
-                st.success(f"✅ **{sel_task}** 권장 투입 인원: 약 **{needed_p:.1f}명**")
-            with c_calc2:
-                st.info(f"선택 작업 평균 LPH: **{avg_lph:.2f}**\n\n예상 총 인건비: **{(needed_p * std_work_hours * hourly_wage):,.0f} 원**")
-
-            # [D. 보고서 출력 (Excel)]
+            # [C. 그래프 포함 엑셀 보고서 출력]
             st.divider()
             st.header("📂 엑셀 보고서 다운로드")
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                # 탭 순서: 요약 분석 -> 상세 로그
-                summary_data = df.groupby('task').agg({'LPH': 'mean', 'CPU': 'mean', 'quantity': 'sum', 'total_man_hours': 'sum'}).reset_index().round(2)
-                summary_data.to_excel(writer, index=False, sheet_name='작업별_요약분석')
-                df.to_excel(writer, index=False, sheet_name='전체_상세로그')
-            
+                # 💡 탭 순서 조정: 그래프탭 -> 요약탭 -> 상세로그탭
+                
+                # 데이터 준비
+                summary_data = df.groupby('task').agg({
+                    'LPH': 'mean', 
+                    'CPU': 'mean', 
+                    'quantity': 'sum', 
+                    'total_man_hours': 'sum'
+                }).reset_index().round(2)
+                
+                # 1. 그래프용 데이터 시트 (나중에 숨기거나 활용)
+                summary_data.to_excel(writer, sheet_name='작업별_요약분석', index=False)
+                df.to_excel(writer, sheet_name='전체_상세로그', index=False)
+                
+                # 2. 첫 번째 탭: 시각화 대시보드 시트 생성
+                workbook = writer.book
+                worksheet = workbook.add_worksheet('📊_종합대시보드')
+                worksheet.activate()
+                
+                # 엑셀 내 차트 생성 (작업 부하 바 차트)
+                chart_load = workbook.add_chart({'type': 'bar'})
+                chart_load.add_series({
+                    'categories': ['작업별_요약분석', 1, 0, len(summary_data), 0],
+                    'values':     ['작업별_요약분석', 1, 4, len(summary_data), 4],
+                    'name':       '총 투입 공수 (h)'
+                })
+                chart_load.set_title({'name': '작업별 부하 랭킹'})
+                worksheet.insert_chart('B2', chart_load)
+
+                # 엑셀 내 차트 생성 (생산성 도넛 차트)
+                chart_pie = workbook.add_chart({'type': 'doughnut'})
+                chart_pie.add_series({
+                    'categories': ['작업별_요약분석', 1, 0, len(summary_data), 0],
+                    'values':     ['작업별_요약분석', 1, 1, len(summary_data), 1],
+                    'name':       '평균 LPH'
+                })
+                chart_pie.set_title({'name': '작업별 생산성 비중'})
+                worksheet.insert_chart('J2', chart_pie)
+
             st.download_button(
-                label="📥 엑셀 보고서 다운로드 (.xlsx)",
+                label="📥 그래프 포함 엑셀 보고서 다운로드",
                 data=output.getvalue(),
-                file_name=f"IWP_물류보고서_{datetime.now(KST).strftime('%Y%m%d')}.xlsx",
+                file_name=f"IWP_종합보고서_{datetime.now(KST).strftime('%Y%m%d')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
-
-            st.subheader("📋 전체 작업 로그 데이터")
             st.dataframe(df.sort_values('work_date', ascending=False), use_container_width=True)
-        else:
-            st.info("데이터가 없습니다. 현장 기록을 시작해주세요.")
     except Exception as e:
-        st.error(f"부하 분석 로드 실패: {e}")
+        st.error(f"분석 로드 실패: {e}")
 
-# --- [로그인 및 네비게이션 로직] ---
+# --- [로그인 및 네비게이션] ---
 def show_login_page():
     st.title("🔐 IWP 물류 시스템")
     with st.container(border=True):
@@ -164,20 +174,18 @@ def show_login_page():
             elif password == "":
                 st.session_state.role = "Staff"
                 st.rerun()
-            else:
-                st.error("잘못된 비밀번호입니다.")
+            else: st.error("잘못된 비밀번호입니다.")
 
 if st.session_state.role is None:
-    pg = st.navigation([st.Page(show_login_page, title="로그인", icon="🔒")])
-    pg.run()
+    st.navigation([st.Page(show_login_page, title="로그인", icon="🔒")]).run()
 else:
     if st.sidebar.button("🔓 로그아웃"):
         st.session_state.role = None
         st.rerun()
-    dashboard = st.Page(show_admin_dashboard, title="통합 대시보드", icon="📊")
-    input_page = st.Page("pages/1_현장입력.py", title="현장기록", icon="📝")
-    if st.session_state.role == "Admin":
-        pg = st.navigation({"메뉴": [dashboard, input_page]})
-    else:
-        pg = st.navigation({"메뉴": [input_page]})
+    pg = st.navigation({
+        "메뉴": [st.Page(show_admin_dashboard, title="통합 대시보드", icon="📊"), 
+                st.Page("pages/1_현장입력.py", title="현장기록", icon="📝")]
+    }) if st.session_state.role == "Admin" else st.navigation({
+        "메뉴": [st.Page("pages/1_현장입력.py", title="현장기록", icon="📝")]
+    })
     pg.run()
