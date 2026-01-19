@@ -4,7 +4,7 @@ from supabase import create_client, Client
 import plotly.express as px
 from datetime import datetime, timedelta, timezone
 
-# 1. 설정
+# 1. 설정 및 KST 시간대 정의
 url = st.secrets["supabase"]["url"]
 key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
@@ -13,26 +13,57 @@ KST = timezone(timedelta(hours=9))
 if "role" not in st.session_state:
     st.session_state.role = None
 
-# --- [페이지 정의] ---
+# --- [페이지별 기능 정의] ---
 
 def show_admin_dashboard():
     st.title("🏰 관리자 통합 통제실")
     
-    # 실시간 모니터링 (공용 세션 id=1)
-    st.header("🕵️ 실시간 현장 작업 현황")
-    active_res = supabase.table("active_tasks").select("*").eq("id", 1).execute()
-    if active_res.data:
-        task = active_res.data[0]
-        status_color = "green" if task['status'] == 'running' else "orange"
-        col_s, col_a = st.columns([3, 1])
-        with col_s:
-            st.warning(f"현장에서 **{task['task_type']}** 진행 중 (:{status_color}[{task['status'].upper()}])")
-        with col_a:
-            if st.button("⚠️ 강제 초기화"):
-                supabase.table("active_tasks").delete().eq("id", 1).execute()
-                st.rerun()
-    else:
-        st.info("진행 중인 작업이 없습니다.")
+    # [A. 실시간 모니터링 및 원격 종료 기능]
+    st.header("🕵️ 실시간 현장 작업 현황 (전체)")
+    try:
+        active_res = supabase.table("active_tasks").select("*").execute()
+        active_df = pd.DataFrame(active_res.data)
+        
+        if not active_df.empty:
+            cols = st.columns(3)
+            for i, (_, row) in enumerate(active_df.iterrows()):
+                with cols[i % 3]:
+                    status_color = "green" if row['status'] == 'running' else "orange"
+                    st.info(f"👤 **{row['session_name']}**\n\n작업: {row['task_type']} (:{status_color}[{row['status'].upper()}])")
+                    
+                    # 💡 강제 초기화에서 '종료 및 업로드'로 변경된 버튼
+                    if st.button(f"🏁 종료 및 업로드 ({row['session_name']})", key=f"end_{row['id']}"):
+                        # 1. 현재 시간 기준으로 시간 계산 로직 수행
+                        now_kst = datetime.now(KST)
+                        accumulated = row['accumulated_seconds']
+                        last_start = pd.to_datetime(row['last_started_at'])
+                        
+                        total_sec = accumulated
+                        if row['status'] == 'running':
+                            # 실행 중인 경우 현재 시간과 마지막 시작 시간의 차이를 더함
+                            total_sec += (now_kst - last_start).total_seconds()
+                        
+                        final_hours = round(total_sec / 3600, 2)
+                        
+                        # 2. work_logs 테이블에 관리자 권한으로 강제 저장
+                        supabase.table("work_logs").insert({
+                            "work_date": now_kst.strftime("%Y-%m-%d"),
+                            "task": row['task_type'],
+                            "workers": row['workers'],
+                            "quantity": row['quantity'],
+                            "duration": final_hours,
+                            "memo": f"관리자 원격 종료 ({row['session_name']})"
+                        }).execute()
+                        
+                        # 3. active_tasks에서 해당 세션 삭제
+                        supabase.table("active_tasks").delete().eq("id", row['id']).execute()
+                        
+                        st.success(f"{row['session_name']}님의 작업이 {final_hours}시간으로 기록 및 업로드되었습니다.")
+                        st.rerun()
+        else:
+            st.write("현재 진행 중인 작업자가 없습니다.")
+    except Exception as e:
+        st.error(f"실시간 데이터 로드 실패: {e}")
 
     st.divider()
 
@@ -88,10 +119,11 @@ def show_admin_dashboard():
         st.error(f"데이터 분석 실패: {e}")
 
 def show_login_page():
+    """비밀번호 유무에 따른 자동 권한 분리 로그인 화면"""
     st.title("🔐 IWP 물류 시스템")
     with st.container(border=True):
-        password = st.text_input("비밀번호 (관리자만 입력)", type="password")
-        if st.button("접속", use_container_width=True, type="primary"):
+        password = st.text_input("비밀번호 (관리자만 입력)", type="password", placeholder="직원은 비워두세요")
+        if st.button("시스템 접속", use_container_width=True, type="primary"):
             if password == "admin123":
                 st.session_state.role = "Admin"
                 st.rerun()
@@ -101,7 +133,7 @@ def show_login_page():
             else:
                 st.error("비밀번호가 틀렸습니다.")
 
-# --- [네비게이션] ---
+# --- [네비게이션 로직] ---
 if st.session_state.role is None:
     pg = st.navigation([st.Page(show_login_page, title="로그인", icon="🔒")])
     pg.run()
