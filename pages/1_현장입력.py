@@ -1,14 +1,15 @@
 import streamlit as st
 from supabase import create_client, Client
 from datetime import datetime, timezone, timedelta
+import time # 실시간 업데이트를 위한 라이브러리
 
-# 1. 연결 및 시간 설정 (KST)
+# 1. 설정 및 KST 설정
 url = st.secrets["supabase"]["url"]
 key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 KST = timezone(timedelta(hours=9))
 
-st.title("📱 현장 작업 기록 (개별 모드)")
+st.title("📱 현장 작업 기록 (실시간 타이머)")
 
 # 2. 작업자 식별 (이름 또는 ID 입력)
 # 직원별로 고유한 이름을 입력해야 본인의 기록을 관리할 수 있습니다.
@@ -47,13 +48,36 @@ if worker_id:
         accumulated = active_task['accumulated_seconds']
         last_start = datetime.fromisoformat(active_task['last_started_at'])
         
-        st.success(f"🟡 **{worker_id}** 현재 **{active_task['task_type']}** 기록 중")
-        
-        # 입력된 정보 확인
-        c1, c2, c3 = st.columns(3)
-        c1.metric("인원", f"{active_task['workers']}명")
-        c2.metric("목표량", f"{active_task['quantity']:,}")
-        c3.metric("상태", status.upper())
+        st.success(f"🟡 **{worker_id}**님 작업 기록 중")
+
+        # --- 🕒 실시간 타이머 표시 영역 ---
+        timer_placeholder = st.empty() # 실시간으로 숫자가 바뀔 공간
+
+        # 실행 중(RUNNING)일 때만 루프를 돌며 시간을 업데이트함
+        if status == "running":
+            # 이 루프는 사용자가 다른 버튼을 눌러 페이지가 리런(Rerun)되기 전까지 1초마다 실행됨
+            while True:
+                now_kst = datetime.now(KST)
+                # 누적 초 = 이전에 멈췄던 시간 + (현재 시간 - 마지막 시작 시간)
+                total_sec = accumulated + (now_kst - last_start).total_seconds()
+                
+                # 시:분:초 변환
+                hours, rem = divmod(int(total_sec), 3600)
+                mins, secs = divmod(rem, 60)
+                time_format = f"{hours:02d}:{mins:02d}:{secs:02d}"
+                
+                # 화면 업데이트
+                timer_placeholder.metric("⏱️ 현재 작업 시간 (HH:MM:SS)", time_format)
+                
+                # 1초 대기 후 루프 반복
+                time.sleep(1)
+                
+                # 주의: 무한 루프 중에도 사용자가 버튼을 누르면 Streamlit이 자동으로 루프를 깨고 리런함
+        else:
+            # 일시정지(PAUSED) 상태일 때는 멈춰있는 시간 표시
+            h, r = divmod(int(accumulated), 3600)
+            m, s = divmod(r, 60)
+            timer_placeholder.metric("⏸️ 일시정지 됨", f"{h:02d}:{m:02d}:{s:02d}")
 
         st.divider()
         col_ctrl, col_end = st.columns(2)
