@@ -52,80 +52,68 @@ def show_admin_dashboard():
         df = pd.DataFrame(res.data)
         if not df.empty:
             df['work_date'] = pd.to_datetime(df['work_date']).dt.date
-            # LPH 계산: 작업량 / (인원 * 시간)
             df['LPH'] = df['quantity'] / (df['workers'] * df['duration']).replace(0, 0.001)
 
-            # 전월 대비 신장율 계산 (KST 기준)
+            # KPI 요약 카드 (KST 기준)
             today_kst = datetime.now(KST).date()
             this_month = today_kst.month
-            last_month = (today_kst.replace(day=1) - timedelta(days=1)).month
             curr_m_avg = df[pd.to_datetime(df['work_date']).dt.month == this_month]['LPH'].mean()
-            last_m_avg = df[pd.to_datetime(df['work_date']).dt.month == last_month]['LPH'].mean()
-            growth = ((curr_m_avg - last_m_avg) / last_m_avg * 100) if last_m_avg and last_m_avg > 0 else 0
-
-            # KPI 요약 카드
+            
             k1, k2, k3 = st.columns(3)
-            k1.metric("이번 달 평균 LPH", f"{curr_m_avg:.1f} EA/h", delta=f"{growth:.1f}% vs 전월")
+            k1.metric("이번 달 평균 LPH", f"{curr_m_avg:.1f} EA/h")
             k2.metric("누적 총 작업량", f"{df['quantity'].sum():,} EA")
             k3.metric("평균 목표 달성률", f"{(df['LPH'].mean()/target_lph*100):.1f}%")
 
-            # 추이 그래프 (필터링 적용)
-            df['display_date'] = pd.to_datetime(df['work_date'])
-            if view_option == "주간":
-                chart_df = df.resample('W', on='display_date')['LPH'].mean().reset_index()
-            elif view_option == "월간":
-                chart_df = df.resample('M', on='display_date')['LPH'].mean().reset_index()
-            else:
-                chart_df = df.groupby('display_date')['LPH'].mean().reset_index()
-
-            fig = px.line(chart_df, x='display_date', y='LPH', markers=True, title=f"{view_option} 생산성 추이")
-            fig.add_hline(y=target_lph, line_dash="dash", line_color="red", annotation_text="목표선")
+            # 추이 그래프
+            chart_df = df.groupby('work_date')['LPH'].mean().reset_index()
+            fig = px.line(chart_df, x='work_date', y='LPH', markers=True, title=f"{view_option} 생산성 추이")
+            fig.add_hline(y=target_lph, line_dash="dash", line_color="red")
             st.plotly_chart(fig, use_container_width=True)
             
-            # --- [C. 인력 배치 시뮬레이션 (동혁님이 찾으시던 부분)] ---
+            # [C. 인력 배치 시뮬레이션]
             st.divider()
             st.header("💡 작업별 필요 인력 예측")
             task_stats = df.groupby('task')['LPH'].mean().reset_index()
-            
-            calc_col1, calc_col2 = st.columns([1, 2])
-            with calc_col1:
-                st.write("### 🧮 필요 인원 계산기")
+            c_calc1, c_calc2 = st.columns([1, 2])
+            with c_calc1:
                 sel_task = st.selectbox("분석 대상 작업", task_stats['task'].unique())
                 target_qty = st.number_input("내일 목표 물량 (EA)", value=1000)
-                
                 avg_lph = task_stats[task_stats['task'] == sel_task]['LPH'].values[0]
-                # 필요 인원 = 목표물량 / (평균 LPH * 가동시간)
                 needed_p = target_qty / (avg_lph * std_work_hours) if avg_lph > 0 else 0
-                st.success(f"✅ **{sel_task}** 목표 달성을 위한\n\n**권장 투입 인원: 약 {needed_p:.1f}명**")
-            
-            with calc_col2:
-                fig_bar = px.bar(task_stats, x='task', y='LPH', color='task', title="작업별 평균 생산성(LPH) 비교")
+                st.success(f"✅ 권장 투입 인원: 약 **{needed_p:.1f}명**")
+            with c_calc2:
+                fig_bar = px.bar(task_stats, x='task', y='LPH', color='task', title="작업별 평균 생산성")
                 st.plotly_chart(fig_bar, use_container_width=True)
 
             st.subheader("📋 전체 작업 상세 로그")
             st.dataframe(df.sort_values('work_date', ascending=False), use_container_width=True)
         else:
-            st.info("데이터가 아직 없습니다. 현장기록을 시작해 주세요.")
+            st.info("데이터가 아직 없습니다.")
     except Exception as e:
         st.error(f"데이터 분석 실패: {e}")
 
 def show_login_page():
-    """로그인 화면"""
-    st.title("🔒 IWP 물류 시스템 로그인")
+    """요청하신 로직이 적용된 로그인 화면"""
+    st.title("🔐 IWP 물류 시스템")
+    st.write("관리자 모드는 비밀번호를 입력하고, 현장 직원은 바로 접속 버튼을 눌러주세요.")
+    
     with st.container(border=True):
-        role_choice = st.radio("권한을 선택하세요", ["현장 직원", "관리자"])
-        password = st.text_input("비밀번호", type="password")
-        if st.button("접속", use_container_width=True):
-            if role_choice == "관리자" and password == "admin123":
+        password = st.text_input("비밀번호 (관리자 전용)", type="password", placeholder="직원은 비워두세요")
+        
+        if st.button("시스템 접속", use_container_width=True, type="primary"):
+            if password == "admin123":
                 st.session_state.role = "Admin"
+                st.success("관리자 권한으로 접속합니다.")
                 st.rerun()
-            elif role_choice == "현장 직원" and password == "staff123":
+            elif password == "":
                 st.session_state.role = "Staff"
+                st.info("현장 직원 권한으로 접속합니다.")
                 st.rerun()
             else:
-                st.error("비밀번호가 올바르지 않습니다.")
+                st.error("잘못된 비밀번호입니다. 다시 확인해 주세요.")
 
 # --- [메인 네비게이션 로직] ---
+
 if st.session_state.role is None:
     pg = st.navigation([st.Page(show_login_page, title="로그인", icon="🔒")])
     pg.run()
@@ -140,5 +128,7 @@ else:
     if st.session_state.role == "Admin":
         pg = st.navigation({"메뉴": [dashboard_page, input_page]})
     else:
+        # 현장 직원은 '현장기록'만 보임
         pg = st.navigation({"메뉴": [input_page]})
+
     pg.run()
