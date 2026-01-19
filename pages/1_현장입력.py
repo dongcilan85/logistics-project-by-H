@@ -18,7 +18,7 @@ active_task = res.data[0] if res.data else None
 if not active_task:
     st.subheader("📝 작업 정보 입력")
     with st.container(border=True):
-        task_type = st.selectbox("작업 구분", ["올리브영 사전작업", "컬리/로켓배송", "홈쇼핑합포", "기획팩", "선물세트", "소분"])
+        task_type = st.selectbox("작업 구분", ["올리브영 사전작업", "컬리/로켓배송", "면세점", "홈쇼핑합포", "기획팩", "선물세트", "소분"])
         workers = st.number_input("작업 인원 (명)", min_value=1, value=1)
         qty = st.number_input("작업량 (Box/EA)", min_value=0, value=0)
         
@@ -96,4 +96,5 @@ else:
         st.balloons()
         st.success(f"업로드 완료! 총 {final_hours}시간이 기록되었습니다.")
         st.rerun()
+
 
