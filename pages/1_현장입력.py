@@ -9,21 +9,31 @@ key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 KST = timezone(timedelta(hours=9))
 
+st.set_page_config(page_title="IWP 현장 기록 시스템", layout="centered")
 st.title("📱 현장 작업 기록 (실시간 타이머)")
 
-# 2. 작업자 식별
-worker_id = st.text_input("작업 현장을 입력하세요", placeholder="예: A동, B동 등")
-
+# 2. 작업자 식별 (드롭다운으로 수정)
+# index=None과 placeholder를 사용하여 초기 선택값이 없도록 설정합니다.
+workplace_list = ["A동", "B동", "C동", "D동", "E동", "F동", "허브"]
+worker_id = st.selectbox(
+    "작업 현장을 선택하세요", 
+    options=workplace_list, 
+    index=None, 
+    placeholder="현장을 선택해주세요"
+)
 
 if worker_id:
+    # 해당 현장에서 진행 중인 작업 조회
     res = supabase.table("active_tasks").select("*").eq("session_name", worker_id).execute()
     active_task = res.data[0] if res.data else None
 
     if not active_task:
         # --- [1단계: 정보 입력 단계] ---
-        st.subheader(f"📝 {worker_id}님의 새 작업 시작")
+        st.subheader(f"📝 {worker_id} 새 작업 시작")
         with st.container(border=True):
-            task_type = st.selectbox("작업 구분", ["올리브영 사전작업", "컬리/로켓배송", "면세점", "홈쇼핑합포", "기획팩", "선물세트", "소분"])
+            # 요청하신 작업 종류로 업데이트
+            task_categories = ["올리브영 사전작업", "컬리/로켓배송", "면세점", "홈쇼핑합포", "기획팩", "선물세트", "소분"]
+            task_type = st.selectbox("작업 구분", options=task_categories)
             workers = st.number_input("작업 인원 (명)", min_value=1, value=1)
             qty = st.number_input("작업량 (Box/EA)", min_value=0, value=0)
             
@@ -46,6 +56,7 @@ if worker_id:
         accumulated = active_task['accumulated_seconds']
         last_start = datetime.fromisoformat(active_task['last_started_at'])
         
+        # 메시지 수정: "ㅇㅇ의 작업 기록 중"
         st.success(f"🟡 **{worker_id}**의 작업 기록 중")
 
         # 🕒 타이머 공간 확보
@@ -58,7 +69,6 @@ if worker_id:
 
         st.divider()
         
-        # 💡 [핵심] 버튼을 루프(while)보다 먼저 정의해야 화면에 나타납니다.
         col_ctrl, col_end = st.columns(2)
 
         # 일시정지 / 재개 버튼
@@ -95,14 +105,14 @@ if worker_id:
                 "workers": active_task['workers'],
                 "quantity": active_task['quantity'],
                 "duration": final_hours,
-                "memo": f"기록자: {worker_id}"
+                "memo": f"기록지: {worker_id}"
             }).execute()
             
             supabase.table("active_tasks").delete().eq("session_name", worker_id).execute()
             st.balloons()
             st.rerun()
 
-        # --- 🕒 마지막에 실시간 타이머 업데이트 루프 실행 ---
+        # --- 🕒 실시간 타이머 업데이트 루프 ---
         if status == "running":
             while True:
                 now_kst = datetime.now(KST)
@@ -119,4 +129,4 @@ if worker_id:
             m, s = divmod(r, 60)
             timer_placeholder.metric("⏸️ 일시정지 상태", f"{h:02d}:{m:02d}:{s:02d}")
 else:
-    st.info("⚠️ 창고를 입력하면 작업 기록창이 나타납니다.")
+    st.info("⚠️ 현장을 선택하면 작업 기록창이 나타납니다.")
