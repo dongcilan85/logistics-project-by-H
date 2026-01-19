@@ -10,70 +10,41 @@ key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 KST = timezone(timedelta(hours=9))
 
-st.set_page_config(page_title="IWP 물류 통합 시스템", layout="wide")
-
-# --- [로그인 상태 및 권한 관리] ---
+# --- [로그인 상태 관리] ---
 if "role" not in st.session_state:
     st.session_state.role = None
 
-# --- [로그인 화면 함수] ---
-def login():
-    st.title("🔒 IWP 물류 시스템 로그인")
-    with st.container(border=True):
-        role_choice = st.radio("권한을 선택하세요", ["현장 직원", "관리자"])
-        password = st.text_input("비밀번호", type="password")
-        
-        if st.button("접속", use_container_width=True):
-            # 관리자 비밀번호: admin123 / 직원 비밀번호: staff123 (비밀번호는 추후 수정 가능)
-            if role_choice == "관리자" and password == "admin123":
-                st.session_state.role = "Admin"
-                st.rerun()
-            elif role_choice == "현장 직원" and password == "staff123":
-                st.session_state.role = "Staff"
-                st.rerun()
-            else:
-                st.error("비밀번호가 올바르지 않습니다.")
+# --- [페이지별 기능 정의] ---
 
-# --- [메인 실행 로직] ---
-if st.session_state.role is None:
-    login()
-else:
-    # 사이드바 공통 설정
+# A. 관리자 대시보드 함수
+def show_admin_dashboard():
+    st.sidebar.success("✅ 관리자 권한 접속 중")
     if st.sidebar.button("🔓 로그아웃"):
         st.session_state.role = None
         st.rerun()
 
-    # --- [권한별 페이지 분기] ---
-    if st.session_state.role == "Staff":
-        # 현장 직원은 사이드바를 숨기고 안내 메시지만 표시
-        st.markdown("""<style> [data-testid="stSidebarNav"] { display: none; } </style>""", unsafe_allow_html=True)
-        st.success("✅ 현장 직원 권한으로 접속 중입니다.")
-        st.info("왼쪽 상단의 '현장기록' 페이지를 클릭하여 작업을 시작해 주세요.")
-        
-    elif st.session_state.role == "Admin":
-        st.sidebar.success("✅ 관리자 권한으로 접속 중")
-        st.title("🏰 관리자 통합 통제실")
+    st.title("🏰 관리자 통합 통제실")
+    
+    # [실시간 모니터링]
+    st.header("🕵️ 실시간 현장 작업 현황")
+    try:
+        active_res = supabase.table("active_tasks").select("*").execute()
+        active_df = pd.DataFrame(active_res.data)
+        if not active_df.empty:
+            cols = st.columns(3)
+            for i, (_, row) in enumerate(active_df.iterrows()):
+                with cols[i % 3]:
+                    status_color = "green" if row['status'] == 'running' else "orange"
+                    st.info(f"👤 **{row['session_name']}**\n\n작업: {row['task_type']} (:{status_color}[{row['status'].upper()}])")
+                    if st.button(f"강제 종료 ({row['session_name']})", key=f"kill_{row['id']}"):
+                        supabase.table("active_tasks").delete().eq("id", row['id']).execute()
+                        st.rerun()
+        else:
+            st.write("진행 중인 실시간 작업이 없습니다.")
+    except Exception as e:
+        st.error(f"실시간 데이터 로드 실패: {e}")
 
-        # [파트 1: 실시간 현장 모니터링]
-        st.header("🕵️ 실시간 현장 작업 현황")
-        try:
-            active_res = supabase.table("active_tasks").select("*").execute()
-            active_df = pd.DataFrame(active_res.data)
-            if not active_df.empty:
-                cols = st.columns(3)
-                for i, (_, row) in enumerate(active_df.iterrows()):
-                    with cols[i % 3]:
-                        status_color = "green" if row['status'] == 'running' else "orange"
-                        st.info(f"👤 **{row['session_name']}**\n\n작업: {row['task_type']} (:{status_color}[{row['status'].upper()}])")
-                        if st.button(f"강제 종료 ({row['session_name']})", key=f"kill_{row['id']}"):
-                            supabase.table("active_tasks").delete().eq("id", row['id']).execute()
-                            st.rerun()
-            else:
-                st.write("현재 진행 중인 실시간 작업이 없습니다.")
-        except Exception as e:
-            st.error(f"실시간 데이터 로드 실패: {e}")
-
-        st.divider()
+    st.divider()
 
         # [파트 2: 생산성 분석 리포트]
         st.header("📈 생산성 분석 리포트")
@@ -145,3 +116,45 @@ else:
                 st.info("데이터가 아직 없습니다. 현장기록을 시작해 주세요.")
         except Exception as e:
             st.error(f"분석 리포트 로드 실패: {e}")
+            st.write("여기에 기존 대시보드 분석 그래프와 표가 나타납니다.")
+
+# B. 로그인 화면 함수
+def show_login_page():
+    st.title("🔒 IWP 물류 시스템 로그인")
+    with st.container(border=True):
+        role_choice = st.radio("권한을 선택하세요", ["현장 직원", "관리자"])
+        password = st.text_input("비밀번호", type="password")
+        
+        if st.button("접속", use_container_width=True):
+            if role_choice == "관리자" and password == "admin123":
+                st.session_state.role = "Admin"
+                st.rerun()
+            elif role_choice == "현장 직원" and password == "staff123":
+                st.session_state.role = "Staff"
+                st.rerun()
+            else:
+                st.error("비밀번호가 올바르지 않습니다.")
+
+# --- [메인 네비게이션 실행 로직] ---
+
+if st.session_state.role is None:
+    # 로그인 전에는 로그인 페이지만 보여줌
+    pg = st.navigation([st.Page(show_login_page, title="로그인", icon="🔒")])
+    pg.run()
+else:
+    # 권한별 페이지 정의
+    dashboard = st.Page(show_admin_dashboard, title="통합 대시보드", icon="📊")
+    input_page = st.Page("pages/1_현장입력.py", title="현장기록", icon="📝")
+
+    if st.session_state.role == "Admin":
+        # 관리자는 대시보드와 현장기록 모두 보임
+        pg = st.navigation([dashboard, input_page])
+    else:
+        # 현장 직원은 '현장기록' 페이지만 보임
+        pg = st.navigation([input_page])
+        # 직원을 위한 로그아웃 버튼 (사이드바에 별도 추가)
+        if st.sidebar.button("🔓 로그아웃"):
+            st.session_state.role = None
+            st.rerun()
+
+    pg.run()
