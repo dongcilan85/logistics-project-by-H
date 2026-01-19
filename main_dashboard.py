@@ -102,6 +102,8 @@ def show_admin_dashboard():
                 fig_donut.update_traces(textinfo='percent+label')
                 st.plotly_chart(fig_donut, use_container_width=True)
 
+            
+
             # 3. 인건비(CPU) 추이 그래프 (하단 배치)
             st.subheader("💰 날짜별 개당 인건비(CPU) 추이")
             cpu_trend = df.groupby('work_date')['CPU'].mean().reset_index()
@@ -150,6 +152,53 @@ def show_admin_dashboard():
             st.info("데이터가 아직 없습니다. 현장 기록을 시작해주세요.")
     except Exception as e:
         st.error(f"데이터 분석 실패: {e}")
+
+st.divider()
+st.header("⚖️ 작업 부하(Workload) 집중도 분석")
+
+try:
+    if not df.empty:
+        # 1. 작업별 총 투입 공수(Load) 계산
+        # 총 투입 공수 = 투입 인원 * 소요 시간
+        load_df = df.groupby('task')['total_man_hours'].sum().reset_index()
+        
+        # 2. 로드가 높은 순서대로 정렬
+        load_df = load_df.sort_values(by='total_man_hours', ascending=True) # 차트 표시를 위해 오름차순 정렬
+
+        # 3. 가동률 및 로드 집중도 시각화 (가로 바 차트)
+        fig_load = px.bar(
+            load_df, 
+            x='total_man_hours', 
+            y='task', 
+            orientation='h',
+            title="작업별 총 투입 공수(Man-Hours) 랭킹",
+            labels={'total_man_hours': '누적 투입 시간 (h)', 'task': '작업 종류'},
+            color='total_man_hours',
+            color_continuous_scale='Reds' # 로드가 높을수록 진한 빨간색 표시
+        )
+        
+        # 차트 디자인 세부 조정
+        fig_load.update_layout(
+            yaxis={'categoryorder':'total ascending'}, # 높은 순서가 위로 오게 설정
+            showlegend=False
+        )
+        
+        # 4. 분석 결과 표시
+        l_col1, l_col2 = st.columns([2, 1])
+        with l_col1:
+            st.plotly_chart(fig_load, use_container_width=True)
+        
+        with l_col2:
+            st.subheader("⚠️ 집중 관리 대상")
+            top_task = load_df.iloc[-1] # 가장 로드가 높은 작업
+            st.warning(f"현재 가장 많은 로드가 걸리는 작업은 **'{top_task['task']}'** 입니다.")
+            st.write(f"누적 투입 공수: **{top_task['total_man_hours']:.1f}h**")
+            st.info("이 작업의 LPH가 목표 대비 낮다면 공정 최적화 또는 추가 인력 배치가 필요합니다.")
+
+    else:
+        st.info("데이터가 충분하지 않아 부하 분석을 진행할 수 없습니다.")
+except Exception as e:
+    st.error(f"부하 분석 로드 실패: {e}")
 
 def show_login_page():
     st.title("🔐 IWP 물류 시스템")
