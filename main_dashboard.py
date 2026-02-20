@@ -69,47 +69,55 @@ def show_admin_dashboard():
         df = pd.DataFrame(res.data)
         
         if not df.empty:
-            # 데이터 전처리 (LPH 소수점 2자리)
-            df['work_date'] = pd.to_datetime(df['work_date']).dt.date
+            # 1. 기초 데이터 전처리
+            df['work_date'] = pd.to_datetime(df['work_date'])
             df['total_man_hours'] = df['workers'] * df['duration']
             df['LPH'] = (df['quantity'] / df['total_man_hours']).replace([float('inf'), -float('inf')], 0).round(2)
             df['total_cost'] = (df['total_man_hours'] * hourly_wage).round(0)
             df['CPU'] = (df['total_cost'] / df['quantity']).replace([float('inf'), -float('inf')], 0).round(2)
 
-            # 1. KPI 카드
+            # 💡 [핵심] 조회 단위에 따른 X축 그룹화 기준 설정
+            if view_option == "일간":
+                df['display_date'] = df['work_date'].dt.strftime('%Y-%m-%d')
+            elif view_option == "주간":
+                # %W는 해당 연도의 몇 번째 주인지 표시합니다.
+                df['display_date'] = df['work_date'].dt.strftime('%Y-%W주')
+            elif view_option == "월간":
+                df['display_date'] = df['work_date'].dt.strftime('%Y-%m월')
+
+            # 2. KPI 카드
             k1, k2, k3, k4 = st.columns(4)
             k1.metric("평균 LPH", f"{df['LPH'].mean():.2f}")
             k2.metric("평균 CPU", f"{df['CPU'].mean():.2f} 원")
             k3.metric("누적 작업량", f"{df['quantity'].sum():,} EA")
             k4.metric("누적 인건비", f"{df['total_cost'].sum():,.0f} 원")
 
-            # 2. 그래프 나란히 배치 (생산성 추이 & 작업 비율)
+            # 3. 생산성 분석 그래프 (X축을 display_date로 변경)
             st.write("---")
-            c1, c2 = st.columns(2)
-            with c1:
+            chart_col1, chart_col2 = st.columns(2)
+            
+            with chart_col1:
                 st.subheader(f"📅 {view_option} LPH 추이")
-                chart_df = df.groupby('work_date')['LPH'].mean().reset_index()
-                fig_lph = px.line(chart_df, x='work_date', y='LPH', markers=True)
+                # display_date 기준으로 그룹화하여 평균 산출
+                chart_df = df.groupby('display_date')['LPH'].mean().reset_index()
+                # 시계열 순서대로 정렬
+                chart_df = chart_df.sort_values('display_date')
+                
+                fig_lph = px.line(chart_df, x='display_date', y='LPH', markers=True, title=f"단위별 평균 LPH ({view_option})")
                 fig_lph.add_hline(y=target_lph, line_dash="dash", line_color="red")
                 st.plotly_chart(fig_lph, use_container_width=True)
-            with c2:
+            
+            with chart_col2:
                 st.subheader("📊 작업별 생산성 비율")
                 task_stats = df.groupby('task')['LPH'].mean().reset_index().round(2)
                 fig_donut = px.pie(task_stats, values='LPH', names='task', hole=0.4)
                 st.plotly_chart(fig_donut, use_container_width=True)
 
-            # 3. 부하 분석 및 인건비 추이 (나란히 배치)
-            c3, c4 = st.columns(2)
-            with c3:
-                st.subheader("⚖️ 작업별 부하(공수) 랭킹")
-                load_df = df.groupby('task')['total_man_hours'].sum().reset_index().sort_values(by='total_man_hours', ascending=True)
-                fig_load = px.bar(load_df, x='total_man_hours', y='task', orientation='h', color='total_man_hours', color_continuous_scale='Reds')
-                st.plotly_chart(fig_load, use_container_width=True)
-            with c4:
-                st.subheader("💰 날짜별 CPU(개당 인건비) 추이")
-                cpu_trend = df.groupby('work_date')['CPU'].mean().reset_index()
-                fig_cpu = px.bar(cpu_trend, x='work_date', y='CPU')
-                st.plotly_chart(fig_cpu, use_container_width=True)
+            # 4. 비용 분석 그래프 (X축을 display_date로 변경)
+            st.subheader(f"💰 {view_option} 개당 인건비(CPU) 추이")
+            cpu_trend = df.groupby('display_date')['CPU'].mean().reset_index().sort_values('display_date')
+            fig_cpu = px.bar(cpu_trend, x='display_date', y='CPU', title=f"단위별 평균 CPU ({view_option})")
+            st.plotly_chart(fig_cpu, use_container_width=True)
 
             # [C. 그래프 포함 엑셀 보고서 출력]
             st.divider()
