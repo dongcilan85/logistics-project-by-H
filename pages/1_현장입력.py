@@ -23,9 +23,16 @@ worker_id = st.selectbox(
 )
 
 if worker_id:
-    # 해당 현장에서 진행 중인 작업 조회
-    res = supabase.table("active_tasks").select("*").eq("session_name", worker_id).execute()
-    active_task = res.data[0] if res.data else None
+    try:
+        # 27번 라인 부근의 실행 코드를 try 문으로 감쌉니다.
+        res = supabase.table("active_tasks").select("*").eq("session_name", worker_id).execute()
+        active_task = res.data[0] if res.data else None
+    except httpx.ConnectError:
+        st.error("📡 데이터베이스 연결에 실패했습니다. 현장의 와이파이 상태를 확인하거나 잠시 후 다시 시도해 주세요.")
+        st.stop() # 이후 코드 실행을 중단합니다.
+    except Exception as e:
+        st.error(f"⚠️ 알 수 없는 오류가 발생했습니다: {e}")
+        st.stop()
 
     if not active_task:
         # --- [1단계: 정보 입력 단계] ---
