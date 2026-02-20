@@ -4,44 +4,66 @@ from datetime import datetime, timezone, timedelta
 import time
 import httpx
 
-# 1. 설정 및 KST 설정
+# 1. 설정 및 한국 시간(KST) 설정
 url = st.secrets["supabase"]["url"]
 key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 KST = timezone(timedelta(hours=9))
 
 st.set_page_config(page_title="IWP 현장 기록 시스템", layout="centered")
-st.title("📱 현장 작업 기록 (그룹/개별 모드)")
+st.title("📱 현장 작업 기록 (일련번호 자동 부여)")
 
-# 2. 작업 식별 (현장 선택 + 그룹명 입력)
+# 2. 현장 선택 (기정의된 리스트 사용)
 workplace_list = ["A동", "B동", "C동", "D동", "E동", "F동", "허브"] # [cite: 2026-01-19]
 selected_place = st.selectbox("작업 현장을 선택하세요", options=workplace_list, index=None, placeholder="현장 선택")
 
-# 현장 선택 후 그룹/작업자명을 추가로 입력받아 중복 허용
-group_name = st.text_input("그룹명 또는 작업자명을 입력하세요 (예: 1조, 홍길동)", placeholder="구분값 입력")
-
-# 식별자 생성 (예: A동_1조)
-worker_id = f"{selected_place}_{group_name}" if selected_place and group_name else None
-
-if worker_id:
+if selected_place:
     try:
-        # DB 연결 및 데이터 조회
-        res = supabase.table("active_tasks").select("*").eq("session_name", worker_id).execute()
-        active_task = res.data[0] if res.data else None
+        # 💡 해당 현장에서 현재 진행 중인 모든 작업 조회
+        active_res = supabase.table("active_tasks").select("*").ilike("session_name", f"{selected_place}_%").execute()
+        active_tasks = active_res.data
 
-        if not active_task:
-            # --- [1단계: 정보 입력 및 시작] ---
-            st.subheader(f"📝 {selected_place} ({group_name}) 새 작업")
+        # --- [상황 1: 이어서 하기] ---
+        if active_tasks:
+            st.subheader(f"🔄 {selected_place}에서 진행 중인 작업")
+            # 진행 중인 작업들을 드롭다운으로 선택하여 관리
+            task_options = {f"{t['session_name']} ({t['task_type']})": t for t in active_tasks}
+            selected_task_label = st.selectbox("이어서 관리할 작업을 선택하세요", options=list(task_options.keys()), index=None, placeholder="작업 선택")
+            
+            if selected_task_label:
+                active_task = task_options[selected_task_label]
+                # (기존 스톱워치 제어 로직 실행 - 아래 '측정 및 제어' 부분과 동일)
+                # 코드 간결화를 위해 아래 로직으로 통합 처리됩니다.
+                worker_id = active_task['session_name']
+            else:
+                worker_id = None
+        else:
+            worker_id = None
+
+        # --- [상황 2: 새 작업 시작하기] ---
+        if not worker_id:
+            st.divider()
+            st.subheader(f"✨ {selected_place} 새 작업 시작")
             with st.container(border=True):
-                task_categories = ["올리브영 사전작업", "컬리/로켓배송", "면세점", "홈쇼핑합포", "기획팩", "선물세트", "소분"] # [cite: 2026-01-19]
+                # 작업 종류 리스트 적용 [cite: 2026-01-19]
+                task_categories = ["올리브영 사전작업", "컬리/로켓배송", "면세점", "홈쇼핑합포", "기획팩", "선물세트", "소분"]
                 task_type = st.selectbox("작업 구분", options=task_categories)
                 workers = st.number_input("작업 인원 (명)", min_value=1, value=1)
                 qty = st.number_input("작업량 (Box/EA)", min_value=0, value=0)
                 
-                if st.button("🚀 스톱워치 시작", use_container_width=True, type="primary"):
+                if st.button("🚀 새 작업 시작 (일련번호 자동부여)", use_container_width=True, type="primary"):
+                    # 💡 일련번호 생성 로직: (오늘 해당 현장의 기존 기록 수 + 현재 활성 작업 수 + 1)
+                    today_str = datetime.now(KST).strftime("%Y-%m-%d")
+                    
+                    # 오늘 완료된 로그 수 확인
+                    log_res = supabase.table("work_logs").select("id", count="exact").eq("work_date", today_str).ilike("memo", f"현장: {selected_place}%").execute()
+                    # 현재 진행 중인 수 확인
+                    next_num = (log_res.count if log_res.count else 0) + len(active_tasks) + 1
+                    new_session_name = f"{selected_place}_{next_num}"
+                    
                     now_kst = datetime.now(KST).isoformat()
                     supabase.table("active_tasks").insert({
-                        "session_name": worker_id,
+                        "session_name": new_session_name,
                         "task_type": task_type,
                         "workers": workers,
                         "quantity": qty,
@@ -50,13 +72,18 @@ if worker_id:
                         "accumulated_seconds": 0
                     }).execute()
                     st.rerun()
-        else:
-            # --- [2단계: 측정 및 제어] ---
+
+        # --- [3단계: 측정 및 제어 (공통)] ---
+        if worker_id:
+            # 선택된 작업 데이터 재조회 (최신 상태 반영)
+            res = supabase.table("active_tasks").select("*").eq("session_name", worker_id).execute()
+            active_task = res.data[0]
+            
             status = active_task['status']
             accumulated = active_task['accumulated_seconds']
             last_start = datetime.fromisoformat(active_task['last_started_at'])
             
-            st.success(f"🟡 **{selected_place} - {group_name}**의 작업 기록 중")
+            st.success(f"🟡 **{worker_id}** 작업 기록 중")
             timer_placeholder = st.empty()
             
             c1, c2, c3 = st.columns(3)
@@ -90,7 +117,7 @@ if worker_id:
                     "workers": active_task['workers'],
                     "quantity": active_task['quantity'],
                     "duration": final_hours,
-                    "memo": f"현장: {selected_place} / 그룹: {group_name}"
+                    "memo": f"현장: {selected_place} / 번호: {worker_id}"
                 }).execute()
                 
                 supabase.table("active_tasks").delete().eq("session_name", worker_id).execute()
@@ -112,8 +139,8 @@ if worker_id:
                 timer_placeholder.metric("⏸️ 일시정지 상태", f"{h:02d}:{m:02d}:{s:02d}")
 
     except httpx.ConnectError:
-        st.error("📡 DB 연결에 실패했습니다. Supabase 프로젝트 상태를 확인해 주세요.")
+        st.error("📡 DB 연결 실패. Supabase 서버 상태를 확인해 주세요.")
     except Exception as e:
-        st.error(f"⚠️ 오류가 발생했습니다: {e}")
+        st.error(f"⚠️ 오류 발생: {e}")
 else:
-    st.info("⚠️ 현장 선택과 그룹명을 입력하면 작업 창이 나타납니다.")
+    st.info("⚠️ 현장을 선택하면 작업 관리 창이 나타납니다.")
