@@ -26,18 +26,22 @@ def show_admin_dashboard():
     hourly_wage = st.sidebar.number_input("평균 시급 (원)", value=10000, step=100)
     std_work_hours = st.sidebar.slider("표준 가동 시간 (h)", 1, 12, 8)
 
-    # [A. 실시간 모니터링]
-    st.header("🕵️ 실시간 현장 작업 현황")
+    # [A. 실시간 모니터링] - 모든 개별 세션 표시
+    st.header("🕵️ 실시간 현장 작업 현황 (전체)")
     try:
         active_res = supabase.table("active_tasks").select("*").execute()
         active_df = pd.DataFrame(active_res.data)
+        
         if not active_df.empty:
             cols = st.columns(3)
             for i, (_, row) in enumerate(active_df.iterrows()):
+                # 식별자(A동_1조)를 보기 좋게 분리 (A동 - 1조)
+                display_name = row['session_name'].replace("_", " - ")
                 with cols[i % 3]:
                     status_color = "green" if row['status'] == 'running' else "orange"
-                    st.info(f"👤 **{row['session_name']}**\n\n작업: {row['task_type']} (:{status_color}[{row['status'].upper()}])")
-                    if st.button(f"🏁 종료 및 업로드 ({row['session_name']})", key=f"end_{row['id']}"):
+                    st.info(f"📍 **{display_name}**\n\n작업: {row['task_type']} (:{status_color}[{row['status'].upper()}])")
+                    
+                    if st.button(f"🏁 원격 종료 ({display_name})", key=f"end_{row['id']}"):
                         now_kst = datetime.now(KST)
                         acc_sec = row['accumulated_seconds']
                         last_start = pd.to_datetime(row['last_started_at'])
