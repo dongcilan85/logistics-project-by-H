@@ -19,7 +19,7 @@ task_categories = ["올리브영 사전작업", "컬리/로켓배송", "면세�
 
 selected_place = st.sidebar.selectbox("🚩 작업 현장 선택", options=workplace_list, index=0)
 
-# --- [상단: 새 작업 추가 섹션] ---
+# --- [상단: 새 작업 추가] ---
 with st.expander(f"➕ {selected_place} 새 작업 추가하기", expanded=False):
     with st.form("new_task_form"):
         t_type = st.selectbox("작업 구분", options=task_categories)
@@ -34,20 +34,15 @@ with st.expander(f"➕ {selected_place} 새 작업 추가하기", expanded=False
             
             new_id = f"{selected_place}_{next_num}"
             supabase.table("active_tasks").insert({
-                "session_name": new_id, 
-                "task_type": t_type, 
-                "workers": t_workers,
-                "quantity": t_qty, 
-                "last_started_at": datetime.now(KST).isoformat(),
-                "status": "running", 
-                "accumulated_seconds": 0,
-                "accumulated_man_seconds": 0
+                "session_name": new_id, "task_type": t_type, "workers": t_workers,
+                "quantity": t_qty, "last_started_at": datetime.now(KST).isoformat(),
+                "status": "running", "accumulated_seconds": 0, "accumulated_man_seconds": 0
             }).execute()
             st.rerun()
 
 st.divider()
 
-# --- [하단: 실시간 작업 카드 리스트] ---
+# --- [하단: 실시간 작업 카드] ---
 st.subheader(f"📊 {selected_place} 진행 중인 작업")
 
 try:
@@ -55,7 +50,7 @@ try:
     tasks = res.data
 
     if not tasks:
-        st.info("현재 진행 중인 작업이 없습니다. 상단에서 새 작업을 시작하세요.")
+        st.info("진행 중인 작업이 없습니다.")
     else:
         cols = st.columns(3)
         placeholders = []
@@ -64,64 +59,79 @@ try:
             with cols[idx % 3]:
                 with st.container(border=True):
                     st.markdown(f"### 🆔 {task['session_name']}")
-                    st.write(f"**업무:** {task['task_type']}")
+                    st.write(f"**{task['task_type']}** | 📦 {task['quantity']:,} EA")
                     
                     p = st.empty()
                     placeholders.append((p, task))
                     
-                    # 인원 변경 관리
-                    current_w = int(task['workers'])
-                    new_w = st.number_input(f"현재 인원", min_value=1, value=current_w, key=f"w_{task['id']}")
-                    
-                    if new_w != current_w:
-                        if st.button("👥 인원 변경 확정", key=f"up_{task['id']}"):
+                    # 1. 인원 관리
+                    curr_w = int(task['workers'])
+                    new_w = st.number_input("인원 수정", min_value=1, value=curr_w, key=f"w_{task['id']}")
+                    if new_w != curr_w:
+                        if st.button("👥 인원변경 확정", key=f"up_{task['id']}"):
                             now = datetime.now(KST)
-                            last_start = datetime.fromisoformat(task['last_started_at'])
-                            # 변경 전까지의 구간 공수 계산 (인원 * 초)
-                            segment_duration = (now - last_start).total_seconds()
-                            segment_man_sec = current_w * segment_duration
-                            
+                            if task['status'] == "running":
+                                dur = (now - datetime.fromisoformat(task['last_started_at'])).total_seconds()
+                                supabase.table("active_tasks").update({
+                                    "workers": new_w,
+                                    "accumulated_man_seconds": task.get('accumulated_man_seconds', 0) + (curr_w * dur),
+                                    "accumulated_seconds": task['accumulated_seconds'] + dur,
+                                    "last_started_at": now.isoformat()
+                                }).eq("id", task['id']).execute()
+                            else:
+                                supabase.table("active_tasks").update({"workers": new_w}).eq("id", task['id']).execute()
+                            st.rerun()
+
+                    # 2. 제어 버튼 (일시정지/재개/종료)
+                    c1, c2 = st.columns(2)
+                    if task['status'] == "running":
+                        if c1.button("⏸️ 일시정지", key=f"p_{task['id']}", use_container_width=True):
+                            now = datetime.now(KST)
+                            dur = (now - datetime.fromisoformat(task['last_started_at'])).total_seconds()
                             supabase.table("active_tasks").update({
-                                "workers": new_w,
-                                "accumulated_man_seconds": task.get('accumulated_man_seconds', 0) + segment_man_sec,
-                                "accumulated_seconds": task['accumulated_seconds'] + segment_duration,
-                                "last_started_at": now.isoformat()
+                                "status": "paused",
+                                "accumulated_man_seconds": task.get('accumulated_man_seconds', 0) + (curr_w * dur),
+                                "accumulated_seconds": task['accumulated_seconds'] + dur
+                            }).eq("id", task['id']).execute()
+                            st.rerun()
+                    else:
+                        if c1.button("▶️ 작업 재개", key=f"r_{task['id']}", use_container_width=True, type="primary"):
+                            supabase.table("active_tasks").update({
+                                "status": "running",
+                                "last_started_at": datetime.now(KST).isoformat()
                             }).eq("id", task['id']).execute()
                             st.rerun()
 
-                    st.write(f"📦 목표: {task['quantity']:,} EA")
-                    
-                    if st.button("🏁 작업 종료 및 업로드", key=f"e_{task['id']}", type="primary", use_container_width=True):
+                    if c2.button("🏁 종료", key=f"e_{task['id']}", type="primary", use_container_width=True):
                         now = datetime.now(KST)
-                        last_start = datetime.fromisoformat(task['last_started_at'])
-                        final_segment_dur = (now - last_start).total_seconds()
-                        final_segment_man_sec = task['workers'] * final_segment_dur
-                        
-                        total_man_sec = task.get('accumulated_man_seconds', 0) + final_segment_man_sec
-                        total_man_hours = round(total_man_sec / 3600, 2)
+                        total_man_sec = task.get('accumulated_man_seconds', 0)
+                        if task['status'] == "running":
+                            dur = (now - datetime.fromisoformat(task['last_started_at'])).total_seconds()
+                            total_man_sec += (curr_w * dur)
                         
                         supabase.table("work_logs").insert({
-                            "work_date": now.strftime("%Y-%m-%d"), 
-                            "task": task['task_type'],
-                            "workers": task['workers'], 
-                            "quantity": task['quantity'],
-                            "duration": total_man_hours, 
-                            "memo": f"현장: {selected_place} / 번호: {task['session_name']} (인원변동 포함)"
+                            "work_date": now.strftime("%Y-%m-%d"), "task": task['task_type'],
+                            "workers": task['workers'], "quantity": task['quantity'],
+                            "duration": round(total_man_sec / 3600, 2),
+                            "memo": f"현장: {selected_place} / {task['session_name']}"
                         }).execute()
                         supabase.table("active_tasks").delete().eq("id", task['id']).execute()
                         st.balloons()
                         st.rerun()
 
-        # 통합 타이머 루프
+        # 실시간 타이머 루프
         while True:
             for p, task in placeholders:
-                now = datetime.now(KST)
-                last_start = datetime.fromisoformat(task['last_started_at'])
-                total_time = task['accumulated_seconds'] + (now - last_start).total_seconds()
-                h, r = divmod(int(total_time), 3600)
-                m, s = divmod(r, 60)
-                p.subheader(f"⏱️ {h:02d}:{m:02d}:{s:02d}")
+                if task['status'] == "running":
+                    total = task['accumulated_seconds'] + (datetime.now(KST) - datetime.fromisoformat(task['last_started_at'])).total_seconds()
+                    h, r = divmod(int(total), 3600)
+                    m, s = divmod(r, 60)
+                    p.subheader(f"⏱️ {h:02d}:{m:02d}:{s:02d}")
+                else:
+                    h, r = divmod(int(task['accumulated_seconds']), 3600)
+                    m, s = divmod(r, 60)
+                    p.subheader(f"⏸️ {h:02d}:{m:02d}:{s:02d}")
             time.sleep(1)
 
 except Exception as e:
-    st.error(f"오류 발생: {e}")
+    st.error(f"오류: {e}")
