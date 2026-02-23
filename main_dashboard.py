@@ -148,9 +148,12 @@ def show_admin_dashboard():
 # --- [로그인 및 네비게이션 로직] ---
 def show_login_page():
     st.title("🔐 IWP 물류 시스템")
-    with st.container(border=True):
+    # 💡 st.form을 사용하여 엔터키 입력 기능을 활성화합니다.
+    with st.form("login_form", clear_on_submit=False):
         password = st.text_input("비밀번호 (관리자 전용)", type="password")
-        if st.button("시스템 접속", use_container_width=True, type="primary"):
+        submit_button = st.form_submit_button("시스템 접속", use_container_width=True, type="primary")
+        
+        if submit_button:
             if password == "admin123":
                 st.session_state.role = "Admin"
                 st.rerun()
@@ -178,3 +181,4 @@ else:
         # Staff는 대시보드 없이 현장기록 페이지만 노출
         pg = st.navigation({"메뉴": [staff_page]})
     pg.run()
+
