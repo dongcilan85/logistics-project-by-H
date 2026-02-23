@@ -23,11 +23,11 @@ def get_admin_password():
     except:
         return "admin123"
 
-# 💡 PW 변경 팝업창 함수 (st.dialog 사용)
+# 💡 PW 변경 팝업창 함수 보강 버전
 @st.dialog("🔐 PW 변경")
 def change_password_dialog():
     actual_current_pw = get_admin_password()
-    st.write("보안을 위해 현재 비밀번호 확인 후 새 비밀번호를 입력해주세요.")
+    st.write("현재 비밀번호 확인 후 새 비밀번호를 설정하세요.")
     
     with st.form("pw_dialog_form", clear_on_submit=True):
         input_curr = st.text_input("현재 비밀번호", type="password")
@@ -43,13 +43,18 @@ def change_password_dialog():
                 st.warning("비밀번호는 최소 4자 이상이어야 합니다.")
             else:
                 try:
-                    # 💡 DB 업데이트 실행
-                    supabase.table("system_config").update({"value": input_new}).eq("key", "admin_password").execute()
-                    st.success("비밀번호가 성공적으로 변경되었습니다!")
-                    time.sleep(1) # 이제 오류 없이 작동합니다.
-                    st.rerun()
+                    # 💡 업데이트 결과(data)를 받아와서 실제로 반영되었는지 확인
+                    response = supabase.table("system_config").update({"value": input_new}).eq("key", "admin_password").execute()
+                    
+                    if response.data:
+                        st.success("비밀번호가 성공적으로 변경되었습니다!")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        # 💡 테이블에 'admin_password' 키를 가진 데이터가 없을 경우
+                        st.error("변경 실패: DB에 'admin_password' 설정값이 없습니다. SQL로 데이터를 먼저 생성해주세요.")
                 except Exception as e:
-                    st.error(f"업데이트 실패: {e}")
+                    st.error(f"업데이트 에러 발생: {e}")
 
 def show_admin_dashboard():
     st.title("🏰 관리자 통합 통제실")
@@ -161,3 +166,4 @@ else:
     if st.session_state.role == "Admin":
         pg_dict = {"관리자 메뉴": [st.Page(show_admin_dashboard, title="통합 대시보드", icon="📊")]} | pg_dict
     st.navigation(pg_dict).run()
+
