@@ -1,4 +1,4 @@
 pandas
 plotly
 supabase
-st-theme
+xlsxwriter
