@@ -4,6 +4,7 @@ from supabase import create_client, Client
 import plotly.express as px
 from datetime import datetime, timedelta, timezone
 import io
+import extra_streamlit_components as stx
 
 # 1. Supabase 및 한국 시간(KST) 설정
 url = st.secrets["supabase"]["url"]
@@ -11,8 +12,16 @@ key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 KST = timezone(timedelta(hours=9))
 
+# 쿠키 매니저 초기화
+cookie_manager = stx.CookieManager()
+
+# 1. 앱 시작 시 쿠키에서 'role' 정보가 있는지 확인
 if "role" not in st.session_state:
-    st.session_state.role = None
+    saved_role = cookie_manager.get(cookie="user_role")
+    if saved_role:
+        st.session_state.role = saved_role
+    else:
+        st.session_state.role = None
 
 def show_admin_dashboard():
     st.title("🏰 관리자 통합 통제실")
@@ -150,13 +159,12 @@ def show_login_page():
     st.title("🔐 IWP 물류 시스템")
     with st.container(border=True):
         password = st.text_input("비밀번호 (관리자 전용)", type="password")
-        if st.button("시스템 접속", use_container_width=True, type="primary"):
-            if password == "admin123":
-                st.session_state.role = "Admin"
-                st.rerun()
-            elif password == "":
-                st.session_state.role = "Staff"
-                st.rerun()
+        if st.button("시스템 접속"):
+        if password == "admin123":
+            st.session_state.role = "Admin"
+            # 💡 쿠키에 로그인 정보 저장 (유효기간 설정 가능)
+            cookie_manager.set("user_role", "Admin", expires_at=datetime.now() + timedelta(days=1))
+            st.rerun()
             else:
                 st.error("잘못된 비밀번호입니다.")
 
