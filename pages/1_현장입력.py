@@ -14,7 +14,7 @@ st.title("📱 현장 작업 통합 관제")
 
 # 2. 리스트 정의 [cite: 2026-01-19]
 workplace_list = ["A동", "B동", "C동", "D동", "E동", "F동", "허브"]
-task_categories = ["올리브영 사전작업", "컬리/로켓배송", "면세점", "홈쇼핑합포", "기획팩", "선물세트", "소분"]
+task_categories = ["올리브영 사전작업", "컬리/로켓배송", "블리스터", "면세점", "홈쇼핑합포", "기획팩", "선물세트", "소분"]
 
 # 💡 [UI 수정] 사이드바에서 메인 화면 최상단으로 이동
 selected_place = st.selectbox("🚩 현재 작업 현장 선택", options=workplace_list, index=0)
@@ -149,3 +149,4 @@ try:
 
 except Exception as e:
     st.error(f"오류: {e}")
+
