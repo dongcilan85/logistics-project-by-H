@@ -4,6 +4,7 @@ from supabase import create_client, Client
 import plotly.express as px
 from datetime import datetime, timedelta, timezone
 import io
+import extra_streamlit_components as stx
 
 # 1. Supabase 및 한국 시간(KST) 설정
 url = st.secrets["supabase"]["url"]
@@ -11,8 +12,17 @@ key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 KST = timezone(timedelta(hours=9))
 
-if "role" not in st.session_state:
-    st.session_state.role = None
+# 쿠키 매니저 초기화
+cookie_manager = stx.CookieManager()
+
+# 세션 상태 및 쿠키 확인 로직
+if "role" not in st.session_state or st.session_state.role is None:
+    # 쿠키에서 저장된 역할 정보를 읽어옴
+    saved_role = cookie_manager.get(cookie="user_role")
+    if saved_role:
+        st.session_state.role = saved_role
+    else:
+        st.session_state.role = None
 
 def show_admin_dashboard():
     st.title("🏰 관리자 통합 통제실")
@@ -68,13 +78,11 @@ def show_admin_dashboard():
         
         if not df.empty:
             df['work_date'] = pd.to_datetime(df['work_date'])
-            # 지표 계산
             df['total_man_hours'] = df['duration']
             df['LPH'] = (df['quantity'] / df['total_man_hours']).replace([float('inf'), -float('inf')], 0).round(2)
             df['total_cost'] = (df['total_man_hours'] * hourly_wage).round(0)
             df['CPU'] = (df['total_cost'] / df['quantity']).replace([float('inf'), -float('inf')], 0).round(2)
 
-            # 조회 단위별 그룹화 기준(display_date) 설정
             if view_option == "일간":
                 df['display_date'] = df['work_date'].dt.strftime('%Y-%m-%d')
             elif view_option == "주간":
@@ -82,14 +90,12 @@ def show_admin_dashboard():
             elif view_option == "월간":
                 df['display_date'] = df['work_date'].dt.strftime('%Y-%m월')
 
-            # 1. KPI 카드
             k1, k2, k3, k4 = st.columns(4)
             k1.metric("평균 LPH", f"{df['LPH'].mean():.2f}")
             k2.metric("평균 CPU (개당 인건비)", f"{df['CPU'].mean():.2f} 원")
             k3.metric("누적 작업량", f"{df['quantity'].sum():,} EA")
             k4.metric("누적 인건비", f"{df['total_cost'].sum():,.0f} 원")
 
-            # 2. 첫 번째 줄 그래프: 생산성 분석
             st.write("---")
             r1_c1, r1_c2 = st.columns(2)
             with r1_c1:
@@ -105,7 +111,6 @@ def show_admin_dashboard():
                 fig_donut.update_traces(textinfo='percent+label')
                 st.plotly_chart(fig_donut, use_container_width=True)
 
-            # 3. 두 번째 줄 그래프: 부하 분석 및 비용 추이
             r2_c1, r2_c2 = st.columns(2)
             with r2_c1:
                 st.subheader("⚖️ 작업별 총 부하(공수) 랭킹")
@@ -118,7 +123,6 @@ def show_admin_dashboard():
                 fig_cpu = px.bar(cpu_trend, x='display_date', y='CPU')
                 st.plotly_chart(fig_cpu, use_container_width=True)
 
-            # [C. 보고서 출력]
             st.divider()
             st.header("📂 엑셀 보고서 다운로드")
             output = io.BytesIO()
@@ -145,7 +149,6 @@ def show_admin_dashboard():
     except Exception as e:
         st.error(f"데이터 분석 오류: {e}")
 
-# --- [로그인 및 네비게이션 로직] ---
 def show_login_page():
     st.title("🔐 IWP 물류 시스템")
     with st.container(border=True):
@@ -153,9 +156,13 @@ def show_login_page():
         if st.button("시스템 접속", use_container_width=True, type="primary"):
             if password == "admin123":
                 st.session_state.role = "Admin"
+                # 쿠키에 Admin 역할 저장 (유효기간 1일)
+                cookie_manager.set("user_role", "Admin", expires_at=datetime.now() + timedelta(days=1))
                 st.rerun()
             elif password == "":
                 st.session_state.role = "Staff"
+                # 쿠키에 Staff 역할 저장 (유효기간 1일)
+                cookie_manager.set("user_role", "Staff", expires_at=datetime.now() + timedelta(days=1))
                 st.rerun()
             else:
                 st.error("잘못된 비밀번호입니다.")
@@ -164,6 +171,8 @@ if st.session_state.role is None:
     st.navigation([st.Page(show_login_page, title="로그인", icon="🔒")]).run()
 else:
     if st.sidebar.button("🔓 로그아웃"):
+        # 로그아웃 시 쿠키 삭제
+        cookie_manager.delete("user_role")
         st.session_state.role = None
         st.rerun()
     pg = st.navigation({
