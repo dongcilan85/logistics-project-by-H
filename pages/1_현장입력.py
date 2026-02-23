@@ -79,24 +79,42 @@ try:
     if not tasks:
         st.info(f"{selected_place}에 진행 중인 작업이 없습니다.")
     else:
-        # Wide 모드에 맞춰 4열 배치
         cols = st.columns(4)
         placeholders = []
         for idx, task in enumerate(tasks):
             with cols[idx % 4]:
                 with st.container(border=True):
                     st.markdown(f"#### 🆔 {task['session_name']}")
-                    st.write(f"**{task['task_type']}**")
-                    st.write(f"📦 {task['quantity']:,} EA | 👥 {task['workers']}명")
-                    p = st.empty()
+                    st.write(f"**{task['task_type']}** | 📦 {task['quantity']:,} EA")
+                    p = st.empty() # 타이머 표시 영역
                     placeholders.append((p, task))
                     
+                    # 💡 [복구된 인원 변경 로직]
+                    curr_w = int(task['workers'])
+                    new_w = st.number_input("인원 수정", min_value=1, value=curr_w, key=f"w_{task['id']}")
+                    if new_w != curr_w and st.button("👥 변경 확정", key=f"up_{task['id']}", use_container_width=True):
+                        now = datetime.now(KST)
+                        if task['status'] == "running":
+                            # 현재까지의 공수를 기존 인원 기준으로 계산하여 history에 저장
+                            new_segs = split_man_seconds_by_date(datetime.fromisoformat(task['last_started_at']), now, curr_w)
+                            updated_history = update_history_map(task.get('work_history', []), new_segs)
+                            supabase.table("active_tasks").update({
+                                "workers": new_w, 
+                                "work_history": updated_history, 
+                                "accumulated_seconds": task['accumulated_seconds'] + (now - datetime.fromisoformat(task['last_started_at'])).total_seconds(),
+                                "last_started_at": now.isoformat()
+                            }).eq("id", task['id']).execute()
+                        else:
+                            # 정지 상태일 때는 인원수만 변경
+                            supabase.table("active_tasks").update({"workers": new_w}).eq("id", task['id']).execute()
+                        st.rerun()
+
                     c1, c2 = st.columns(2)
                     if task['status'] == "running":
                         if c1.button("⏸️ 정지", key=f"p_{task['id']}", use_container_width=True):
                             now = datetime.now(KST)
                             dur = (now - datetime.fromisoformat(task['last_started_at'])).total_seconds()
-                            new_segs = split_man_seconds_by_date(datetime.fromisoformat(task['last_started_at']), now, int(task['workers']))
+                            new_segs = split_man_seconds_by_date(datetime.fromisoformat(task['last_started_at']), now, curr_w)
                             supabase.table("active_tasks").update({
                                 "status": "paused", "accumulated_seconds": task['accumulated_seconds'] + dur,
                                 "work_history": update_history_map(task.get('work_history', []), new_segs)
@@ -111,7 +129,7 @@ try:
                         now = datetime.now(KST)
                         final_h = task.get('work_history', [])
                         if task['status'] == "running":
-                            new_segs = split_man_seconds_by_date(datetime.fromisoformat(task['last_started_at']), now, int(task['workers']))
+                            new_segs = split_man_seconds_by_date(datetime.fromisoformat(task['last_started_at']), now, curr_w)
                             final_h = update_history_map(final_h, new_segs)
                         
                         total_man_sec = sum(item['man_seconds'] for item in final_h)
@@ -143,3 +161,4 @@ try:
 
 except Exception as e:
     st.error(f"데이터 로드 중 오류 발생: {e}")
+
