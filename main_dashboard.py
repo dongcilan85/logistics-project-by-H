@@ -14,6 +14,42 @@ KST = timezone(timedelta(hours=9))
 if "role" not in st.session_state:
     st.session_state.role = None
 
+# 💡 DB에서 비밀번호를 실시간으로 가져오는 함수
+def get_admin_password():
+    try:
+        res = supabase.table("system_config").select("value").eq("key", "admin_password").execute()
+        return res.data[0]['value'] if res.data else "admin123"
+    except:
+        return "admin123"
+
+# 💡 PW 변경 팝업창 함수 (st.dialog 사용)
+@st.dialog("🔐 PW 변경")
+def change_password_dialog():
+    actual_current_pw = get_admin_password()
+    st.write("보안을 위해 현재 비밀번호 확인 후 새 비밀번호를 입력해주세요.")
+    
+    with st.form("pw_dialog_form", clear_on_submit=True):
+        input_curr = st.text_input("현재 비밀번호", type="password")
+        input_new = st.text_input("새 비밀번호", type="password")
+        input_conf = st.text_input("새 비밀번호 확인", type="password")
+        
+        if st.form_submit_button("변경사항 저장", use_container_width=True):
+            if input_curr != actual_current_pw:
+                st.error("현재 비밀번호가 일치하지 않습니다.")
+            elif input_new != input_conf:
+                st.error("새 비밀번호가 서로 일치하지 않습니다.")
+            elif len(input_new) < 4:
+                st.warning("비밀번호는 최소 4자 이상이어야 합니다.")
+            else:
+                try:
+                    # 💡 DB 업데이트 실행
+                    supabase.table("system_config").update({"value": input_new}).eq("key", "admin_password").execute()
+                    st.success("비밀번호가 성공적으로 변경되었습니다!")
+                    time.sleep(1) # 이제 오류 없이 작동합니다.
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"업데이트 실패: {e}")
+
 def show_admin_dashboard():
     st.title("🏰 관리자 통합 통제실")
     
@@ -148,17 +184,14 @@ def show_admin_dashboard():
 # --- [로그인 및 네비게이션 로직] ---
 def show_login_page():
     st.title("🔐 IWP 물류 시스템")
-    with st.container(border=True):
-        password = st.text_input("비밀번호 (관리자 전용)", type="password")
-        if st.button("시스템 접속", use_container_width=True, type="primary"):
-            if password == "70077":
-                st.session_state.role = "Admin"
-                st.rerun()
+    with st.form("login_form"):
+        password = st.text_input("비밀번호", type="password")
+        if st.form_submit_button("시스템 접속", use_container_width=True, type="primary"):
+            if password == get_admin_password():
+                st.session_state.role = "Admin"; st.rerun()
             elif password == "":
-                st.session_state.role = "Staff"
-                st.rerun()
-            else:
-                st.error("잘못된 비밀번호입니다.")
+                st.session_state.role = "Staff"; st.rerun()
+            else: st.error("잘못된 비밀번호입니다.")
 
 if st.session_state.role is None:
     st.navigation([st.Page(show_login_page, title="로그인", icon="🔒")]).run()
@@ -178,4 +211,5 @@ else:
         # Staff는 대시보드 없이 현장기록 페이지만 노출
         pg = st.navigation({"메뉴": [staff_page]})
     pg.run()
+
 
