@@ -4,6 +4,7 @@ from supabase import create_client, Client
 import plotly.express as px
 from datetime import datetime, timedelta, timezone
 import io
+import time
 
 # 1. Supabase 및 한국 시간(KST) 설정
 url = st.secrets["supabase"]["url"]
@@ -151,3 +152,4 @@ else:
         pg_dict = {"관리자 메뉴": [st.Page(show_admin_dashboard, title="통합 대시보드", icon="📊")]} | pg_dict
     
     st.navigation(pg_dict).run()
+
