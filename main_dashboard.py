@@ -151,7 +151,7 @@ def show_login_page():
     with st.container(border=True):
         password = st.text_input("비밀번호 (관리자 전용)", type="password")
         if st.button("시스템 접속", use_container_width=True, type="primary"):
-            if password == "admin123":
+            if password == "70077":
                 st.session_state.role = "Admin"
                 st.rerun()
             elif password == "":
@@ -178,3 +178,4 @@ else:
         # Staff는 대시보드 없이 현장기록 페이지만 노출
         pg = st.navigation({"메뉴": [staff_page]})
     pg.run()
+
