@@ -17,7 +17,6 @@ cookie_manager = stx.CookieManager()
 
 # 세션 상태 및 쿠키 확인 로직
 if "role" not in st.session_state or st.session_state.role is None:
-    # 쿠키에서 저장된 역할 정보를 읽어옴
     saved_role = cookie_manager.get(cookie="user_role")
     if saved_role:
         st.session_state.role = saved_role
@@ -92,7 +91,7 @@ def show_admin_dashboard():
 
             k1, k2, k3, k4 = st.columns(4)
             k1.metric("평균 LPH", f"{df['LPH'].mean():.2f}")
-            k2.metric("평균 CPU (개당 인건비)", f"{df['CPU'].mean():.2f} 원")
+            k2.metric("평균 CPU", f"{df['CPU'].mean():.2f} 원")
             k3.metric("누적 작업량", f"{df['quantity'].sum():,} EA")
             k4.metric("누적 인건비", f"{df['total_cost'].sum():,.0f} 원")
 
@@ -102,7 +101,7 @@ def show_admin_dashboard():
                 st.subheader(f"📅 {view_option} LPH 추이")
                 chart_df = df.groupby('display_date')['LPH'].mean().reset_index().sort_values('display_date')
                 fig_lph = px.line(chart_df, x='display_date', y='LPH', markers=True)
-                fig_lph.add_hline(y=target_lph, line_dash="dash", line_color="red", annotation_text="목표")
+                fig_lph.add_hline(y=target_lph, line_dash="dash", line_color="red")
                 st.plotly_chart(fig_lph, use_container_width=True)
             with r1_c2:
                 st.subheader("📊 작업별 생산성 비중")
@@ -156,12 +155,10 @@ def show_login_page():
         if st.button("시스템 접속", use_container_width=True, type="primary"):
             if password == "admin123":
                 st.session_state.role = "Admin"
-                # 쿠키에 Admin 역할 저장 (유효기간 1일)
                 cookie_manager.set("user_role", "Admin", expires_at=datetime.now() + timedelta(days=1))
                 st.rerun()
             elif password == "":
                 st.session_state.role = "Staff"
-                # 쿠키에 Staff 역할 저장 (유효기간 1일)
                 cookie_manager.set("user_role", "Staff", expires_at=datetime.now() + timedelta(days=1))
                 st.rerun()
             else:
@@ -171,7 +168,6 @@ if st.session_state.role is None:
     st.navigation([st.Page(show_login_page, title="로그인", icon="🔒")]).run()
 else:
     if st.sidebar.button("🔓 로그아웃"):
-        # 로그아웃 시 쿠키 삭제
         cookie_manager.delete("user_role")
         st.session_state.role = None
         st.rerun()
