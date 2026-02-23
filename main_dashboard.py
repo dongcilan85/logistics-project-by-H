@@ -6,7 +6,10 @@ from datetime import datetime, timedelta, timezone
 import io
 import time
 
-# 1. Supabase 및 한국 시간(KST) 설정
+# 1. 페이지 설정 (최상단에 위치해야 함) - Wide 모드 적용
+st.set_page_config(page_title="IWP 통합 관제 시스템", layout="wide")
+
+# 2. Supabase 및 한국 시간(KST) 설정
 url = st.secrets["supabase"]["url"]
 key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
@@ -216,6 +219,7 @@ else:
         # Staff는 대시보드 없이 현장기록 페이지만 노출
         pg = st.navigation({"메뉴": [staff_page]})
     pg.run()
+
 
 
 
