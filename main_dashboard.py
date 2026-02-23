@@ -4,7 +4,6 @@ from supabase import create_client, Client
 import plotly.express as px
 from datetime import datetime, timedelta, timezone
 import io
-import extra_streamlit_components as stx
 
 # 1. Supabase 및 한국 시간(KST) 설정
 url = st.secrets["supabase"]["url"]
@@ -12,16 +11,8 @@ key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 KST = timezone(timedelta(hours=9))
 
-# 쿠키 매니저 초기화
-cookie_manager = stx.CookieManager()
-
-# 1. 앱 시작 시 쿠키에서 'role' 정보가 있는지 확인
 if "role" not in st.session_state:
-    saved_role = cookie_manager.get(cookie="user_role")
-    if saved_role:
-        st.session_state.role = saved_role
-    else:
-        st.session_state.role = None
+    st.session_state.role = None
 
 def show_admin_dashboard():
     st.title("🏰 관리자 통합 통제실")
@@ -40,7 +31,7 @@ def show_admin_dashboard():
         active_df = pd.DataFrame(active_res.data)
         if not active_df.empty:
             cols = st.columns(3)
-            for i, (_, row) in enumerate(active_df.iterrows()):
+            for i, row in active_df.iterrows():
                 display_name = row['session_name'].replace("_", " - ")
                 with cols[i % 3]:
                     status_color = "green" if row['status'] == 'running' else "orange"
@@ -77,13 +68,11 @@ def show_admin_dashboard():
         
         if not df.empty:
             df['work_date'] = pd.to_datetime(df['work_date'])
-            # 지표 계산
             df['total_man_hours'] = df['duration']
             df['LPH'] = (df['quantity'] / df['total_man_hours']).replace([float('inf'), -float('inf')], 0).round(2)
             df['total_cost'] = (df['total_man_hours'] * hourly_wage).round(0)
             df['CPU'] = (df['total_cost'] / df['quantity']).replace([float('inf'), -float('inf')], 0).round(2)
 
-            # 조회 단위별 그룹화 기준(display_date) 설정
             if view_option == "일간":
                 df['display_date'] = df['work_date'].dt.strftime('%Y-%m-%d')
             elif view_option == "주간":
@@ -94,27 +83,26 @@ def show_admin_dashboard():
             # 1. KPI 카드
             k1, k2, k3, k4 = st.columns(4)
             k1.metric("평균 LPH", f"{df['LPH'].mean():.2f}")
-            k2.metric("평균 CPU (개당 인건비)", f"{df['CPU'].mean():.2f} 원")
+            k2.metric("평균 CPU", f"{df['CPU'].mean():.2f} 원")
             k3.metric("누적 작업량", f"{df['quantity'].sum():,} EA")
             k4.metric("누적 인건비", f"{df['total_cost'].sum():,.0f} 원")
 
-            # 2. 첫 번째 줄 그래프: 생산성 분석
+            # 2. 첫 번째 줄: 생산성 분석
             st.write("---")
             r1_c1, r1_c2 = st.columns(2)
             with r1_c1:
                 st.subheader(f"📅 {view_option} LPH 추이")
                 chart_df = df.groupby('display_date')['LPH'].mean().reset_index().sort_values('display_date')
                 fig_lph = px.line(chart_df, x='display_date', y='LPH', markers=True)
-                fig_lph.add_hline(y=target_lph, line_dash="dash", line_color="red", annotation_text="목표")
+                fig_lph.add_hline(y=target_lph, line_dash="dash", line_color="red")
                 st.plotly_chart(fig_lph, use_container_width=True)
             with r1_c2:
                 st.subheader("📊 작업별 생산성 비중")
                 task_stats = df.groupby('task')['LPH'].mean().reset_index().round(2)
                 fig_donut = px.pie(task_stats, values='LPH', names='task', hole=0.4)
-                fig_donut.update_traces(textinfo='percent+label')
                 st.plotly_chart(fig_donut, use_container_width=True)
 
-            # 3. 두 번째 줄 그래프: 부하 분석 및 비용 추이
+            # 3. 두 번째 줄: 부하 분석 및 비용 추이
             r2_c1, r2_c2 = st.columns(2)
             with r2_c1:
                 st.subheader("⚖️ 작업별 총 부하(공수) 랭킹")
@@ -135,10 +123,8 @@ def show_admin_dashboard():
                 summary = df.groupby('task').agg({'LPH':'mean', 'CPU':'mean', 'quantity':'sum', 'total_man_hours':'sum'}).reset_index().round(2)
                 summary.to_excel(writer, sheet_name='작업별_요약분석', index=False)
                 df.to_excel(writer, sheet_name='전체_상세로그', index=False)
-                
                 workbook = writer.book
                 worksheet = workbook.add_worksheet('📊_종합대시보드')
-                worksheet.activate()
                 chart = workbook.add_chart({'type': 'column'})
                 chart.add_series({'categories':['작업별_요약분석', 1, 0, len(summary), 0], 'values':['작업별_요약분석', 1, 1, len(summary), 1]})
                 worksheet.insert_chart('B2', chart)
@@ -154,20 +140,22 @@ def show_admin_dashboard():
     except Exception as e:
         st.error(f"데이터 분석 오류: {e}")
 
-# --- [로그인 및 네비게이션 로직] ---
+# --- [로그인 로직] ---
 def show_login_page():
     st.title("🔐 IWP 물류 시스템")
     with st.container(border=True):
         password = st.text_input("비밀번호 (관리자 전용)", type="password")
-        if st.button("시스템 접속"):
-        if password == "admin123":
-            st.session_state.role = "Admin"
-            # 💡 쿠키에 로그인 정보 저장 (유효기간 설정 가능)
-            cookie_manager.set("user_role", "Admin", expires_at=datetime.now() + timedelta(days=1))
-            st.rerun()
+        if st.button("시스템 접속", use_container_width=True, type="primary"):
+            if password == "admin123":
+                st.session_state.role = "Admin"
+                st.rerun()
+            elif password == "":
+                st.session_state.role = "Staff"
+                st.rerun()
             else:
                 st.error("잘못된 비밀번호입니다.")
 
+# --- [네비게이션 설정] ---
 if st.session_state.role is None:
     st.navigation([st.Page(show_login_page, title="로그인", icon="🔒")]).run()
 else:
