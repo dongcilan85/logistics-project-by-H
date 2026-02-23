@@ -14,26 +14,46 @@ KST = timezone(timedelta(hours=9))
 if "role" not in st.session_state:
     st.session_state.role = None
 
-# 💡 DB에서 현재 비밀번호 가져오는 함수
+# 💡 DB에서 현재 비밀번호를 실시간으로 가져오는 함수
 def get_admin_password():
-    res = supabase.table("system_config").select("value").eq("key", "admin_password").execute()
-    return res.data[0]['value'] if res.data else "admin123"
+    try:
+        res = supabase.table("system_config").select("value").eq("key", "admin_password").execute()
+        return res.data[0]['value'] if res.data else "admin123"
+    except:
+        return "admin123"
 
 def show_admin_dashboard():
     st.title("🏰 관리자 통합 통제실")
     
-    # 🔐 [신규: 비밀번호 변경 섹션]
+    # 🔐 [보안 강화: 3중 확인 비밀번호 변경 섹션]
     with st.expander("⚙️ 관리자 보안 설정", expanded=False):
         st.subheader("비밀번호 변경")
+        # 현재 저장된 비밀번호를 먼저 불러옵니다.
+        actual_current_pw = get_admin_password()
+        
         with st.form("pw_change_form"):
+            current_pw_input = st.text_input("현재 비밀번호 확인", type="password", help="보안을 위해 현재 비밀번호를 먼저 입력하세요.")
             new_pw = st.text_input("새 비밀번호", type="password")
             confirm_pw = st.text_input("새 비밀번호 확인", type="password")
-            if st.form_submit_button("비밀번호 업데이트"):
-                if new_pw == confirm_pw and new_pw != "":
-                    supabase.table("system_config").update({"value": new_pw}).eq("key", "admin_password").execute()
-                    st.success("비밀번호가 성공적으로 변경되었습니다!")
+            
+            if st.form_submit_button("보안 업데이트 실행"):
+                # 1단계: 현재 비밀번호가 일치하는지 확인
+                if current_pw_input != actual_current_pw:
+                    st.error("❌ 현재 비밀번호가 일치하지 않습니다. 변경이 거부되었습니다.")
+                # 2단계: 새 비밀번호와 확인용이 일치하는지 확인
+                elif new_pw != confirm_pw:
+                    st.error("❌ 새 비밀번호와 확인용 비밀번호가 일치하지 않습니다.")
+                # 3단계: 빈칸 여부 확인
+                elif new_pw.strip() == "":
+                    st.warning("⚠️ 새 비밀번호를 입력해 주세요.")
+                # 최종: 모든 조건 만족 시 DB 업데이트
                 else:
-                    st.error("비밀번호가 일치하지 않거나 빈칸입니다.")
+                    try:
+                        supabase.table("system_config").update({"value": new_pw}).eq("key", "admin_password").execute()
+                        st.success("✅ 비밀번호가 안전하게 변경되었습니다. 다음 로그인부터 적용됩니다.")
+                        st.balloons()
+                    except Exception as e:
+                        st.error(f"DB 업데이트 중 오류가 발생했습니다: {e}")
 
     st.divider()
     
@@ -116,13 +136,12 @@ def show_admin_dashboard():
             st.dataframe(df.sort_values('work_date', ascending=False), use_container_width=True)
     except Exception as e: st.error(f"분석 오류: {e}")
 
-# --- [로그인 로직 - DB 연동] ---
+# --- [로그인 로직] ---
 def show_login_page():
     st.title("🔐 IWP 물류 시스템")
     with st.form("login_form"):
         password = st.text_input("비밀번호", type="password")
         if st.form_submit_button("시스템 접속", use_container_width=True, type="primary"):
-            # 💡 하드코딩된 'admin123' 대신 DB에서 조회
             current_admin_pw = get_admin_password()
             if password == current_admin_pw:
                 st.session_state.role = "Admin"; st.rerun()
