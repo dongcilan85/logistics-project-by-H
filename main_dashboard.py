@@ -4,6 +4,7 @@ from supabase import create_client, Client
 import plotly.express as px
 from datetime import datetime, timedelta, timezone
 import io
+import time
 
 # 1. Supabase 및 한국 시간(KST) 설정
 url = st.secrets["supabase"]["url"]
@@ -196,9 +197,13 @@ def show_login_page():
 if st.session_state.role is None:
     st.navigation([st.Page(show_login_page, title="로그인", icon="🔒")]).run()
 else:
-    if st.sidebar.button("🔓 로그아웃"):
-        st.session_state.role = None
-        st.rerun()
+    # 💡 [사이드바 하단 버튼 배치] 로그아웃과 PW변경 나란히
+    st.sidebar.divider()
+    side_col1, side_col2 = st.sidebar.columns(2)
+    if side_col1.button("🔓 로그아웃", use_container_width=True):
+        st.session_state.role = None; st.rerun()
+    if side_col2.button("🔑 PW변경", use_container_width=True):
+        change_password_dialog()
     
     # 페이지 정의
     admin_page = st.Page(show_admin_dashboard, title="통합 대시보드", icon="📊")
@@ -211,5 +216,6 @@ else:
         # Staff는 대시보드 없이 현장기록 페이지만 노출
         pg = st.navigation({"메뉴": [staff_page]})
     pg.run()
+
 
 
