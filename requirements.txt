@@ -2,4 +2,4 @@ pandas
 plotly
 supabase
 xlsxwriter
-extra-streamlit-components
+
