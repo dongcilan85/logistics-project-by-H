@@ -220,6 +220,39 @@ else:
         pg = st.navigation({"메뉴": [staff_page]})
     pg.run()
 
+def show_prediction_module(df, hourly_wage):
+    st.header("🔮 작업 자원 예측 시뮬레이터")
+    
+    with st.container(border=True):
+        col1, col2, col3 = st.columns(3)
+        
+        # 1. 입력부
+        with col1:
+            target_task = st.selectbox("예측 대상 작업", options=df['task'].unique())
+            target_qty = st.number_input("목표 작업 물량 (EA)", min_value=1, value=1000)
+            
+        with col2:
+            # 해당 카테고리의 평균 LPH 추출
+            avg_lph = df[df['task'] == target_task]['LPH'].mean()
+            st.metric(f"{target_task} 평균 LPH", f"{avg_lph:.2f}")
+            
+            available_time = st.slider("제한 시간 (시간)", 1, 12, 8)
+            
+        # 2. 연산부
+        predicted_man_hours = target_qty / avg_lph if avg_lph > 0 else 0
+        required_workers = predicted_man_hours / available_time if available_time > 0 else 0
+        predicted_cost = predicted_man_hours * hourly_wage
+        
+        # 3. 출력부
+        with col3:
+            st.info("💡 예측 결과")
+            st.write(f"⏱️ **소요 총 공수:** {predicted_man_hours:.1f} MH")
+            st.write(f"👥 **필요 인원:** 약 {round(required_workers + 0.49)} 명") # 올림 처리
+            st.write(f"💰 **예상 인건비:** {predicted_cost:,.0f} 원")
+
+    # 가독성을 위한 시각화 추가
+    if predicted_man_hours > 0:
+        st.caption(f"※ {target_task} 카테고리의 과거 실적 데이터 {len(df[df['task'] == target_task])}건을 분석한 결과입니다.")
 
 
 
