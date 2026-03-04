@@ -9,24 +9,33 @@ key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 KST = timezone(timedelta(hours=9))
 
-# Wide 모드 적용 (대시보드와 일관성 유지)
 st.set_page_config(page_title="IWP 현장기록", layout="wide")
-st.title("📱 현장 작업 통합 관제")
+st.title("📱 IWP (Intelligent Work Platform) 현장 관제")
 
-# 2. 리스트 정의 [cite: 2026-01-19]
-workplace_list = ["A동", "B동", "C동", "D동", "E동", "F동", "허브"]
-task_categories = ["올리브영 사전작업", "컬리/로켓배송", "블리스터", "면세점", "홈쇼핑합포","B2B 출고", "기획팩", "선물세트", "소분"]
+# 2. 리스트 및 계층 구조 정의 [cite: 2026-01-19]
+# 💡 팀장님이 원하시는 대로 하위 카테고리를 자유롭게 수정/추가하실 수 있습니다.
+task_hierarchy = {
+    "올리브영": ["사전작업", "출고작업"],
+    "컬리/로켓배송": ["밀크런", "일반입고"],
+    "면세점": [], # 세부 카테고리 없음
+    "홈쇼핑": ["세팅", "사전작업" ,"합포"],
+    "기획팩": [],
+    "선물세트": [],
+    "소분": []
+}
+
+workplace_list = ["A동", "B동", "C동", "D동", "E동", "F동", "허브"] [cite: 2026-01-19]
 
 # 상단 버튼형 현장 선택
 st.write("### 🚩 작업 현장 선택")
 selected_place = st.segmented_control(
-    "현장을 선택하면 해당 구역의 작업 목록이 아래에 나타납니다.",
+    "현장을 선택하면 해당 구역의 작업 목록이 나타납니다.",
     options=workplace_list,
     default="A동",
     key="workplace_selector"
 )
 
-# --- 헬퍼 함수 (날짜별 공수 분리 로직 유지) ---
+# --- 헬퍼 함수 생략 (기존 split_man_seconds_by_date, update_history_map 로직 동일 유지) ---
 def split_man_seconds_by_date(start_dt, end_dt, workers):
     history_map = {}
     curr = start_dt
@@ -36,10 +45,7 @@ def split_man_seconds_by_date(start_dt, end_dt, workers):
         d_str = curr.strftime("%Y-%m-%d")
         history_map[d_str] = history_map.get(d_str, 0) + (duration * workers)
         curr = next_day
-    duration = (end_dt - curr).total_seconds()
-    d_str = end_dt.strftime("%Y-%m-%d")
-    history_map[d_str] = history_map.get(d_str, 0) + (duration * curr.hour) # workers 오타 수정
-    history_map[d_str] = (end_dt - curr).total_seconds() * workers
+    history_map[end_dt.strftime("%Y-%m-%d")] = (end_dt - curr).total_seconds() * workers
     return history_map
 
 def update_history_map(current_history, new_segments):
@@ -53,9 +59,23 @@ st.divider()
 # --- [상단: 새 작업 추가] ---
 with st.expander(f"➕ {selected_place} 새 작업 시작", expanded=False):
     with st.form("new_task"):
-        t_type = st.selectbox("작업 구분", options=task_categories)
+        # 💡 [개선] 세부 카테고리 유무에 따른 동적 표시 로직
+        main_tasks = list(task_hierarchy.keys())
+        display_tasks = [f"▶ {t}" if task_hierarchy[t] else t for t in main_tasks]
+        
+        selected_main_display = st.selectbox("작업 대분류", options=display_tasks)
+        selected_main = selected_main_display.replace("▶ ", "")
+        
+        selected_sub = None
+        if task_hierarchy[selected_main]:
+            selected_sub = st.selectbox(f"ㄴ {selected_main} 세부 항목", options=task_hierarchy[selected_main])
+        
+        # DB에 저장될 최종 작업명 결정
+        final_task_name = f"{selected_main} ({selected_sub})" if selected_sub else selected_main
+        
         t_workers = st.number_input("시작 인원", min_value=1, value=1)
         t_qty = st.number_input("목표 물량", min_value=0, value=0)
+        
         if st.form_submit_button("🚀 작업 시작"):
             now = datetime.now(KST)
             active_res = supabase.table("active_tasks").select("id").ilike("session_name", f"{selected_place}_%").execute()
@@ -63,9 +83,14 @@ with st.expander(f"➕ {selected_place} 새 작업 시작", expanded=False):
             next_num = (log_res.count if log_res.count else 0) + len(active_res.data) + 1
             
             supabase.table("active_tasks").insert({
-                "session_name": f"{selected_place}_{next_num}", "task_type": t_type, "workers": t_workers,
-                "quantity": t_qty, "last_started_at": now.isoformat(),
-                "status": "running", "accumulated_seconds": 0, "work_history": []
+                "session_name": f"{selected_place}_{next_num}", 
+                "task_type": final_task_name, # 💡 세부 카테고리가 포함된 명칭 저장
+                "workers": t_workers,
+                "quantity": t_qty, 
+                "last_started_at": now.isoformat(),
+                "status": "running", 
+                "accumulated_seconds": 0, 
+                "work_history": []
             }).execute()
             st.rerun()
 
@@ -156,6 +181,3 @@ def render_active_tasks(place):
 
 # 프래그먼트 실행
 render_active_tasks(selected_place)
-
-
-
