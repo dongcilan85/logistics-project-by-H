@@ -12,6 +12,19 @@ KST = timezone(timedelta(hours=9))
 st.set_page_config(page_title="현장 기록", layout="wide")
 st.title("📱 현장 기록")
 
+# --- CSS: 버튼 왼쪽 정렬 및 스타일 강제 적용 ---
+st.markdown("""
+    <style>
+    div.stButton > button {
+        display: flex !important;
+        justify-content: flex-start !important;
+        text-align: left !important;
+        padding-left: 20px !important;
+        width: 100% !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 # 2. 계층형 데이터 정의
 task_hierarchy = {
     "올리브영": ["사전작업", "출고작업"],
@@ -185,4 +198,3 @@ def render_active_tasks(place):
 
 # 프래그먼트 실행
 render_active_tasks(selected_place)
-
