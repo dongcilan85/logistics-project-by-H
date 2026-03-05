@@ -93,54 +93,6 @@ def show_admin_dashboard():
 
     st.divider()
 
-    # [B. 통합 분석 및 예측 모듈]
-    try:
-        res = supabase.table("work_logs").select("*").execute()
-        df = pd.DataFrame(res.data)
-        
-        if not df.empty:
-            df['work_date'] = pd.to_datetime(df['work_date'])
-            df['total_man_hours'] = df['duration']
-            df['LPH'] = (df['quantity'] / df['total_man_hours']).replace([float('inf'), -float('inf')], 0).round(2)
-            df['total_cost'] = (df['total_man_hours'] * hourly_wage).round(0)
-            df['CPU'] = (df['total_cost'] / df['quantity']).replace([float('inf'), -float('inf')], 0).round(2)
-
-            # 🔮 1. [신규] 지능형 자원 예측 시뮬레이터
-            st.header("🔮 자원 투입 예측 시뮬레이터 (AI TFT)")
-            with st.container(border=True):
-                p_col1, p_col2, p_col3 = st.columns([1, 1, 1.5])
-                
-                with p_col1:
-                    st.markdown("### 📝 작업 계획 입력")
-                    pred_task = st.selectbox("예측 대상 작업 카테고리", options=df['task'].unique())
-                    pred_qty = st.number_input("예상 작업 물량 (EA)", min_value=1, value=1000, step=100)
-                    pred_limit_time = st.slider("마감 제한 시간 (h)", 1, 12, 8)
-                
-                # 카테고리별 누적 평균 LPH 계산
-                task_avg_lph = df[df['task'] == pred_task]['LPH'].mean()
-                
-                # 예측 연산 로직
-                est_man_hours = pred_qty / task_avg_lph if task_avg_lph > 0 else 0
-                est_workers = est_man_hours / pred_limit_time if pred_limit_time > 0 else 0
-                est_cost = est_man_hours * hourly_wage
-                
-                with p_col2:
-                    st.markdown("### 📊 실적 기반 상수")
-                    st.metric(f"{pred_task} 평균 LPH", f"{task_avg_lph:.2f} EA/h")
-                    st.caption(f"※ 누적 {len(df[df['task'] == pred_task])}건의 실적 데이터 기준")
-
-                with p_col3:
-                    st.markdown("### 💡 예측 결과 리포트")
-                    r_c1, r_c2 = st.columns(2)
-                    r_c1.metric("필요 총 공수", f"{est_man_hours:.1f} MH")
-                    r_c1.metric("필요 인원", f"약 {round(est_workers + 0.49)} 명", help="소수점 올림 처리")
-                    r_c2.metric("예상 인건비", f"{est_cost:,.0f} 원")
-                    
-                    if est_workers > 10:
-                        st.warning("⚠️ 필요 인원이 10명을 초과합니다. 작업 구역 분산 배치를 검토하세요.")
-
-            st.divider()
-
             # 2. KPI 카드 및 차트 (기존 로직 유지)
             st.header("📈 실적 분석 리포트")
             k1, k2, k3, k4 = st.columns(4)
@@ -200,4 +152,5 @@ else:
     else:
         pg = st.navigation({"메뉴": [staff_page]})
     pg.run()
+
 
