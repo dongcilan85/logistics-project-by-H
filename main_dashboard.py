@@ -4,6 +4,7 @@ from supabase import create_client, Client
 import plotly.express as px
 from datetime import datetime, timedelta, timezone
 import time
+import io
 
 # 1. 페이지 설정 및 Supabase 연결
 st.set_page_config(page_title="IWP 통합 관제 시스템", layout="wide")
@@ -54,7 +55,7 @@ def change_password_dialog():
 def show_admin_dashboard():
     st.title("🏰 IWP (Intelligent Work Platform) 통합 통제실")
     
-    # [1] 사이드바 설정 (설정값 고정) [cite: 2026-03-05]
+    # [1] 사이드바 설정 (설정값 고정)
     st.sidebar.header("⚙️ 분석 및 시스템 설정")
     view_option = st.sidebar.selectbox("조회 단위", ["일간", "주간", "월간"])
     
@@ -70,7 +71,7 @@ def show_admin_dashboard():
             st.success("설정이 저장되었습니다."); time.sleep(0.5); st.rerun()
 
     # [2] 실시간 현장 작업 현황
-    st.header("🕵️ 실시간 현장 작업 현황")
+    st.header("🕵️ 실시간 현황")
     try:
         active_res = supabase.table("active_tasks").select("*").execute()
         active_df = pd.DataFrame(active_res.data)
@@ -80,9 +81,8 @@ def show_admin_dashboard():
                 display_name = row['session_name'].replace("_", " - ")
                 with cols[i % 4]:
                     with st.container(border=True):
-                        status_color = "green" if row['status'] == 'running' else "orange"
                         st.markdown(f"📍 **{display_name}**")
-                        st.markdown(f"작업: **{row['task_type']}** (:{status_color}[{row['status'].upper()}])")
+                        st.markdown(f"작업: **{row['task_type']}**")
                         if st.button(f"🏁 원격 종료", key=f"end_{row['id']}", use_container_width=True):
                             now_kst = datetime.now(KST)
                             acc_sec = row['accumulated_seconds']
@@ -94,12 +94,12 @@ def show_admin_dashboard():
                             }).execute()
                             supabase.table("active_tasks").delete().eq("id", row['id']).execute()
                             st.rerun()
-        else: st.info("현재 진행 중인 작업 세션이 없습니다.")
-    except Exception as e: st.error(f"실시간 데이터 로드 실패: {e}")
+        else: st.info("진행 중인 작업 세션이 없습니다.")
+    except Exception as e: st.error(f"데이터 로드 실패: {e}")
 
     st.divider()
 
-    # [3] 실적 분석 리포트 (복구된 그래프 포함) [cite: 2026-03-05]
+    # [3] 실적 분석 리포트
     try:
         log_res = supabase.table("work_logs").select("*").execute()
         df = pd.DataFrame(log_res.data)
@@ -117,37 +117,42 @@ def show_admin_dashboard():
             k3.metric("평균 생산성 (LPH)", f"{df['LPH'].mean():.2f}")
             k4.metric("평균 단가 (CPU)", f"{df['CPU'].mean():.2f} 원")
 
-            # 조회 단위 설정
             if view_option == "일간": df['display_date'] = df['work_date'].dt.strftime('%Y-%m-%d')
             elif view_option == "주간": df['display_date'] = df['work_date'].dt.strftime('%Y-%U주')
             else: df['display_date'] = df['work_date'].dt.strftime('%Y-%m월')
 
-            # --- 그래프 2열: 추이 및 비중 ---
-            g2_col1, g2_col2 = st.columns(2)
-            with g2_col1:
+            # 그래프 섹션
+            st.write("---")
+            g1, g2 = st.columns(2)
+            with g1:
+                load_df = df.groupby('task')['quantity'].sum().reset_index().sort_values('quantity', ascending=False)
+                st.plotly_chart(px.bar(load_df, x='task', y='quantity', title="📊 작업 부하 현황 (건수)", color='task'), use_container_width=True)
                 chart_df = df.groupby('display_date')['LPH'].mean().reset_index().sort_values('display_date')
                 st.plotly_chart(px.line(chart_df, x='display_date', y='LPH', markers=True, title="📈 생산성 추이 (LPH)"), use_container_width=True)
-            with g2_col2:
+            with g2:
+                cost_df = df.groupby('task')['total_cost'].sum().reset_index().sort_values('total_cost', ascending=False)
+                st.plotly_chart(px.bar(cost_df, x='task', y='total_cost', title="💰 인건비 투입 현황 (원)", color='task'), use_container_width=True)
                 task_stats = df.groupby('task')['LPH'].mean().reset_index().round(2)
                 st.plotly_chart(px.pie(task_stats, values='LPH', names='task', hole=0.4, title="🍕 작업별 생산 비중"), use_container_width=True)
 
-            # --- 그래프 1열: 부하 및 비용 현황 (복구) --- [cite: 2026-03-05]
-            st.write("---")
-            g1_col1, g1_col2 = st.columns(2)
-            with g1_col1:
-                # 작업 부하 현황 (작업별 총 건수)
-                load_df = df.groupby('task')['quantity'].sum().reset_index().sort_values('quantity', ascending=False)
-                fig_load = px.bar(load_df, x='task', y='quantity', title="📊 작업 부하 현황 (총 건수)", color='task', text_auto=',.0f')
-                st.plotly_chart(fig_load, use_container_width=True)
-            with g1_col2:
-                # 인건비 현황 (작업별 총 인건비)
-                cost_df = df.groupby('task')['total_cost'].sum().reset_index().sort_values('total_cost', ascending=False)
-                fig_cost = px.bar(cost_df, x='task', y='total_cost', title="💰 인건비 투입 현황 (원)", color='task', text_auto=',.0f')
-                st.plotly_chart(fig_cost, use_container_width=True)
-       
-            st.subheader("📋 상세 실적 데이터")
+            # --- [핵심 복구: 보고서 다운로드 기능] --- [cite: 2026-03-05]
+            st.divider()
+            d_col1, d_col2 = st.columns([3, 1])
+            with d_col1:
+                st.subheader("📋 상세 실적 데이터")
+            with d_col2:
+                # 엑셀 호환 CSV 변환 (BOM 포함으로 한글 깨짐 방지)
+                csv = df.to_csv(index=False).encode('utf-8-sig')
+                st.download_button(
+                    label="📥 리포트 다운로드 (CSV)",
+                    data=csv,
+                    file_name=f"IWP_Work_Report_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            
             st.dataframe(df.sort_values('work_date', ascending=False), use_container_width=True)
-        else: st.info("데이터가 없습니다.")
+        else: st.info("실적 데이터가 없습니다.")
     except Exception as e: st.error(f"분석 오류: {e}")
 
 # --- [네비게이션 및 로그인] ---
