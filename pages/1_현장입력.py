@@ -13,7 +13,7 @@ KST = timezone(timedelta(hours=9))
 st.set_page_config(page_title="IWP 현장기록", layout="wide")
 st.title("📱 IWP (Intelligent Work Platform) 현장 관제")
 
-# 2. 계층형 데이터 정의 (요청하신 리스트로 업데이트 완료) [cite: 2026-03-05]
+# 2. 계층형 데이터 정의 [cite: 2026-03-05]
 task_hierarchy = {
     "올리브영": ["사전작업", "출고작업"],
     "컬리/로켓배송": ["택배", "밀크런"],
@@ -46,7 +46,8 @@ def split_man_seconds_by_date(start_dt, end_dt, workers):
         d_str = curr.strftime("%Y-%m-%d")
         history_map[d_str] = history_map.get(d_str, 0) + (duration * workers)
         curr = next_day
-    history_map[end_dt.strftime("%Y-%m-%d")] = (end_dt - curr).total_seconds() * workers
+    d_str = end_dt.strftime("%Y-%m-%d")
+    history_map[d_str] = history_map.get(d_str, 0) + ((end_dt - curr).total_seconds() * workers)
     return history_map
 
 def update_history_map(current_history, new_segments):
@@ -79,7 +80,7 @@ with st.container(border=True):
             t_workers = st.number_input("👥 시작 인원", min_value=1, value=1)
         
         with col3:
-            # 💡 [명칭 변경] 목표 물량 (EA) -> 총 작업 건수 [cite: 2026-03-05]
+            # 💡 [명칭 변경] 총 작업 건수 [cite: 2026-03-05]
             t_qty = st.number_input("📦 총 작업 건수", min_value=0, value=0)
 
         if st.form_submit_button("🚀 작업 시작", use_container_width=True, type="primary"):
@@ -114,7 +115,6 @@ def render_active_tasks(place):
                 with st.container(border=True):
                     st.markdown(f"#### 🆔 {task['session_name']}")
                     st.write(f"**{task['task_type']}**")
-                    # 💡 카드 내부 표시도 '건수'로 일관성 유지
                     st.write(f"📦 건수: {task['quantity']:,} | 👥 {task['workers']}명")
                     
                     if task['status'] == "running":
