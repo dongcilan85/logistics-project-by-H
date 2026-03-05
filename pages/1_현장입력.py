@@ -13,16 +13,16 @@ KST = timezone(timedelta(hours=9))
 st.set_page_config(page_title="IWP 현장기록", layout="wide")
 st.title("📱 IWP (Intelligent Work Platform) 현장 관제")
 
-# 2. 계층형 데이터 정의 (동혁님 최신 요청 반영) [cite: 2026-03-05]
+# 2. 계층형 데이터 정의 (요청하신 최신 리스트) [cite: 2026-03-05]
 task_hierarchy = {
     "올리브영": ["사전작업", "출고작업"],
     "컬리/로켓배송": ["택배", "밀크런"],
     "면세점": [],
-    "홈쇼핑": ["세팅", "사전작업", "합포장"],
+    "홈쇼핑합포": ["세팅", "사전작업", "합포장"],
     "기획팩": [],
     "선물세트": [],
     "소분": [],
-    "B2B": [],
+    "B2B": []
 }
 
 workplace_list = ["A동", "B동", "C동", "D동", "E동", "F동", "허브"] [cite: 2026-01-19]
@@ -78,7 +78,7 @@ with st.container(border=True):
             t_workers = st.number_input("👥 시작 인원", min_value=1, value=1)
         
         with col3:
-            # 💡 [명칭 변경] 목표 물량 (EA) -> 총 작업 건수 [cite: 2026-03-05]
+            # 💡 [명칭 변경] 총 작업 건수 [cite: 2026-03-05]
             t_qty = st.number_input("📦 총 작업 건수", min_value=0, value=0)
 
         if st.form_submit_button("🚀 작업 시작", use_container_width=True, type="primary"):
@@ -178,4 +178,3 @@ def render_active_tasks(place):
 
 # 프래그먼트 실행
 render_active_tasks(selected_place)
-
