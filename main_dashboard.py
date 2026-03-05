@@ -3,154 +3,112 @@ import pandas as pd
 from supabase import create_client, Client
 import plotly.express as px
 from datetime import datetime, timedelta, timezone
-import io
 import time
 
-# 1. 페이지 설정 (최상단에 위치해야 함) - Wide 모드 적용
-st.set_page_config(page_title="IWP 통합 관제 시스템", layout="wide")
-
-# 2. Supabase 및 한국 시간(KST) 설정
+# 1. 시스템 설정
 url = st.secrets["supabase"]["url"]
 key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 KST = timezone(timedelta(hours=9))
 
-if "role" not in st.session_state:
-    st.session_state.role = None
+st.set_page_config(page_title="IWP 통합 관제", layout="wide")
 
-# 💡 DB에서 비밀번호를 실시간으로 가져오는 함수
-def get_admin_password():
+# 💡 DB 설정값 로드 및 저장 함수 (설정 고정 장치) [cite: 2026-03-05]
+def get_config(key, default):
     try:
-        res = supabase.table("system_config").select("value").eq("key", "admin_password").execute()
-        return res.data[0]['value'] if res.data else "admin123"
-    except:
-        return "admin123"
+        res = supabase.table("system_config").select("value").eq("key", key).execute()
+        return res.data[0]['value'] if res.data else default
+    except: return default
 
-# 💡 PW 변경 팝업창 함수 (st.dialog 사용)
-@st.dialog("🔐 PW 변경")
-def change_password_dialog():
-    actual_current_pw = get_admin_password()
-    st.write("보안을 위해 현재 비밀번호 확인 후 새 비밀번호를 입력해주세요.")
+def set_config(key, value):
+    supabase.table("system_config").upsert({"key": key, "value": str(value)}).execute()
+
+# --- 사이드바: 고정 설정창 ---
+st.sidebar.header("⚙️ 시스템 고정 설정")
+if "role" not in st.session_state: st.session_state.role = None
+
+with st.sidebar.expander("💰 운영 지표 설정", expanded=False):
+    # DB에서 저장된 값을 불러와 초기값으로 세팅 [cite: 2026-03-05]
+    saved_lph = float(get_config("target_lph", 150))
+    saved_wage = int(get_config("hourly_wage", 10000))
     
-    with st.form("pw_dialog_form", clear_on_submit=True):
-        input_curr = st.text_input("현재 비밀번호", type="password")
-        input_new = st.text_input("새 비밀번호", type="password")
-        input_conf = st.text_input("새 비밀번호 확인", type="password")
-        
-        if st.form_submit_button("변경사항 저장", use_container_width=True):
-            if input_curr != actual_current_pw:
-                st.error("현재 비밀번호가 일치하지 않습니다.")
-            elif input_new != input_conf:
-                st.error("새 비밀번호가 서로 일치하지 않습니다.")
-            elif len(input_new) < 4:
-                st.warning("비밀번호는 최소 4자 이상이어야 합니다.")
-            else:
-                try:
-                    supabase.table("system_config").update({"value": input_new}).eq("key", "admin_password").execute()
-                    st.success("비밀번호가 성공적으로 변경되었습니다!")
-                    time.sleep(1)
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"업데이트 실패: {e}")
+    new_lph = st.number_input("목표 LPH", value=saved_lph)
+    new_wage = st.number_input("평균 시급", value=saved_wage)
+    
+    if st.button("💾 서버에 설정 고정", use_container_width=True):
+        set_config("target_lph", new_lph)
+        set_config("hourly_wage", new_wage)
+        st.success("설정이 DB에 고정되었습니다."); time.sleep(0.5); st.rerun()
 
+# --- [메인 함수: 통합 대시보드 리포트] --- [cite: 2026-03-05]
 def show_admin_dashboard():
-    st.title("🏰 IWP (Intelligent Work Platform) 통합 통제실")
+    st.title("📊 통합 대시보드")
     
-    # [사이드바 설정]
-    st.sidebar.header("📊 분석 및 비용 설정")
-    view_option = st.sidebar.selectbox("조회 단위", ["일간", "주간", "월간"])
-    target_lph = st.sidebar.number_input("목표 LPH (EA/h)", value=150)
-    hourly_wage = st.sidebar.number_input("평균 시급 (원)", value=10000, step=100)
-    std_work_hours = st.sidebar.slider("표준 가동 시간 (h)", 1, 12, 8)
-
-    # [A. 실시간 모니터링]
-    st.header("🕵️ 실시간 현장 작업 현황")
+    # 데이터 로드 (실적 로그)
     try:
+        log_res = supabase.table("work_logs").select("*").order("work_date", desc=True).execute()
         active_res = supabase.table("active_tasks").select("*").execute()
-        active_df = pd.DataFrame(active_res.data)
-        if not active_df.empty:
-            cols = st.columns(4)
-            for i, (_, row) in enumerate(active_df.iterrows()):
-                display_name = row['session_name'].replace("_", " - ")
-                with cols[i % 4]:
-                    status_color = "green" if row['status'] == 'running' else "orange"
-                    st.info(f"📍 **{display_name}**\n\n작업: {row['task_type']} (:{status_color}[{row['status'].upper()}])")
-                    if st.button(f"🏁 원격 종료 ({display_name})", key=f"end_{row['id']}"):
-                        now_kst = datetime.now(KST)
-                        acc_sec = row['accumulated_seconds']
-                        last_start = pd.to_datetime(row['last_started_at'])
-                        total_sec = acc_sec + (now_kst - last_start).total_seconds() if row['status'] == 'running' else acc_sec
-                        final_hours = round(total_sec / 3600, 2)
-                        supabase.table("work_logs").insert({
-                            "work_date": now_kst.strftime("%Y-%m-%d"), "task": row['task_type'],
-                            "workers": row['workers'], "quantity": row['quantity'],
-                            "duration": final_hours, "memo": f"관리자 원격 종료 ({display_name})"
-                        }).execute()
-                        supabase.table("active_tasks").delete().eq("id", row['id']).execute()
-                        st.rerun()
-        else: st.write("현재 진행 중인 작업자가 없습니다.")
-    except Exception as e: st.error(f"실시간 데이터 로드 실패: {e}")
+        
+        if not log_res.data:
+            st.info("누적된 작업 실적이 없습니다. 현장 기록을 시작해 주세요.")
+            return
 
-    st.divider()
+        df_log = pd.DataFrame(log_res.data)
+        
+        # 상단 요약 지표 (KPI Metrics)
+        m1, m2, m3, m4 = st.columns(4)
+        total_qty = df_log['quantity'].sum()
+        total_hours = df_log['duration'].sum()
+        avg_lph = total_qty / total_hours if total_hours > 0 else 0
+        
+        m1.metric("누적 총 작업 건수", f"{total_qty:,} 건")
+        m2.metric("누적 총 투입 공수", f"{total_hours:.1f} MH")
+        m3.metric("평균 생산성 (LPH)", f"{avg_lph:.2f}")
+        m4.metric("진행 중인 세션", f"{len(active_res.data)} 개")
 
-            # 2. KPI 카드 및 차트 (기존 로직 유지)
-            st.header("📈 실적 분석 리포트")
-            k1, k2, k3, k4 = st.columns(4)
-            k1.metric("평균 LPH", f"{df['LPH'].mean():.2f}")
-            k2.metric("평균 CPU", f"{df['CPU'].mean():.2f} 원")
-            k3.metric("누적 작업량", f"{df['quantity'].sum():,} EA")
-            k4.metric("누적 인건비", f"{df['total_cost'].sum():,.0f} 원")
+        st.divider()
 
-            st.write("---")
-            r1_c1, r1_c2 = st.columns(2)
-            # 조회 단위 설정 (일간/주간/월간)
-            if view_option == "일간": df['display_date'] = df['work_date'].dt.strftime('%Y-%m-%d')
-            elif view_option == "주간": df['display_date'] = df['work_date'].dt.strftime('%Y-%U주')
-            elif view_option == "월간": df['display_date'] = df['work_date'].dt.strftime('%Y-%m월')
+        # 분석 차트 영역
+        c1, c2 = st.columns(2)
+        with c1:
+            st.subheader("📈 작업 종류별 생산성 비교")
+            # 작업별 평균 LPH 계산
+            df_stats = df_log.groupby('task').agg({'quantity':'sum', 'duration':'sum'})
+            df_stats['LPH'] = df_stats['quantity'] / df_stats['duration']
+            fig_lph = px.bar(df_stats.reset_index(), x='task', y='LPH', color='task', text_auto='.2f')
+            st.plotly_chart(fig_lph, use_container_width=True)
 
-            with r1_c1:
-                chart_df = df.groupby('display_date')['LPH'].mean().reset_index().sort_values('display_date')
-                st.plotly_chart(px.line(chart_df, x='display_date', y='LPH', markers=True, title="생산성 추이"), use_container_width=True)
-            with r1_c2:
-                task_stats = df.groupby('task')['LPH'].mean().reset_index().round(2)
-                st.plotly_chart(px.pie(task_stats, values='LPH', names='task', hole=0.4, title="작업별 생산성 비중"), use_container_width=True)
+        with c2:
+            st.subheader("📅 날짜별 작업 물량 추이")
+            df_daily = df_log.groupby('work_date')['quantity'].sum().reset_index()
+            fig_date = px.line(df_daily, x='work_date', y='quantity', markers=True)
+            st.plotly_chart(fig_date, use_container_width=True)
 
-            st.subheader("📋 상세 데이터")
-            st.dataframe(df.sort_values('work_date', ascending=False), use_container_width=True)
-        else:
-            st.info("데이터가 충분하지 않아 예측 시뮬레이터를 가동할 수 없습니다.")
+        st.subheader("📄 최근 작업 상세 로그")
+        st.dataframe(df_log, use_container_width=True)
+        
     except Exception as e:
         st.error(f"데이터 분석 오류: {e}")
 
-# --- [로그인 및 네비게이션 로직] ---
-def show_login_page():
-    st.title("🔐 IWP 물류 시스템")
-    with st.form("login_form"):
-        password = st.text_input("비밀번호", type="password")
-        if st.form_submit_button("시스템 접속", use_container_width=True, type="primary"):
-            if password == get_admin_password():
-                st.session_state.role = "Admin"; st.rerun()
-            elif password == "":
-                st.session_state.role = "Staff"; st.rerun()
-            else: st.error("잘못된 비밀번호입니다.")
+# --- 네비게이션 설정 (순서 및 명칭 반영) --- [cite: 2026-03-05]
+admin_main = st.Page(show_admin_dashboard, title="통합 대시보드", icon="📊")
+pred_page = st.Page("pages/2_생산예측.py", title="생산 예측", icon="🔮") # 위치: 대시보드 바로 밑
+cat_page = st.Page("pages/3_카테고리관리.py", title="카테고리 관리", icon="📁")
+site_page = st.Page("pages/1_현장입력.py", title="현장 기록", icon="📝")
 
-if st.session_state.role is None:
-    st.navigation([st.Page(show_login_page, title="로그인", icon="🔒")]).run()
+if st.session_state.role == "Admin":
+    pg = st.navigation({
+        "관리실": [admin_main, pred_page, cat_page],
+        "현장 구역": [site_page]
+    })
 else:
-    st.sidebar.divider()
-    side_col1, side_col2 = st.sidebar.columns(2)
-    if side_col1.button("🔓 로그아웃", use_container_width=True):
-        st.session_state.role = None; st.rerun()
-    if side_col2.button("🔑 PW변경", use_container_width=True):
-        change_password_dialog()
-    
-    admin_page = st.Page(show_admin_dashboard, title="통합 대시보드", icon="📊")
-    staff_page = st.Page("pages/1_현장입력.py", title="현장기록", icon="📝")
-    
-    if st.session_state.role == "Admin":
-        pg = st.navigation({"메뉴": [admin_page, staff_page]})
-    else:
-        pg = st.navigation({"메뉴": [staff_page]})
-    pg.run()
+    # 로그인 화면
+    st.title("🔐 IWP 시스템 접속")
+    input_pw = st.text_input("비밀번호", type="password")
+    if st.button("로그인", use_container_width=True):
+        if input_pw == get_config("admin_password", "admin123"):
+            st.session_state.role = "Admin"; st.rerun()
+        else: st.error("비밀번호가 틀렸습니다.")
+    pg = st.navigation([st.Page(lambda: None, title="인증 필요")])
 
-
+pg.run()
