@@ -10,7 +10,7 @@ supabase: Client = create_client(url, key)
 KST = timezone(timedelta(hours=9))
 
 st.set_page_config(page_title="현장 기록", layout="wide")
-st.title("📱 현장 기록") # 명칭 변경 반영
+st.title("📱 현장 기록")
 
 # 2. 계층형 데이터 정의
 task_hierarchy = {
@@ -32,7 +32,31 @@ if "expanded_main" not in st.session_state:
 if "final_choice" not in st.session_state:
     st.session_state.final_choice = None
 
-# 작업 현장 선택 (기존 로직 유지)
+# CSS: 버튼 왼쪽 정렬 및 스타일 강제 적용
+st.markdown("""
+    <style>
+    div.stButton > button {
+        text-align: left !important;
+        justify-content: flex-start !important;
+        padding-left: 20px !important;
+        width: 100% !important;
+        border: none !important;
+        background-color: transparent !important;
+        border-bottom: 1px solid #f0f2f6 !important;
+        border-radius: 0px !important;
+    }
+    div.stButton > button:hover {
+        background-color: #f0f2f6 !important;
+    }
+    .sub-item {
+        padding-left: 45px !important;
+        color: #666 !important;
+        font-size: 0.9em !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# 작업 현장 선택
 st.write("### 🚩 작업 현장 선택")
 selected_place = st.segmented_control(
     "현장을 선택하면 해당 구역의 작업 목록이 나타납니다.",
@@ -62,63 +86,70 @@ def update_history_map(current_history, new_segments):
 
 st.divider()
 
-# --- [상단: 작업 선택 및 정보 입력] ---
-st.markdown(f"### ➕ {selected_place} 새 작업 등록")
+# --- [상단: 작업 구분 선택 (드롭다운 형식)] ---
+st.write("### 🎯 작업 구분 선택")
 
-# 💡 드롭다운 형식의 입력창 구현 (최종 선택 전까지 유지됨)
-with st.expander(f"🎯 작업 구분 선택: {st.session_state.final_choice if st.session_state.final_choice else '선택하세요'}", expanded=True):
-    # 왼쪽 정렬을 위한 스타일 적용
-    st.markdown("""<style> div.stButton > button { text-align: left !important; justify-content: flex-start !important; } </style>""", unsafe_allow_html=True)
-    
+# 선택된 값이 있으면 표시, 없으면 기본 메시지
+dropdown_label = f"선택됨: {st.session_state.final_choice}" if st.session_state.final_choice else "작업 구분을 선택하세요 ▾"
+
+# 드롭다운 역할을 하는 Expander (최종 선택 전까지 닫히지 않음)
+with st.expander(dropdown_label, expanded=True):
     for main, subs in task_hierarchy.items():
         if subs:
-            # 서브 카테고리가 있는 경우
+            # 서브가 있는 카테고리
             is_expanded = st.session_state.expanded_main == main
-            icon = "▼" if is_expanded else "▶️"
-            if st.button(f"{icon} {main}", key=f"btn_{main}", use_container_width=True):
+            icon = "▼" if is_expanded else "▶"
+            if st.button(f"{icon} {main}", key=f"main_{main}"):
                 st.session_state.expanded_main = main if not is_expanded else None
                 st.rerun()
             
             if is_expanded:
                 for sub in subs:
-                    if st.button(f"　 └ {sub}", key=f"sub_{main}_{sub}", use_container_width=True):
-                        st.session_state.final_choice = f"{main} ({sub})"
-                        st.session_state.expanded_main = None # 선택 완료 후 접기
+                    # 서브 카테고리 클릭 시 최종 선택 완료
+                    if st.button(f"　　└ {sub}", key=f"sub_{main}_{sub}"):
+                        st.session_state.final_choice = f"{main} ➔ {sub}"
+                        # 최종 선택이므로 여기서 메뉴를 접고 싶다면 세션 상태 조절 가능
                         st.rerun()
         else:
-            # 서브 카테고리가 없는 경우 (선택 시 즉시 최종 결정)
-            if st.button(f"  {main}", key=f"btn_{main}", use_container_width=True):
+            # 서브가 없는 카테고리 (클릭 시 즉시 최종 선택)
+            if st.button(f"　 {main}", key=f"none_{main}"):
                 st.session_state.final_choice = main
                 st.session_state.expanded_main = None
                 st.rerun()
 
-# 💡 작업 정보 입력창 (작업 구분 하단에 위치)
-if st.session_state.final_choice:
-    with st.form("work_info_form", clear_on_submit=True):
-        st.info(f"선택된 작업: **{st.session_state.final_choice}**")
-        col1, col2 = st.columns(2)
-        with col1:
-            t_workers = st.number_input("👥 시작 인원", min_value=1, value=1)
-        with col2:
-            t_qty = st.number_input("📦 총 작업 건수", min_value=0, value=0)
-        
-        if st.form_submit_button("🚀 작업 시작", use_container_width=True, type="primary"):
-            now = datetime.now(KST)
-            active_res = supabase.table("active_tasks").select("id").ilike("session_name", f"{selected_place}_%").execute()
-            log_res = supabase.table("work_logs").select("id", count="exact").eq("work_date", now.strftime("%Y-%m-%d")).ilike("memo", f"현장: {selected_place}%").execute()
-            next_num = (log_res.count if log_res.count else 0) + len(active_res.data) + 1
-            
-            supabase.table("active_tasks").insert({
-                "session_name": f"{selected_place}_{next_num}", 
-                "task_type": st.session_state.final_choice,
-                "workers": t_workers, "quantity": t_qty, 
-                "last_started_at": now.isoformat(),
-                "status": "running", "accumulated_seconds": 0, "work_history": []
-            }).execute()
-            st.session_state.final_choice = None # 등록 후 초기화
-            st.rerun()
+st.write("") # 간격
 
-# --- [중심: 실시간 작업 카드 (Fragment 적용)] ---
+# --- [중단: 작업 정보 입력 (선택창 하단에 위치)] ---
+if st.session_state.final_choice:
+    with st.container(border=True):
+        st.write(f"📂 **선택된 작업:** {st.session_state.final_choice}")
+        with st.form("work_info_form", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                t_workers = st.number_input("👥 시작 인원", min_value=1, value=1)
+            with col2:
+                t_qty = st.number_input("📦 총 작업 건수", min_value=0, value=0)
+            
+            if st.form_submit_button("🚀 작업 시작", use_container_width=True, type="primary"):
+                now = datetime.now(KST)
+                active_res = supabase.table("active_tasks").select("id").ilike("session_name", f"{selected_place}_%").execute()
+                log_res = supabase.table("work_logs").select("id", count="exact").eq("work_date", now.strftime("%Y-%m-%d")).ilike("memo", f"현장: {selected_place}%").execute()
+                next_num = (log_res.count if log_res.count else 0) + len(active_res.data) + 1
+                
+                supabase.table("active_tasks").insert({
+                    "session_name": f"{selected_place}_{next_num}", 
+                    "task_type": st.session_state.final_choice,
+                    "workers": t_workers, "quantity": t_qty, 
+                    "last_started_at": now.isoformat(),
+                    "status": "running", "accumulated_seconds": 0, "work_history": []
+                }).execute()
+                # 등록 완료 후 선택 상태 초기화
+                st.session_state.final_choice = None
+                st.rerun()
+
+st.divider()
+
+# --- [하단: 실시간 작업 카드] ---
 @st.fragment(run_every=1)
 def render_active_tasks(place):
     st.subheader(f"📊 {place} 실시간 현황")
@@ -145,7 +176,7 @@ def render_active_tasks(place):
                         h, m, s = int(task['accumulated_seconds'] // 3600), int((task['accumulated_seconds'] % 3600) // 60), int(task['accumulated_seconds'] % 60)
                         st.subheader(f"⏸️ {h:02d}:{m:02d}:{s:02d}")
 
-                    # 인원 수정 및 종료 로직 유지
+                    # 인원 수정 및 종료 버튼 로직 (기존 유지)
                     curr_w = int(task['workers'])
                     new_w = st.number_input("인원 수정", min_value=1, value=curr_w, key=f"w_{task['id']}")
                     if new_w != curr_w and st.button("👥 변경 확정", key=f"up_{task['id']}", use_container_width=True):
