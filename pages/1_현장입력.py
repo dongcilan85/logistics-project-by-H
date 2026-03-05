@@ -9,11 +9,11 @@ key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 KST = timezone(timedelta(hours=9))
 
-# 페이지 설정 (서브 페이지에서도 Wide 모드 유지)
+# 페이지 설정
 st.set_page_config(page_title="IWP 현장기록", layout="wide")
 st.title("📱 IWP (Intelligent Work Platform) 현장 관제")
 
-# 2. 계층형 데이터 정의 - 💡 쉼표(,) 오류 수정 완료! [cite: 2026-03-05]
+# 2. 계층형 데이터 정의 (요청하신 리스트로 업데이트 완료) [cite: 2026-03-05]
 task_hierarchy = {
     "올리브영": ["사전작업", "출고작업"],
     "컬리/로켓배송": ["택배", "밀크런"],
@@ -36,7 +36,7 @@ selected_place = st.segmented_control(
     key="workplace_selector"
 )
 
-# --- 헬퍼 함수 (날짜별 공수 배분 로직) ---
+# --- 헬퍼 함수: 정밀 공수 계산 로직 ---
 def split_man_seconds_by_date(start_dt, end_dt, workers):
     history_map = {}
     curr = start_dt
@@ -58,14 +58,13 @@ def update_history_map(current_history, new_segments):
 st.divider()
 
 # --- [상단: 새 작업 추가] ---
-# 💡 [개선] 모든 입력창이 처음부터 노출되도록 구성
 with st.container(border=True):
     st.markdown(f"### ➕ {selected_place} 새 작업 시작")
     with st.form("new_task_form", clear_on_submit=True):
         col1, col2, col3 = st.columns([2, 1, 1])
         
         with col1:
-            # 💡 [핵심] 한눈에 보이는 평탄화된 계층 리스트 생성
+            # 원클릭 계층 리스트 생성
             flat_options = []
             for main, subs in task_hierarchy.items():
                 if subs:
@@ -80,11 +79,11 @@ with st.container(border=True):
             t_workers = st.number_input("👥 시작 인원", min_value=1, value=1)
         
         with col3:
+            # 💡 [명칭 변경] 목표 물량 (EA) -> 총 작업 건수 [cite: 2026-03-05]
             t_qty = st.number_input("📦 총 작업 건수", min_value=0, value=0)
 
         if st.form_submit_button("🚀 작업 시작", use_container_width=True, type="primary"):
             now = datetime.now(KST)
-            # 세션 번호 생성 (오늘 해당 현장의 몇 번째 작업인지)
             active_res = supabase.table("active_tasks").select("id").ilike("session_name", f"{selected_place}_%").execute()
             log_res = supabase.table("work_logs").select("id", count="exact").eq("work_date", now.strftime("%Y-%m-%d")).ilike("memo", f"현장: {selected_place}%").execute()
             next_num = (log_res.count if log_res.count else 0) + len(active_res.data) + 1
@@ -115,7 +114,8 @@ def render_active_tasks(place):
                 with st.container(border=True):
                     st.markdown(f"#### 🆔 {task['session_name']}")
                     st.write(f"**{task['task_type']}**")
-                    st.write(f"📦 {task['quantity']:,} EA | 👥 {task['workers']}명")
+                    # 💡 카드 내부 표시도 '건수'로 일관성 유지
+                    st.write(f"📦 건수: {task['quantity']:,} | 👥 {task['workers']}명")
                     
                     if task['status'] == "running":
                         total_sec = task['accumulated_seconds'] + (datetime.now(KST) - datetime.fromisoformat(task['last_started_at'])).total_seconds()
