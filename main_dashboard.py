@@ -122,6 +122,15 @@ def show_admin_dashboard():
             elif view_option == "주간": df['display_date'] = df['work_date'].dt.strftime('%Y-%U주')
             else: df['display_date'] = df['work_date'].dt.strftime('%Y-%m월')
 
+            # --- 그래프 2열: 추이 및 비중 ---
+            g2_col1, g2_col2 = st.columns(2)
+            with g2_col1:
+                chart_df = df.groupby('display_date')['LPH'].mean().reset_index().sort_values('display_date')
+                st.plotly_chart(px.line(chart_df, x='display_date', y='LPH', markers=True, title="📈 생산성 추이 (LPH)"), use_container_width=True)
+            with g2_col2:
+                task_stats = df.groupby('task')['LPH'].mean().reset_index().round(2)
+                st.plotly_chart(px.pie(task_stats, values='LPH', names='task', hole=0.4, title="🍕 작업별 생산 비중"), use_container_width=True)
+
             # --- 그래프 1열: 부하 및 비용 현황 (복구) --- [cite: 2026-03-05]
             st.write("---")
             g1_col1, g1_col2 = st.columns(2)
@@ -135,16 +144,7 @@ def show_admin_dashboard():
                 cost_df = df.groupby('task')['total_cost'].sum().reset_index().sort_values('total_cost', ascending=False)
                 fig_cost = px.bar(cost_df, x='task', y='total_cost', title="💰 인건비 투입 현황 (원)", color='task', text_auto=',.0f')
                 st.plotly_chart(fig_cost, use_container_width=True)
-
-            # --- 그래프 2열: 추이 및 비중 ---
-            g2_col1, g2_col2 = st.columns(2)
-            with g2_col1:
-                chart_df = df.groupby('display_date')['LPH'].mean().reset_index().sort_values('display_date')
-                st.plotly_chart(px.line(chart_df, x='display_date', y='LPH', markers=True, title="📈 생산성 추이 (LPH)"), use_container_width=True)
-            with g2_col2:
-                task_stats = df.groupby('task')['LPH'].mean().reset_index().round(2)
-                st.plotly_chart(px.pie(task_stats, values='LPH', names='task', hole=0.4, title="🍕 작업별 생산 비중"), use_container_width=True)
-
+       
             st.subheader("📋 상세 실적 데이터")
             st.dataframe(df.sort_values('work_date', ascending=False), use_container_width=True)
         else: st.info("데이터가 없습니다.")
