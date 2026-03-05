@@ -29,6 +29,7 @@ task_hierarchy = {
     "컬리/로켓배송": ["택배", "밀크런"],
     "면세점": [],
     "홈쇼핑": ["세팅", "사전작업", "합포장"],
+    "블리스터" : ["RRP", "블리스터생산"],
     "기획팩": [],
     "선물세트": [],
     "소분": [],
@@ -216,3 +217,4 @@ def render_active_tasks(place):
 
 # 프래그먼트 실행
 render_active_tasks(selected_place)
+
