@@ -26,7 +26,11 @@ def get_config(key, default):
     except: return default
 
 def set_config(key, value):
-    supabase.table("system_config").upsert({"key": key, "value": str(value)}).execute()
+    try:
+        # 💡 보강된 upsert 로직: SQL 정책 수정 후 에러 없이 작동 [cite: 2026-03-05]
+        supabase.table("system_config").upsert({"key": key, "value": str(value)}).execute()
+    except Exception as e:
+        st.error(f"설정 저장 실패: {e}")
 
 def get_admin_password():
     return get_config("admin_password", "admin123")
@@ -51,7 +55,7 @@ def change_password_dialog():
 def show_admin_dashboard():
     st.title("🏰 IWP (Intelligent Work Platform) 통합 통제실")
     
-    # [A] 사이드바: 고정 설정 및 조회 단위 [cite: 2026-03-05]
+    # [A] 사이드바 설정
     st.sidebar.header("⚙️ 분석 및 시스템 설정")
     view_option = st.sidebar.selectbox("조회 단위", ["일간", "주간", "월간"])
     
@@ -67,7 +71,7 @@ def show_admin_dashboard():
             set_config("hourly_wage", hourly_wage)
             st.success("DB 저장 완료"); time.sleep(0.5); st.rerun()
 
-    # [B] 실시간 모니터링 및 원격 종료 [cite: 2026-03-05]
+    # [B] 실시간 모니터링 및 원격 종료
     st.header("🕵️ 실시간 현장 작업 현황")
     try:
         active_res = supabase.table("active_tasks").select("*").execute()
@@ -79,11 +83,10 @@ def show_admin_dashboard():
                     with st.container(border=True):
                         st.markdown(f"📍 **{display_name}**")
                         st.write(f"작업: **{row['task_type']}**")
-                        st.write(f"상태: {row['status'].upper()}")
-                        if st.button(f"🏁 원격 종료", key=f"remote_{row['id']}", use_container_width=True):
+                        if st.button(f"🏁 원격 종료", key=f"stop_{row['id']}", use_container_width=True):
                             now = datetime.now(KST)
                             dur = row['accumulated_seconds']
-                            if row['status'] == 'running':
+                            if row['status'] == 'running' and row['last_started_at']:
                                 dur += (now - datetime.fromisoformat(row['last_started_at'])).total_seconds()
                             supabase.table("work_logs").insert({
                                 "work_date": now.strftime("%Y-%m-%d"), "task": row['task_type'],
@@ -97,7 +100,7 @@ def show_admin_dashboard():
 
     st.divider()
 
-    # [C] 통합 분석 리포트 및 3시트 엑셀 추출 [cite: 2026-03-05]
+    # [C] 통합 분석 리포트 및 3시트 엑셀 추출
     try:
         res = supabase.table("work_logs").select("*").execute()
         df = pd.DataFrame(res.data)
@@ -112,42 +115,28 @@ def show_admin_dashboard():
             elif view_option == "주간": df['display_date'] = df['work_date'].dt.strftime('%Y-%U주')
             else: df['display_date'] = df['work_date'].dt.strftime('%Y-%m월')
 
-            # --- 💡 진짜 그래프가 포함된 3시트 엑셀 생성 ---
+            # --- 💡 진짜 그래프가 포함된 3시트 엑셀 생성 --- [cite: 2026-03-05]
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 workbook = writer.book
-                
-                # Sheet 1: 분석 상세 데이터
-                sheet1 = df.groupby(['display_date', 'task']).agg({
-                    'quantity': 'sum', 'duration': 'sum', 'total_cost': 'sum', 'LPH': 'mean'
-                }).reset_index().rename(columns={'display_date': view_option})
+                sheet1 = df.groupby(['display_date', 'task']).agg({'quantity':'sum', 'duration':'sum', 'total_cost':'sum', 'LPH':'mean'}).reset_index().rename(columns={'display_date': view_option})
                 sheet1.to_excel(writer, sheet_name='분석 상세 데이터', index=False)
-                
-                # Sheet 2: 그래프 데이터 및 차트 삽입
                 l_st = df.groupby('task')['quantity'].sum().reset_index()
                 c_st = df.groupby('task')['total_cost'].sum().reset_index()
                 t_st = df.groupby('display_date')['LPH'].mean().reset_index()
-                
                 l_st.to_excel(writer, sheet_name='그래프 데이터', startrow=1, index=False)
                 c_st.to_excel(writer, sheet_name='그래프 데이터', startrow=12, index=False)
                 t_st.to_excel(writer, sheet_name='그래프 데이터', startrow=23, index=False)
-                
                 ws = writer.sheets['그래프 데이터']
-                # 차트 삽입 로직 (작업 부하, 비용, 추이)
                 c1 = workbook.add_chart({'type': 'column'}); c1.set_title({'name': '📊 작업 부하'}); c1.add_series({'categories':['그래프 데이터',2,0,len(l_st)+1,0],'values':['그래프 데이터',2,1,len(l_st)+1,1]}); ws.insert_chart('D2', c1)
                 c2 = workbook.add_chart({'type': 'column'}); c2.set_title({'name': '💰 투입 비용'}); c2.add_series({'categories':['그래프 데이터',13,0,13+len(c_st)-1,0],'values':['그래프 데이터',13,1,13+len(c_st)-1,1]}); ws.insert_chart('D13', c2)
                 c3 = workbook.add_chart({'type': 'line'}); c3.set_title({'name': '📈 생산성 추이'}); c3.add_series({'categories':['그래프 데이터',24,0,24+len(t_st)-1,0],'values':['그래프 데이터',24,1,24+len(t_st)-1,1]}); ws.insert_chart('D24', c3)
-                
-                # Sheet 3: 기록 리포트 (Raw)
                 df.sort_values('work_date', ascending=False).to_excel(writer, sheet_name='기록 리포트', index=False)
 
-            # --- 대시보드 UI ---
             st.header("📈 실적 분석 리포트")
             d_col1, d_col2 = st.columns([3, 1])
-            with d_col1:
-                st.write(f"기준: **{view_option}** | 평균 시급: **{hourly_wage:,}원**")
-            with d_col2:
-                st.download_button(label="📥 전문 분석 리포트(.xlsx) 다운로드", data=output.getvalue(), file_name=f"IWP_Report_{datetime.now().strftime('%Y%m%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+            with d_col1: st.write(f"기준: **{view_option}** | 시급: **{hourly_wage:,}원**")
+            with d_col2: st.download_button(label="📥 전문 분석 리포트(.xlsx) 다운로드", data=output.getvalue(), file_name=f"IWP_Report_{datetime.now().strftime('%Y%m%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
             k1, k2, k3, k4 = st.columns(4)
             k1.metric("누적 총 건수", f"{df['quantity'].sum():,} 건")
@@ -158,10 +147,10 @@ def show_admin_dashboard():
             st.write("---")
             g1, g2 = st.columns(2)
             with g1:
-                st.plotly_chart(px.bar(df.groupby('task')['quantity'].sum().reset_index(), x='task', y='quantity', title="📊 작업 부하 현황 (건수)", color='task'), use_container_width=True)
-                st.plotly_chart(px.line(df.groupby('display_date')['LPH'].mean().reset_index(), x='display_date', y='LPH', markers=True, title="📈 생산성 추이 (LPH)"), use_container_width=True)
+                st.plotly_chart(px.bar(df.groupby('task')['quantity'].sum().reset_index(), x='task', y='quantity', title="📊 작업 부하 현황", color='task'), use_container_width=True)
+                st.plotly_chart(px.line(df.groupby('display_date')['LPH'].mean().reset_index(), x='display_date', y='LPH', markers=True, title="📈 생산성 추이"), use_container_width=True)
             with g2:
-                st.plotly_chart(px.bar(df.groupby('task')['total_cost'].sum().reset_index(), x='task', y='total_cost', title="💰 인건비 투입 현황 (원)", color='task'), use_container_width=True)
+                st.plotly_chart(px.bar(df.groupby('task')['total_cost'].sum().reset_index(), x='task', y='total_cost', title="💰 인건비 투입 현황", color='task'), use_container_width=True)
                 st.plotly_chart(px.pie(df.groupby('task')['LPH'].mean().reset_index(), values='LPH', names='task', hole=0.4, title="🍕 생산 비중"), use_container_width=True)
 
             st.subheader("📋 전체 실적 상세 데이터")
@@ -171,17 +160,17 @@ def show_admin_dashboard():
 # --- [네비게이션 및 로그인] ---
 def login_screen():
     st.title("🔐 IWP 지능형 작업 플랫폼")
-    with st.form("login_hub"):
+    with st.form("login_form"):
         pw = st.text_input("비밀번호", type="password")
         if st.form_submit_button("접속", use_container_width=True, type="primary"):
             if pw == get_admin_password(): st.session_state.role = "Admin"; st.rerun()
             elif pw == "": st.session_state.role = "Staff"; st.rerun()
-            else: st.error("PW 불일치")
+            else: st.error("비밀번호가 틀렸습니다.")
 
 if st.session_state.role is None:
     st.navigation([st.Page(login_screen, title="로그인", icon="🔒")]).run()
 else:
-    # 모든 사이드 메뉴 유지 [cite: 2026-03-05]
+    # 💡 모든 메뉴 유지 및 순서 정리 [cite: 2026-03-05]
     admin_main = st.Page(show_admin_dashboard, title="통합 대시보드", icon="📊")
     pred_page = st.Page("pages/2_생산예측.py", title="생산 예측", icon="🔮")
     cat_page = st.Page("pages/3_카테고리관리.py", title="카테고리 관리", icon="📁")
@@ -193,6 +182,6 @@ else:
     if sc2.button("🔑 PW변경", use_container_width=True): change_password_dialog()
 
     if st.session_state.role == "Admin":
-        pg = st.navigation({"관리실": [admin_main, pred_page, cat_page], "현장": [site_page]})
+        pg = st.navigation({"통제실": [admin_main, pred_page, cat_page], "현장": [site_page]})
     else: pg = st.navigation({"현장": [site_page]})
     pg.run()
