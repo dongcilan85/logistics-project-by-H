@@ -3,14 +3,14 @@ from supabase import create_client, Client
 from datetime import datetime, timezone, timedelta, time as dt_time
 import time
 
-# 1. 시스템 설정 및 한국 시간(KST)
+# 1. 시스템 설정
 url = st.secrets["supabase"]["url"]
 key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 KST = timezone(timedelta(hours=9))
 
-st.set_page_config(page_title="IWP 현장기록", layout="wide")
-st.title("📱 IWP (Intelligent Work Platform) 현장 관제")
+st.set_page_config(page_title="현장 기록", layout="wide")
+st.title("📱 현장 기록") # 명칭 변경 반영
 
 # 2. 계층형 데이터 정의
 task_hierarchy = {
@@ -26,13 +26,13 @@ task_hierarchy = {
 
 workplace_list = ["A동", "B동", "C동", "D동", "E동", "F동", "허브"]
 
-# 세션 상태: 어떤 항목이 펼쳐져 있는지 저장
-if "expanded_task" not in st.session_state:
-    st.session_state.expanded_task = None
-if "selected_final_task" not in st.session_state:
-    st.session_state.selected_final_task = None
+# 세션 상태 관리
+if "expanded_main" not in st.session_state:
+    st.session_state.expanded_main = None
+if "final_choice" not in st.session_state:
+    st.session_state.final_choice = None
 
-# 상단 현장 선택 (버튼형)
+# 작업 현장 선택 (기존 로직 유지)
 st.write("### 🚩 작업 현장 선택")
 selected_place = st.segmented_control(
     "현장을 선택하면 해당 구역의 작업 목록이 나타납니다.",
@@ -41,7 +41,7 @@ selected_place = st.segmented_control(
     key="workplace_selector"
 )
 
-# --- 헬퍼 함수 (공수 배분 로직) ---
+# 헬퍼 함수
 def split_man_seconds_by_date(start_dt, end_dt, workers):
     history_map = {}
     curr = start_dt
@@ -62,67 +62,61 @@ def update_history_map(current_history, new_segments):
 
 st.divider()
 
-# --- [상단: IWP 지능형 작업 입력창] ---
-st.markdown(f"### ➕ {selected_place} 새 작업 시작")
-with st.container(border=True):
-    # 💡 왼쪽: 트리형 작업 선택 | 오른쪽: 인원 및 건수 입력
-    col_task, col_input = st.columns([1.5, 1])
-    
-    with col_task:
-        st.write("**🎯 작업 구분 선택**")
-        # 💡 [핵심] 선택창이 닫히지 않는 트리 구조 리스트
-        for main, subs in task_hierarchy.items():
-            if subs:
-                # 하위 항목이 있는 경우 ▶️ 표시
-                is_expanded = st.session_state.expanded_task == main
-                icon = "▼" if is_expanded else "▶️"
-                if st.button(f"{icon} {main}", key=f"main_{main}", use_container_width=True, type="secondary"):
-                    st.session_state.expanded_task = main if not is_expanded else None
-                    st.rerun()
-                
-                if is_expanded:
-                    for sub in subs:
-                        sub_label = f"　　└ {sub}"
-                        is_selected = st.session_state.selected_final_task == f"{main} ({sub})"
-                        if st.button(sub_label, key=f"sub_{main}_{sub}", use_container_width=True, type="primary" if is_selected else "secondary"):
-                            st.session_state.selected_final_task = f"{main} ({sub})"
-                            st.rerun()
-            else:
-                # 하위 항목이 없는 경우
-                is_selected = st.session_state.selected_final_task == main
-                if st.button(main, key=f"main_none_{main}", use_container_width=True, type="primary" if is_selected else "secondary"):
-                    st.session_state.selected_final_task = main
-                    st.session_state.expanded_task = None
-                    st.rerun()
+# --- [상단: 작업 선택 및 정보 입력] ---
+st.markdown(f"### ➕ {selected_place} 새 작업 등록")
 
-    with col_input:
-        st.write("**👥 작업 정보 입력**")
-        current_task = st.session_state.selected_final_task
-        st.info(f"선택됨: **{current_task if current_task else '작업을 선택해주세요'}**")
-        
-        # 💡 인원과 건수 입력창은 항상 노출됨
-        with st.form("new_task_form", clear_on_submit=True):
-            t_workers = st.number_input("👥 시작 인원", min_value=1, value=1)
-            # 💡 [명칭 변경] 총 작업 건수 [cite: 2026-03-05]
-            t_qty = st.number_input("📦 총 작업 건수", min_value=0, value=0)
+# 💡 드롭다운 형식의 입력창 구현 (최종 선택 전까지 유지됨)
+with st.expander(f"🎯 작업 구분 선택: {st.session_state.final_choice if st.session_state.final_choice else '선택하세요'}", expanded=True):
+    # 왼쪽 정렬을 위한 스타일 적용
+    st.markdown("""<style> div.stButton > button { text-align: left !important; justify-content: flex-start !important; } </style>""", unsafe_allow_html=True)
+    
+    for main, subs in task_hierarchy.items():
+        if subs:
+            # 서브 카테고리가 있는 경우
+            is_expanded = st.session_state.expanded_main == main
+            icon = "▼" if is_expanded else "▶️"
+            if st.button(f"{icon} {main}", key=f"btn_{main}", use_container_width=True):
+                st.session_state.expanded_main = main if not is_expanded else None
+                st.rerun()
             
-            if st.form_submit_button("🚀 작업 시작", use_container_width=True, type="primary"):
-                if not current_task:
-                    st.error("작업 구분을 먼저 선택해야 합니다.")
-                else:
-                    now = datetime.now(KST)
-                    active_res = supabase.table("active_tasks").select("id").ilike("session_name", f"{selected_place}_%").execute()
-                    log_res = supabase.table("work_logs").select("id", count="exact").eq("work_date", now.strftime("%Y-%m-%d")).ilike("memo", f"현장: {selected_place}%").execute()
-                    next_num = (log_res.count if log_res.count else 0) + len(active_res.data) + 1
-                    
-                    supabase.table("active_tasks").insert({
-                        "session_name": f"{selected_place}_{next_num}", 
-                        "task_type": current_task, "workers": t_workers, 
-                        "quantity": t_qty, "last_started_at": now.isoformat(),
-                        "status": "running", "accumulated_seconds": 0, "work_history": []
-                    }).execute()
-                    st.session_state.selected_final_task = None
-                    st.rerun()
+            if is_expanded:
+                for sub in subs:
+                    if st.button(f"　 └ {sub}", key=f"sub_{main}_{sub}", use_container_width=True):
+                        st.session_state.final_choice = f"{main} ({sub})"
+                        st.session_state.expanded_main = None # 선택 완료 후 접기
+                        st.rerun()
+        else:
+            # 서브 카테고리가 없는 경우 (선택 시 즉시 최종 결정)
+            if st.button(f"  {main}", key=f"btn_{main}", use_container_width=True):
+                st.session_state.final_choice = main
+                st.session_state.expanded_main = None
+                st.rerun()
+
+# 💡 작업 정보 입력창 (작업 구분 하단에 위치)
+if st.session_state.final_choice:
+    with st.form("work_info_form", clear_on_submit=True):
+        st.info(f"선택된 작업: **{st.session_state.final_choice}**")
+        col1, col2 = st.columns(2)
+        with col1:
+            t_workers = st.number_input("👥 시작 인원", min_value=1, value=1)
+        with col2:
+            t_qty = st.number_input("📦 총 작업 건수", min_value=0, value=0)
+        
+        if st.form_submit_button("🚀 작업 시작", use_container_width=True, type="primary"):
+            now = datetime.now(KST)
+            active_res = supabase.table("active_tasks").select("id").ilike("session_name", f"{selected_place}_%").execute()
+            log_res = supabase.table("work_logs").select("id", count="exact").eq("work_date", now.strftime("%Y-%m-%d")).ilike("memo", f"현장: {selected_place}%").execute()
+            next_num = (log_res.count if log_res.count else 0) + len(active_res.data) + 1
+            
+            supabase.table("active_tasks").insert({
+                "session_name": f"{selected_place}_{next_num}", 
+                "task_type": st.session_state.final_choice,
+                "workers": t_workers, "quantity": t_qty, 
+                "last_started_at": now.isoformat(),
+                "status": "running", "accumulated_seconds": 0, "work_history": []
+            }).execute()
+            st.session_state.final_choice = None # 등록 후 초기화
+            st.rerun()
 
 # --- [중심: 실시간 작업 카드 (Fragment 적용)] ---
 @st.fragment(run_every=1)
@@ -151,7 +145,7 @@ def render_active_tasks(place):
                         h, m, s = int(task['accumulated_seconds'] // 3600), int((task['accumulated_seconds'] % 3600) // 60), int(task['accumulated_seconds'] % 60)
                         st.subheader(f"⏸️ {h:02d}:{m:02d}:{s:02d}")
 
-                    # 인원 수정 및 종료 로직 생략 없이 모두 포함 [cite: 2026-02-23]
+                    # 인원 수정 및 종료 로직 유지
                     curr_w = int(task['workers'])
                     new_w = st.number_input("인원 수정", min_value=1, value=curr_w, key=f"w_{task['id']}")
                     if new_w != curr_w and st.button("👥 변경 확정", key=f"up_{task['id']}", use_container_width=True):
