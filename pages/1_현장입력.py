@@ -12,15 +12,13 @@ KST = timezone(timedelta(hours=9))
 st.set_page_config(page_title="현장 기록", layout="wide")
 st.title("📱 현장 기록")
 
-# --- CSS: 버튼 왼쪽 정렬 및 스타일 강제 적용 ---
+# 💡 [CSS 추가] 버튼 텍스트 왼쪽 정렬 및 여백 설정
 st.markdown("""
     <style>
     div.stButton > button {
-        display: flex !important;
-        justify-content: flex-start !important;
         text-align: left !important;
-        padding-left: 20px !important;
-        width: 100% !important;
+        justify-content: flex-start !important;
+        padding-left: 15px !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -53,6 +51,26 @@ selected_place = st.segmented_control(
     key="workplace_selector"
 )
 
+# 헬퍼 함수: 정밀 공수 계산
+def split_man_seconds_by_date(start_dt, end_dt, workers):
+    history_map = {}
+    curr = start_dt
+    while curr.date() < end_dt.date():
+        next_day = datetime.combine(curr.date() + timedelta(days=1), dt_time.min, tzinfo=KST)
+        duration = (next_day - curr).total_seconds()
+        d_str = curr.strftime("%Y-%m-%d")
+        history_map[d_str] = history_map.get(d_str, 0) + (duration * workers)
+        curr = next_day
+    d_str = end_dt.strftime("%Y-%m-%d")
+    history_map[d_str] = history_map.get(d_str, 0) + ((end_dt - curr).total_seconds() * workers)
+    return history_map
+
+def update_history_map(current_history, new_segments):
+    h_dict = {item['date']: item['man_seconds'] for item in current_history} if current_history else {}
+    for d, s in new_segments.items():
+        h_dict[d] = h_dict.get(d, 0) + s
+    return [{"date": d, "man_seconds": s} for d, s in h_dict.items()]
+
 # --- [상단: 작업 구분 입력 구역] ---
 st.divider()
 
@@ -65,7 +83,7 @@ with st.container(border=True):
         st.session_state.menu_open = not st.session_state.menu_open
         st.rerun()
 
-    # 계층형 메뉴 로직
+    # 계층형 메뉴 로직 (버튼들이 CSS에 의해 왼쪽 정렬됨)
     if st.session_state.menu_open:
         inner_container = st.container(border=True)
         for main, subs in task_hierarchy.items():
@@ -87,12 +105,13 @@ with st.container(border=True):
                     st.session_state.final_choice = main
                     st.session_state.menu_open = False
                     st.rerun()
-    # 💡 작업 정보 입력 (작업 구분 하단에 항상 노출) [cite: 2026-03-05]
+
+    # 작업 정보 입력 (작업 구분 하단 상시 노출)
     with st.form("new_task_form", clear_on_submit=True):
         st.write("시작 인원")
         t_workers = st.number_input("시작 인원", min_value=1, value=1, label_visibility="collapsed")
         
-        st.write("총 작업 건수") # 명칭 변경: 목표 물량 -> 총 작업 건수 [cite: 2026-03-05]
+        st.write("총 작업 건수")
         t_qty = st.number_input("총 작업 건수", min_value=0, value=0, label_visibility="collapsed")
         
         if st.form_submit_button("🚀 시작", use_container_width=False):
@@ -143,7 +162,6 @@ def render_active_tasks(place):
                         h, m, s = int(task['accumulated_seconds'] // 3600), int((task['accumulated_seconds'] % 3600) // 60), int(task['accumulated_seconds'] % 60)
                         st.subheader(f"⏸️ {h:02d}:{m:02d}:{s:02d}")
 
-                    # 인원 수정 로직 [cite: 2026-02-23]
                     curr_w = int(task['workers'])
                     new_w = st.number_input("인원 수정", min_value=1, value=curr_w, key=f"w_{task['id']}")
                     if new_w != curr_w and st.button("👥 변경 확정", key=f"up_{task['id']}", use_container_width=True):
