@@ -1,7 +1,6 @@
 import streamlit as st
 from supabase import create_client, Client
 from datetime import datetime, timezone, timedelta, time as dt_time
-import time
 
 # 1. 시스템 설정
 url = st.secrets["supabase"]["url"]
@@ -11,9 +10,9 @@ KST = timezone(timedelta(hours=9))
 
 # 페이지 설정
 st.set_page_config(page_title="현장 기록", layout="wide")
-st.title("📱 현장 기록") # 명칭 변경 반영
+st.title("📱 현장 기록")
 
-# 2. 계층형 데이터 정의 [cite: 2026-03-05]
+# 2. 계층형 데이터 정의
 task_hierarchy = {
     "올리브영": ["사전작업", "출고작업"],
     "컬리/로켓배송": ["택배", "밀크런"],
@@ -25,27 +24,7 @@ task_hierarchy = {
     "B2B": []
 }
 
-workplace_list = ["A동", "B동", "C동", "D동", "E동", "F동", "허브"] [cite: 2026-01-19]
-
-# CSS: 왼쪽 정렬 및 이미지 스타일 강제 적용
-st.markdown("""
-    <style>
-    div.stButton > button {
-        text-align: left !important;
-        justify-content: flex-start !important;
-        padding-left: 20px !important;
-        width: 100% !important;
-    }
-    .sub-item-btn {
-        padding-left: 45px !important;
-        color: #555 !important;
-        font-size: 0.9em !important;
-    }
-    div[data-testid="stExpander"] div[role="button"] p {
-        text-align: left !important;
-    }
-    </style>
-""", unsafe_allow_html=True)
+workplace_list = ["A동", "B동", "C동", "D동", "E동", "F동", "허브"]
 
 # 세션 상태 초기화
 if "menu_open" not in st.session_state: st.session_state.menu_open = False
@@ -61,58 +40,40 @@ selected_place = st.segmented_control(
     key="workplace_selector"
 )
 
-# 헬퍼 함수
-def split_man_seconds_by_date(start_dt, end_dt, workers):
-    history_map = {}
-    curr = start_dt
-    while curr.date() < end_dt.date():
-        next_day = datetime.combine(curr.date() + timedelta(days=1), dt_time.min, tzinfo=KST)
-        duration = (next_day - curr).total_seconds()
-        d_str = curr.strftime("%Y-%m-%d")
-        history_map[d_str] = history_map.get(d_str, 0) + (duration * workers)
-        curr = next_day
-    history_map[end_dt.strftime("%Y-%m-%d")] = (end_dt - curr).total_seconds() * workers
-    return history_map
-
-def update_history_map(current_history, new_segments):
-    h_dict = {item['date']: item['man_seconds'] for item in current_history} if current_history else {}
-    for d, s in new_segments.items():
-        h_dict[d] = h_dict.get(d, 0) + s
-    return [{"date": d, "man_seconds": s} for d, s in h_dict.items()]
-
+# --- [상단: 작업 구분 입력 구역] ---
 st.divider()
 
-# --- [상단: 작업 구분 및 정보 입력] ---
 with st.container(border=True):
     st.write("작업 구분")
-    # 드롭다운 라벨 버튼
     dropdown_label = st.session_state.final_choice if st.session_state.final_choice else "선택하세요"
+    
+    # 드롭다운 토글 버튼
     if st.button(f"{dropdown_label} ▾", key="dropdown_trigger", use_container_width=True):
         st.session_state.menu_open = not st.session_state.menu_open
         st.rerun()
 
-    # 계층형 드롭다운 메뉴 (열려 있을 때만 표시)
+    # 계층형 메뉴 로직
     if st.session_state.menu_open:
-        with st.container(border=True):
-            for main, subs in task_hierarchy.items():
-                if subs:
-                    is_expanded = st.session_state.expanded_main == main
-                    icon = "▼" if is_expanded else "▶"
-                    if st.button(f"{icon} {main}", key=f"main_{main}", use_container_width=True):
-                        st.session_state.expanded_main = main if not is_expanded else None
-                        st.rerun()
-                    if is_expanded:
-                        for sub in subs:
-                            if st.button(f"　　└ {sub}", key=f"sub_{main}_{sub}", use_container_width=True):
-                                st.session_state.final_choice = f"{main} ({sub})"
-                                st.session_state.menu_open = False # 최종 선택 시 닫힘
-                                st.rerun()
-                else:
-                    if st.button(f"　 {main}", key=f"none_{main}", use_container_width=True):
-                        st.session_state.final_choice = main
-                        st.session_state.menu_open = False # 최종 선택 시 닫힘
-                        st.rerun()
-
+        inner_container = st.container(border=True)
+        for main, subs in task_hierarchy.items():
+            if subs:
+                is_expanded = st.session_state.expanded_main == main
+                icon = "▼" if is_expanded else "▶"
+                if inner_container.button(f"{icon} {main}", key=f"main_{main}", use_container_width=True):
+                    st.session_state.expanded_main = main if not is_expanded else None
+                    st.rerun()
+                
+                if is_expanded:
+                    for sub in subs:
+                        if inner_container.button(f"　　└ {sub}", key=f"sub_{main}_{sub}", use_container_width=True):
+                            st.session_state.final_choice = f"{main} ({sub})"
+                            st.session_state.menu_open = False
+                            st.rerun()
+            else:
+                if inner_container.button(f"　 {main}", key=f"none_{main}", use_container_width=True):
+                    st.session_state.final_choice = main
+                    st.session_state.menu_open = False
+                    st.rerun()
     # 💡 작업 정보 입력 (작업 구분 하단에 항상 노출) [cite: 2026-03-05]
     with st.form("new_task_form", clear_on_submit=True):
         st.write("시작 인원")
@@ -224,3 +185,4 @@ def render_active_tasks(place):
 
 # 프래그먼트 실행
 render_active_tasks(selected_place)
+
