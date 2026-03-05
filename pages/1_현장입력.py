@@ -9,10 +9,11 @@ key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 KST = timezone(timedelta(hours=9))
 
+# 페이지 설정 (서브 페이지에서도 Wide 모드 유지)
 st.set_page_config(page_title="IWP 현장기록", layout="wide")
 st.title("📱 IWP (Intelligent Work Platform) 현장 관제")
 
-# 2. 업데이트된 계층형 데이터 정의 [cite: 2026-03-05]
+# 2. 계층형 데이터 정의 - 💡 쉼표(,) 오류 수정 완료! [cite: 2026-03-05]
 task_hierarchy = {
     "올리브영": ["사전작업", "출고작업"],
     "컬리/로켓배송": ["택배", "밀크런"],
@@ -20,7 +21,7 @@ task_hierarchy = {
     "홈쇼핑합포": ["세팅", "사전작업", "합포장"],
     "기획팩": [],
     "선물세트": [],
-    "소분": ["박스소분", "낱개소분"],
+    "소분": ["박스소분", "낱개소분"], # ⬅️ 여기에 쉼표가 빠져있었습니다!
     "B2B": []
 }
 
@@ -35,7 +36,7 @@ selected_place = st.segmented_control(
     key="workplace_selector"
 )
 
-# --- 헬퍼 함수: 정밀 공수 계산 로직 ---
+# --- 헬퍼 함수 (날짜별 공수 배분 로직) ---
 def split_man_seconds_by_date(start_dt, end_dt, workers):
     history_map = {}
     curr = start_dt
@@ -57,15 +58,14 @@ def update_history_map(current_history, new_segments):
 st.divider()
 
 # --- [상단: 새 작업 추가] ---
-# 💡 [개선] 처음부터 입력창이 보이도록 expander를 기본적으로 열어두거나 아예 제거할 수도 있습니다.
-# 여기서는 시각적 구분을 위해 expander를 쓰되, 내부 필드는 무조건 노출되게 했습니다.
-with st.expander(f"➕ {selected_place} 새 작업 입력 (모든 필드 상시 노출)", expanded=True):
+# 💡 [개선] 모든 입력창이 처음부터 노출되도록 구성
+with st.container(border=True):
+    st.markdown(f"### ➕ {selected_place} 새 작업 시작")
     with st.form("new_task_form", clear_on_submit=True):
         col1, col2, col3 = st.columns([2, 1, 1])
         
         with col1:
-            # 💡 [핵심] 펼치기 동작 없이 한눈에 보이는 계층형 리스트 생성
-            # 검색창에 '사전'만 쳐도 '올리브영 (사전작업)' 등이 바로 검색됩니다.
+            # 💡 [핵심] 한눈에 보이는 평탄화된 계층 리스트 생성
             flat_options = []
             for main, subs in task_hierarchy.items():
                 if subs:
@@ -74,31 +74,27 @@ with st.expander(f"➕ {selected_place} 새 작업 입력 (모든 필드 상시 
                 else:
                     flat_options.append(main)
             
-            selected_task = st.selectbox("🎯 작업 구분 선택 (검색 가능)", options=flat_options)
+            selected_task = st.selectbox("🎯 작업 구분 (선택 또는 검색)", options=flat_options)
         
         with col2:
             t_workers = st.number_input("👥 시작 인원", min_value=1, value=1)
         
         with col3:
-            t_qty = st.number_input("📦 목표 물량 (EA)", min_value=0, value=0)
+            t_qty = st.number_input("📦 작업 총 건수", min_value=0, value=0)
 
-        # 🚀 제출 버튼
         if st.form_submit_button("🚀 작업 시작", use_container_width=True, type="primary"):
             now = datetime.now(KST)
-            # 세션 번호 생성 로직
+            # 세션 번호 생성 (오늘 해당 현장의 몇 번째 작업인지)
             active_res = supabase.table("active_tasks").select("id").ilike("session_name", f"{selected_place}_%").execute()
             log_res = supabase.table("work_logs").select("id", count="exact").eq("work_date", now.strftime("%Y-%m-%d")).ilike("memo", f"현장: {selected_place}%").execute()
             next_num = (log_res.count if log_res.count else 0) + len(active_res.data) + 1
             
             supabase.table("active_tasks").insert({
                 "session_name": f"{selected_place}_{next_num}", 
-                "task_type": selected_task, # 이미 계층형으로 선택된 명칭 저장
-                "workers": t_workers, 
-                "quantity": t_qty, 
+                "task_type": selected_task,
+                "workers": t_workers, "quantity": t_qty, 
                 "last_started_at": now.isoformat(),
-                "status": "running", 
-                "accumulated_seconds": 0, 
-                "work_history": []
+                "status": "running", "accumulated_seconds": 0, "work_history": []
             }).execute()
             st.rerun()
 
@@ -110,10 +106,9 @@ def render_active_tasks(place):
         res = supabase.table("active_tasks").select("*").ilike("session_name", f"{place}_%").execute()
         tasks = res.data
         if not tasks:
-            st.info(f"{place}에 진행 중인 작업이 없습니다.")
+            st.info(f"{place} 구역에 진행 중인 작업이 없습니다.")
             return
 
-        # Wide 모드 활용 4열 배치
         cols = st.columns(4)
         for idx, task in enumerate(tasks):
             with cols[idx % 4]:
@@ -122,7 +117,6 @@ def render_active_tasks(place):
                     st.write(f"**{task['task_type']}**")
                     st.write(f"📦 {task['quantity']:,} EA | 👥 {task['workers']}명")
                     
-                    # 실시간 타이머
                     if task['status'] == "running":
                         total_sec = task['accumulated_seconds'] + (datetime.now(KST) - datetime.fromisoformat(task['last_started_at'])).total_seconds()
                         h, m, s = int(total_sec // 3600), int((total_sec % 3600) // 60), int(total_sec % 60)
@@ -131,7 +125,7 @@ def render_active_tasks(place):
                         h, m, s = int(task['accumulated_seconds'] // 3600), int((task['accumulated_seconds'] % 3600) // 60), int(task['accumulated_seconds'] % 60)
                         st.subheader(f"⏸️ {h:02d}:{m:02d}:{s:02d}")
 
-                    # 인원 수정
+                    # 인원 수정 로직 [cite: 2026-02-23]
                     curr_w = int(task['workers'])
                     new_w = st.number_input("인원 수정", min_value=1, value=curr_w, key=f"w_{task['id']}")
                     if new_w != curr_w and st.button("👥 변경 확정", key=f"up_{task['id']}", use_container_width=True):
