@@ -22,7 +22,7 @@ task_hierarchy = {
     "기획팩": [],
     "선물세트": [],
     "소분": [],
-    "B2B": []
+    "B2B": [],
 }
 
 workplace_list = ["A동", "B동", "C동", "D동", "E동", "F동", "허브"] [cite: 2026-01-19]
@@ -178,3 +178,4 @@ def render_active_tasks(place):
 
 # 프래그먼트 실행
 render_active_tasks(selected_place)
+
