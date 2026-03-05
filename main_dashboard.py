@@ -16,13 +16,12 @@ KST = timezone(timedelta(hours=9))
 if "role" not in st.session_state:
     st.session_state.role = None
 
-# 💡 DB 설정값 로드 및 저장 함수
+# 💡 DB 설정값 로드 및 저장 함수 (설정 고정 장치)
 def get_config(key, default):
     try:
         res = supabase.table("system_config").select("value").eq("key", key).execute()
         return res.data[0]['value'] if res.data else default
-    except:
-        return default
+    except: return default
 
 def set_config(key, value):
     supabase.table("system_config").upsert({"key": key, "value": str(value)}).execute()
@@ -55,7 +54,7 @@ def change_password_dialog():
 def show_admin_dashboard():
     st.title("🏰 IWP (Intelligent Work Platform) 통합 통제실")
     
-    # [1] 사이드바 설정
+    # [1] 사이드바 설정 (설정값 고정) [cite: 2026-03-05]
     st.sidebar.header("⚙️ 분석 및 시스템 설정")
     view_option = st.sidebar.selectbox("조회 단위", ["일간", "주간", "월간"])
     
@@ -68,7 +67,7 @@ def show_admin_dashboard():
         if st.button("💾 서버에 설정 고정", use_container_width=True):
             set_config("target_lph", target_lph)
             set_config("hourly_wage", hourly_wage)
-            st.success("설정 고정 완료!"); time.sleep(0.5); st.rerun()
+            st.success("설정이 저장되었습니다."); time.sleep(0.5); st.rerun()
 
     # [2] 실시간 현장 작업 현황
     st.header("🕵️ 실시간 현장 작업 현황")
@@ -100,7 +99,7 @@ def show_admin_dashboard():
 
     st.divider()
 
-    # [3] 실적 분석 리포트 (시뮬레이터 제거됨)
+    # [3] 실적 분석 리포트 (복구된 그래프 포함) [cite: 2026-03-05]
     try:
         log_res = supabase.table("work_logs").select("*").execute()
         df = pd.DataFrame(log_res.data)
@@ -109,26 +108,42 @@ def show_admin_dashboard():
             df['work_date'] = pd.to_datetime(df['work_date'])
             df['LPH'] = (df['quantity'] / df['duration']).replace([float('inf')], 0).round(2)
             df['total_cost'] = (df['duration'] * hourly_wage).round(0)
+            df['CPU'] = (df['total_cost'] / df['quantity']).replace([float('inf')], 0).round(2)
 
             st.header("📈 실적 분석 리포트")
             k1, k2, k3, k4 = st.columns(4)
-            k1.metric("누적 평균 LPH", f"{df['LPH'].mean():.2f}")
-            k2.metric("누적 총 건수", f"{df['quantity'].sum():,} 건")
-            k3.metric("누적 총 비용", f"{df['total_cost'].sum():,.0f} 원")
-            k4.metric("누적 공수", f"{df['duration'].sum():.1f} MH")
+            k1.metric("누적 총 건수", f"{df['quantity'].sum():,} 건")
+            k2.metric("누적 총 비용", f"{df['total_cost'].sum():,.0f} 원")
+            k3.metric("평균 생산성 (LPH)", f"{df['LPH'].mean():.2f}")
+            k4.metric("평균 단가 (CPU)", f"{df['CPU'].mean():.2f} 원")
 
-            # 차트 시각화
+            # 조회 단위 설정
             if view_option == "일간": df['display_date'] = df['work_date'].dt.strftime('%Y-%m-%d')
             elif view_option == "주간": df['display_date'] = df['work_date'].dt.strftime('%Y-%U주')
             else: df['display_date'] = df['work_date'].dt.strftime('%Y-%m월')
 
-            r1_c1, r1_c2 = st.columns(2)
-            with r1_c1:
+            # --- 그래프 1열: 부하 및 비용 현황 (복구) --- [cite: 2026-03-05]
+            st.write("---")
+            g1_col1, g1_col2 = st.columns(2)
+            with g1_col1:
+                # 작업 부하 현황 (작업별 총 건수)
+                load_df = df.groupby('task')['quantity'].sum().reset_index().sort_values('quantity', ascending=False)
+                fig_load = px.bar(load_df, x='task', y='quantity', title="📊 작업 부하 현황 (총 건수)", color='task', text_auto=',.0f')
+                st.plotly_chart(fig_load, use_container_width=True)
+            with g1_col2:
+                # 인건비 현황 (작업별 총 인건비)
+                cost_df = df.groupby('task')['total_cost'].sum().reset_index().sort_values('total_cost', ascending=False)
+                fig_cost = px.bar(cost_df, x='task', y='total_cost', title="💰 인건비 투입 현황 (원)", color='task', text_auto=',.0f')
+                st.plotly_chart(fig_cost, use_container_width=True)
+
+            # --- 그래프 2열: 추이 및 비중 ---
+            g2_col1, g2_col2 = st.columns(2)
+            with g2_col1:
                 chart_df = df.groupby('display_date')['LPH'].mean().reset_index().sort_values('display_date')
-                st.plotly_chart(px.line(chart_df, x='display_date', y='LPH', markers=True, title="생산성 추이"), use_container_width=True)
-            with r1_c2:
+                st.plotly_chart(px.line(chart_df, x='display_date', y='LPH', markers=True, title="📈 생산성 추이 (LPH)"), use_container_width=True)
+            with g2_col2:
                 task_stats = df.groupby('task')['LPH'].mean().reset_index().round(2)
-                st.plotly_chart(px.pie(task_stats, values='LPH', names='task', hole=0.4, title="작업별 생산 비중"), use_container_width=True)
+                st.plotly_chart(px.pie(task_stats, values='LPH', names='task', hole=0.4, title="🍕 작업별 생산 비중"), use_container_width=True)
 
             st.subheader("📋 상세 실적 데이터")
             st.dataframe(df.sort_values('work_date', ascending=False), use_container_width=True)
