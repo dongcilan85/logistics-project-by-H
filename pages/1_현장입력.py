@@ -1,12 +1,26 @@
 import streamlit as st
 from supabase import create_client, Client
-from datetime import datetime, timezone, timedelta, time as dt_time
+from datetime import datetime, timezone, timedelta
 
-# 1. 시스템 설정
+# DB 연동 및 설정
 url = st.secrets["supabase"]["url"]
 key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 KST = timezone(timedelta(hours=9))
+
+# 💡 DB에서 카테고리 구조 동적 생성
+def fetch_hierarchy():
+    res = supabase.table("task_categories").select("*").execute()
+    hierarchy = {}
+    for item in res.data:
+        main = item['main_category']
+        sub = item['sub_category']
+        if main not in hierarchy: hierarchy[main] = []
+        if sub: hierarchy[main].append(sub)
+    return hierarchy
+
+task_hierarchy = fetch_hierarchy()
+workplace_list = ["A동", "B동", "C동", "D동", "E동", "F동", "허브"] 
 
 # 페이지 설정
 st.set_page_config(page_title="현장 기록", layout="wide")
@@ -217,4 +231,5 @@ def render_active_tasks(place):
 
 # 프래그먼트 실행
 render_active_tasks(selected_place)
+
 
