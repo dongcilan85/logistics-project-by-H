@@ -21,7 +21,7 @@ task_hierarchy = {
     "홈쇼핑합포": ["세팅", "사전작업", "합포장"],
     "기획팩": [],
     "선물세트": [],
-    "소분": ["박스소분", "낱개소분"], # ⬅️ 여기에 쉼표가 빠져있었습니다!
+    "소분": [],
     "B2B": []
 }
 
@@ -80,7 +80,7 @@ with st.container(border=True):
             t_workers = st.number_input("👥 시작 인원", min_value=1, value=1)
         
         with col3:
-            t_qty = st.number_input("📦 작업 총 건수", min_value=0, value=0)
+            t_qty = st.number_input("📦 총 작업 건수", min_value=0, value=0)
 
         if st.form_submit_button("🚀 작업 시작", use_container_width=True, type="primary"):
             now = datetime.now(KST)
