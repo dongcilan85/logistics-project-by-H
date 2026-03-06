@@ -58,7 +58,7 @@ def show_admin_dashboard():
     st.sidebar.header("⚙️ 분석 및 시스템 설정")
     view_option = st.sidebar.selectbox("조회 단위", ["일간", "주간", "월간"])
     
-    # DB 고정 값 로드
+    # 서버 저장된 설정값 로드
     c_lph = float(get_config("target_lph", 150))
     c_wage = int(get_config("hourly_wage", 10000))
     
@@ -88,15 +88,11 @@ def show_admin_dashboard():
                             if row['status'] == 'running' and row['last_started_at']:
                                 dur += (now - datetime.fromisoformat(row['last_started_at'])).total_seconds()
                             
-                            # 로그 삽입 시 plan_id가 있다면 함께 전송 [cite: 2026-03-05]
                             supabase.table("work_logs").insert({
-                                "work_date": now.strftime("%Y-%m-%d"), 
-                                "task": row['task_type'],
-                                "workers": row['workers'], 
-                                "quantity": row['quantity'],
-                                "duration": round(dur / 3600, 2), 
-                                "memo": "관리자 원격 종료",
-                                "plan_id": row.get('plan_id') 
+                                "work_date": now.strftime("%Y-%m-%d"), "task": row['task_type'],
+                                "workers": row['workers'], "quantity": row['quantity'],
+                                "duration": round(dur / 3600, 2), "memo": "관리자 원격 종료",
+                                "plan_id": row.get('plan_id') # 계획 연동 유지 [cite: 2026-03-05]
                             }).execute()
                             supabase.table("active_tasks").delete().eq("id", row['id']).execute()
                             st.rerun()
@@ -120,7 +116,7 @@ def show_admin_dashboard():
             elif view_option == "주간": df['display_date'] = df['work_date'].dt.strftime('%Y-%U주')
             else: df['display_date'] = df['work_date'].dt.strftime('%Y-%m월')
 
-            # --- 💡 진짜 그래프가 포함된 3시트 엑셀 생성 --- [cite: 2026-03-05]
+            # --- 💡 진짜 그래프가 포함된 3시트 엑셀 생성 ---
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 workbook = writer.book
@@ -158,18 +154,19 @@ def show_admin_dashboard():
                 st.plotly_chart(px.bar(df.groupby('task')['total_cost'].sum().reset_index(), x='task', y='total_cost', title="💰 인건비 투입 현황", color='task'), use_container_width=True)
                 st.plotly_chart(px.pie(df.groupby('task')['LPH'].mean().reset_index(), values='LPH', names='task', hole=0.4, title="🍕 생산 비중"), use_container_width=True)
 
-            st.subheader("📋 전체 실적 상세 데이터")
+            st.subheader("📋 전체 상세 데이터")
             st.dataframe(df.sort_values('work_date', ascending=False), use_container_width=True)
 
-            # 💡 [핵심 보강] 계획 대비 실적 분석 섹션 (함수 내부로 이동) [cite: 2026-03-05]
+            # 💡 [보충] 계획 대비 실적 분석 섹션 (에러 수정됨) [cite: 2026-03-05]
             st.divider()
             st.header("🎯 생산 계획 대비 실적 분석 (Plan vs Actual)")
             try:
+                # 외래 키 설정 후 정상 작동하는 쿼리
                 analysis_res = supabase.table("work_logs").select("*, production_plans(*)").not_.is_("plan_id", "null").execute()
                 if analysis_res.data:
                     a_df = pd.DataFrame(analysis_res.data)
-                    a_df['목표물량'] = a_df['production_plans'].apply(lambda x: x['target_quantity'])
-                    a_df['계획인원'] = a_df['production_plans'].apply(lambda x: x['planned_workers'])
+                    a_df['목표물량'] = a_df['production_plans'].apply(lambda x: x['target_quantity'] if x else 0)
+                    a_df['계획인원'] = a_df['production_plans'].apply(lambda x: x['planned_workers'] if x else 0)
                     a_df['물량달성률'] = (a_df['quantity'] / a_df['목표물량'] * 100).round(1)
                     
                     fig_va = px.bar(a_df, x='task', y=['목표물량', 'quantity'], barmode='group', title="계획 물량 vs 실제 처리 물량")
@@ -179,8 +176,8 @@ def show_admin_dashboard():
                     st.dataframe(a_df[['work_date', 'task', '목표물량', 'quantity', '물량달성률', '계획인원', 'workers', 'duration']], use_container_width=True)
                 else:
                     st.info("아직 완료된 생산 계획 실적이 없습니다.")
-            except Exception as e:
-                st.error(f"분석 리포트 생성 오류: {e}")
+            except Exception as plan_err:
+                st.warning(f"계획 분석 데이터를 불러오는 중입니다 (SQL 외래 키 설정을 확인해 주세요): {plan_err}")
 
     except Exception as e: st.error(f"분석 오류: {e}")
 
@@ -192,7 +189,7 @@ def login_screen():
         if st.form_submit_button("접속", use_container_width=True, type="primary"):
             if pw == get_admin_password(): st.session_state.role = "Admin"; st.rerun()
             elif pw == "": st.session_state.role = "Staff"; st.rerun()
-            else: st.error("비밀번호가 틀렸습니다.")
+            else: st.error("비밀번호 불일치")
 
 if st.session_state.role is None:
     st.navigation([st.Page(login_screen, title="로그인", icon="🔒")]).run()
