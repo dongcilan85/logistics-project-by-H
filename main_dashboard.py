@@ -137,7 +137,7 @@ def show_admin_dashboard():
             st.header("📈 실적 분석 리포트")
             d_col1, d_col2 = st.columns([3, 1])
             with d_col1: st.write(f"기준: **{view_option}** | 시급: **{hourly_wage:,}원**")
-            with d_col2: st.download_button(label="📥 전문 분석 리포트(.xlsx) 다운로드", data=output.getvalue(), file_name=f"IWP_Report_{datetime.now().strftime('%Y%m%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+            with d_col2: st.download_button(label="📥 현장 분석 리포트(.xlsx) 다운로드", data=output.getvalue(), file_name=f"IWP_Report_{datetime.now().strftime('%Y%m%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
             k1, k2, k3, k4 = st.columns(4)
             k1.metric("누적 총 건수", f"{df['quantity'].sum():,} 건")
@@ -214,3 +214,4 @@ else:
     else:
         pg = st.navigation({"현장": [site_page]})
     pg.run()
+
