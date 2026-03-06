@@ -53,32 +53,28 @@ if "final_choice" not in st.session_state: st.session_state.final_choice = None
 st.write("### 🚩 작업 현장 선택")
 selected_place = st.segmented_control("현장 선택", options=workplace_list, default="A동", key="workplace_selector")
 
-# 💡 [신규] 계획 실행을 위한 인원 입력창 배치
-st.write("### 👥 투입 인원 설정")
-plan_workers = st.number_input("현재 투입 인원", min_value=1, value=1, key="plan_worker_input")
-
-# 💡 [신규] 생산 계획 버튼 영역 (현장 선택과 작업 구분 사이) [cite: 2026-03-05]
+# 💡 [신규] 생산 계획 버튼 영역 (요청하신 위치에 배치) [cite: 2026-03-05]
 try:
+    # 💡 현장을 선택했을 때, 해당 현장과 관련된 계획(혹은 전체 대기 계획)을 버튼으로 생성
     plan_res = supabase.table("production_plans").select("*").eq("status", "pending").execute()
     if plan_res.data:
         st.write("---")
-        st.write("📅 **대기 중인 생산 계획 (클릭 시 즉시 시작)**")
-        p_cols = st.columns(3)
+        st.write(f"📅 **[{selected_place}] 대기 중인 생산 계획 (클릭 시 기록 시작)**")
+        p_cols = st.columns(2)
         for p_idx, plan in enumerate(plan_res.data):
-            # 버튼 형식: 생산계획_카테고리명_목표건수_인원(예측인원)
+            # 버튼 라벨: 생산계획_카테고리명_목표건수_인원() [cite: 2026-03-05]
             btn_label = f"🚀 생산계획_{plan['task_type']}_{plan['target_quantity']}건_인원({plan['planned_workers']})"
-            if p_cols[p_idx % 3].button(btn_label, key=f"plan_btn_{plan['id']}", use_container_width=True):
+            if p_cols[p_idx % 2].button(btn_label, key=f"plan_{plan['id']}", use_container_width=True):
                 now = datetime.now(KST)
-                # 1. active_tasks에 계획 데이터와 함께 삽입
+                # 계획 기반으로 기록 시작 [cite: 2026-03-05]
                 supabase.table("active_tasks").insert({
-                    "session_name": f"{selected_place}_계획_{plan['id']}",
+                    "session_name": f"{selected_place}_P{plan['id']}",
                     "task_type": plan['task_type'],
-                    "workers": plan_workers, # 현재 입력한 인원 적용
+                    "workers": plan['planned_workers'], # 계획된 인원으로 우선 세팅
                     "quantity": plan['target_quantity'],
                     "last_started_at": now.isoformat(),
-                    "plan_id": plan['id'] # 계획 ID 연동
+                    "plan_id": plan['id']
                 }).execute()
-                # 2. 계획 상태를 active로 변경
                 supabase.table("production_plans").update({"status": "active"}).eq("id", plan['id']).execute()
                 st.rerun()
 except: pass
