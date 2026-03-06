@@ -13,6 +13,12 @@ KST = timezone(timedelta(hours=9))
 st.set_page_config(page_title="생산 계획 관리", layout="wide")
 st.title("📅 생산 계획 관리 (예측 및 리스트업)")
 
+# 💡 세션 상태 초기화 (예측 결과 유지용) [cite: 2026-03-05]
+if "prediction_done" not in st.session_state:
+    st.session_state.prediction_done = False
+if "pred_data" not in st.session_state:
+    st.session_state.pred_data = {}
+
 # 💡 데이터 로드 유틸리티
 def get_config(key, default):
     try:
@@ -36,8 +42,8 @@ with st.expander("🔮 새로운 생산 계획 수립 (예측 시뮬레이터)",
     with c2:
         work_qty = st.number_input("예상 작업 건수 (EA)", min_value=0, value=1000, step=100)
     
+    # 예측 실행 버튼
     if st.button("🚀 예측 및 계획 초안 생성", use_container_width=True, type="primary"):
-        # 예측 로직 (MH 기반) [cite: 2026-03-05]
         base_lph = float(get_config("target_lph", 150))
         hourly_wage = int(get_config("hourly_wage", 10000))
         
@@ -45,19 +51,41 @@ with st.expander("🔮 새로운 생산 계획 수립 (예측 시뮬레이터)",
         est_cost = needed_mh * hourly_wage
         est_workers = int(needed_mh / 8 + 0.99)
         
+        # 결과를 세션 상태에 저장하여 버튼 중첩 에러 방지 [cite: 2026-03-05]
+        st.session_state.prediction_done = True
+        st.session_state.pred_data = {
+            "task": sel_task,
+            "qty": work_qty,
+            "mh": needed_mh,
+            "cost": est_cost,
+            "workers": est_workers
+        }
+
+    # 예측 결과가 있을 때만 표시 [cite: 2026-03-05]
+    if st.session_state.prediction_done:
+        data = st.session_state.pred_data
         st.divider()
         res_c1, res_c2, res_c3 = st.columns(3)
-        res_c1.metric("필요 총 공수", f"{needed_mh:.1f} MH")
-        res_c2.metric("8시간 기준 권장 인원", f"{est_workers} 명")
-        res_c3.metric("예상 인건비", f"{est_cost:,.0f} 원")
+        res_c1.metric("필요 총 공수", f"{data['mh']:.1f} MH")
+        res_c2.metric("8시간 기준 권장 인원", f"{data['workers']} 명")
+        res_c3.metric("예상 인건비", f"{data['cost']:,.0f} 원")
         
-        # 💡 [핵심] 즉시 계획 등록 버튼
-        if st.button(f"📅 '{sel_task}' 계획 확정 및 현장 전송", use_container_width=True):
-            supabase.table("production_plans").insert({
-                "task_type": sel_task, "target_quantity": work_qty,
-                "planned_workers": est_workers, "status": "pending"
-            }).execute()
-            st.success("계획이 수립되었습니다. 현장 기록 메뉴에서 즉시 가동 가능합니다."); time.sleep(1); st.rerun()
+        # 💡 [해결] 이제 버튼이 정상적으로 반응합니다. [cite: 2026-03-05]
+        if st.button(f"📅 '{data['task']}' 계획 확정 및 현장 전송", use_container_width=True):
+            try:
+                supabase.table("production_plans").insert({
+                    "task_type": data['task'], 
+                    "target_quantity": data['qty'],
+                    "planned_workers": data['workers'], 
+                    "status": "pending"
+                }).execute()
+                st.success(f"'{data['task']}' 계획이 수립되었습니다. 현장 기록 메뉴에서 즉시 가동 가능합니다.")
+                # 상태 초기화 후 페이지 새로고침 [cite: 2026-03-05]
+                st.session_state.prediction_done = False
+                time.sleep(1)
+                st.rerun()
+            except Exception as e:
+                st.error(f"저장 실패: {e}")
 
 st.divider()
 
@@ -71,12 +99,10 @@ try:
         t1, t2 = st.tabs(["🕒 가동/대기 계획", "✅ 완료된 계획 분석"])
         
         with t1:
-            # 상태 한글화 및 강조
             df_active = df_p[df_p['status'].isin(['pending', 'active'])].copy()
             if not df_active.empty:
                 st.dataframe(df_active, use_container_width=True)
                 
-                # 계획 제어
                 sel_id = st.selectbox("제어할 계획 ID", options=df_active['id'].tolist())
                 ctrl_c1, ctrl_c2 = st.columns(2)
                 if ctrl_c1.button("🗑️ 계획 삭제", use_container_width=True):
@@ -88,12 +114,13 @@ try:
             else: st.info("대기 중인 계획이 없습니다.")
 
         with t2:
-            # 계획 대비 실적 조인 분석 [cite: 2026-03-05]
             try:
                 log_res = supabase.table("work_logs").select("*, production_plans(*)").not_.is_("plan_id", "null").execute()
                 if log_res.data:
                     a_df = pd.DataFrame(log_res.data)
-                    a_df['달성률(%)'] = (a_df['quantity'] / a_df['production_plans'].apply(lambda x: x['target_quantity']) * 100).round(1)
+                    # Safe check for production_plans data
+                    a_df['목표물량'] = a_df['production_plans'].apply(lambda x: x['target_quantity'] if x else 0)
+                    a_df['달성률(%)'] = (a_df['quantity'] / a_df['목표물량'] * 100).round(1)
                     st.dataframe(a_df[['work_date', 'task', 'quantity', '달성률(%)', 'workers', 'duration']], use_container_width=True)
                 else: st.info("완료된 계획 실적이 없습니다.")
             except: st.warning("분석 데이터를 로드하는 중입니다.")
