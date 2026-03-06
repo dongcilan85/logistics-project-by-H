@@ -156,27 +156,30 @@ def show_admin_dashboard():
             st.subheader("📋 전체 실적 상세 데이터")
             st.dataframe(df.sort_values('work_date', ascending=False), use_container_width=True)
     except Exception as e: st.error(f"분석 오류: {e}")
-# (기존 대시보드 리포트 하단에 추가) [cite: 2026-03-05]
 
-st.header("🎯 생산 계획 대비 실적 분석 (Plan vs Actual)")
-try:
-    # 계획과 로그를 조인하여 가져오기
-    analysis_res = supabase.table("work_logs").select("*, production_plans(*)").not_.is_("plan_id", "null").execute()
-    if analysis_res.data:
-        analysis_df = pd.DataFrame(analysis_res.data)
-        
-        # 분석 지표 계산 [cite: 2026-03-05]
-        analysis_df['물량달성률'] = (analysis_df['quantity'] / analysis_df['production_plans'].apply(lambda x: x['target_quantity'])) * 100
-        analysis_df['인원차이'] = analysis_df['workers'] - analysis_df['production_plans'].apply(lambda x: x['planned_workers'])
-        
-        # 시각화: 계획 대비 실제 생산성(LPH) 비교
-        fig_compare = px.bar(analysis_df, x='task', y=['LPH', '물량달성률'], barmode='group', title="계획 기반 작업 성과 지표")
-        st.plotly_chart(fig_compare, use_container_width=True)
-        
-        st.subheader("📋 계획 이행 상세 리포트")
-        st.dataframe(analysis_df, use_container_width=True)
-except:
-    st.info("아직 완료된 계획 데이터가 없습니다.")
+    st.divider()
+    st.header("🎯 생산 계획 대비 실적 분석 (Plan vs Actual)")
+    try:
+        # 계획 정보가 포함된 로그 로드 [cite: 2026-03-05]
+        analysis_res = supabase.table("work_logs").select("*, production_plans(*)").not_.is_("plan_id", "null").execute()
+        if analysis_res.data:
+            a_df = pd.DataFrame(analysis_res.data)
+            
+            # 성과 지표 산출
+            a_df['목표물량'] = a_df['production_plans'].apply(lambda x: x['target_quantity'])
+            a_df['계획인원'] = a_df['production_plans'].apply(lambda x: x['planned_workers'])
+            a_df['물량달성률'] = (a_df['quantity'] / a_df['목표물량'] * 100).round(1)
+            
+            # 시각화: 계획 대비 실제 건수 비교
+            fig_va = px.bar(a_df, x='task', y=['목표물량', 'quantity'], barmode='group', title="계획 물량 vs 실제 처리 물량")
+            st.plotly_chart(fig_va, use_container_width=True)
+            
+            st.subheader("📑 계획 이행 분석 리포트")
+            st.dataframe(a_df[['work_date', 'task', '목표물량', 'quantity', '물량달성률', '계획인원', 'workers', 'duration']], use_container_width=True)
+        else:
+            st.info("아직 완료된 생산 계획 실적이 없습니다.")
+    except Exception as e:
+        st.error(f"분석 리포트 생성 오류: {e}")
 
 # --- [네비게이션 및 로그인] ---
 def login_screen():
