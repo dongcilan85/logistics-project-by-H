@@ -156,6 +156,27 @@ def show_admin_dashboard():
             st.subheader("📋 전체 실적 상세 데이터")
             st.dataframe(df.sort_values('work_date', ascending=False), use_container_width=True)
     except Exception as e: st.error(f"분석 오류: {e}")
+# (기존 대시보드 리포트 하단에 추가) [cite: 2026-03-05]
+
+st.header("🎯 생산 계획 대비 실적 분석 (Plan vs Actual)")
+try:
+    # 계획과 로그를 조인하여 가져오기
+    analysis_res = supabase.table("work_logs").select("*, production_plans(*)").not_.is_("plan_id", "null").execute()
+    if analysis_res.data:
+        analysis_df = pd.DataFrame(analysis_res.data)
+        
+        # 분석 지표 계산 [cite: 2026-03-05]
+        analysis_df['물량달성률'] = (analysis_df['quantity'] / analysis_df['production_plans'].apply(lambda x: x['target_quantity'])) * 100
+        analysis_df['인원차이'] = analysis_df['workers'] - analysis_df['production_plans'].apply(lambda x: x['planned_workers'])
+        
+        # 시각화: 계획 대비 실제 생산성(LPH) 비교
+        fig_compare = px.bar(analysis_df, x='task', y=['LPH', '물량달성률'], barmode='group', title="계획 기반 작업 성과 지표")
+        st.plotly_chart(fig_compare, use_container_width=True)
+        
+        st.subheader("📋 계획 이행 상세 리포트")
+        st.dataframe(analysis_df, use_container_width=True)
+except:
+    st.info("아직 완료된 계획 데이터가 없습니다.")
 
 # --- [네비게이션 및 로그인] ---
 def login_screen():
