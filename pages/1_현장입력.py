@@ -1,32 +1,39 @@
 import streamlit as st
 from supabase import create_client, Client
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, time as dt_time
 
-# DB 연동 및 설정
+# 1. 시스템 설정
 url = st.secrets["supabase"]["url"]
 key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 KST = timezone(timedelta(hours=9))
 
-# 💡 DB에서 카테고리 구조 동적 생성
-def fetch_hierarchy():
-    res = supabase.table("task_categories").select("*").execute()
-    hierarchy = {}
-    for item in res.data:
-        main = item['main_category']
-        sub = item['sub_category']
-        if main not in hierarchy: hierarchy[main] = []
-        if sub: hierarchy[main].append(sub)
-    return hierarchy
-
-task_hierarchy = fetch_hierarchy()
-workplace_list = ["A동", "B동", "C동", "D동", "E동", "F동", "허브"] 
-
 # 페이지 설정
 st.set_page_config(page_title="현장 기록", layout="wide")
 st.title("📱 현장 기록")
 
-# 💡 [CSS 추가] 버튼 텍스트 왼쪽 정렬 및 여백 설정
+# 💡 [신규] DB에서 카테고리 마스터 정보를 읽어와 계층 구조 생성 [cite: 2026-03-05]
+def get_dynamic_hierarchy():
+    try:
+        res = supabase.table("task_categories").select("main_category, sub_category").execute()
+        hierarchy = {}
+        for row in res.data:
+            main = row['main_category']
+            sub = row['sub_category']
+            if main not in hierarchy:
+                hierarchy[main] = []
+            if sub: # 서브 카테고리가 있는 경우에만 리스트에 추가
+                hierarchy[main].append(sub)
+        return hierarchy
+    except Exception as e:
+        st.error(f"카테고리 로드 실패: {e}")
+        return {}
+
+# 실시간으로 카테고리 로드
+task_hierarchy = get_dynamic_hierarchy()
+workplace_list = ["A동", "B동", "C동", "D동", "E동", "F동", "허브"]
+
+# CSS: 왼쪽 정렬 스타일 강제 적용 [cite: 2026-03-05]
 st.markdown("""
     <style>
     div.stButton > button {
@@ -37,27 +44,12 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 2. 계층형 데이터 정의
-task_hierarchy = {
-    "올리브영": ["사전작업", "출고작업"],
-    "컬리/로켓배송": ["택배", "밀크런"],
-    "면세점": [],
-    "홈쇼핑": ["세팅", "사전작업", "합포장"],
-    "블리스터" : ["RRP", "블리스터생산"],
-    "기획팩": [],
-    "선물세트": [],
-    "소분": [],
-    "B2B": []
-}
-
-workplace_list = ["A동", "B동", "C동", "D동", "E동", "F동", "허브"]
-
 # 세션 상태 초기화
 if "menu_open" not in st.session_state: st.session_state.menu_open = False
 if "expanded_main" not in st.session_state: st.session_state.expanded_main = None
 if "final_choice" not in st.session_state: st.session_state.final_choice = None
 
-# 작업 현장 선택
+# 작업 현장 선택 (기존 로직 유지)
 st.write("### 🚩 작업 현장 선택")
 selected_place = st.segmented_control(
     "현장을 선택하면 해당 구역의 작업 목록이 나타납니다.",
@@ -66,7 +58,7 @@ selected_place = st.segmented_control(
     key="workplace_selector"
 )
 
-# 헬퍼 함수: 정밀 공수 계산
+# 헬퍼 함수: 날짜별 공수 분할 로직 (유지) [cite: 2026-03-05]
 def split_man_seconds_by_date(start_dt, end_dt, workers):
     history_map = {}
     curr = start_dt
@@ -76,8 +68,7 @@ def split_man_seconds_by_date(start_dt, end_dt, workers):
         d_str = curr.strftime("%Y-%m-%d")
         history_map[d_str] = history_map.get(d_str, 0) + (duration * workers)
         curr = next_day
-    d_str = end_dt.strftime("%Y-%m-%d")
-    history_map[d_str] = history_map.get(d_str, 0) + ((end_dt - curr).total_seconds() * workers)
+    history_map[end_dt.strftime("%Y-%m-%d")] = (end_dt - curr).total_seconds() * workers
     return history_map
 
 def update_history_map(current_history, new_segments):
@@ -86,9 +77,9 @@ def update_history_map(current_history, new_segments):
         h_dict[d] = h_dict.get(d, 0) + s
     return [{"date": d, "man_seconds": s} for d, s in h_dict.items()]
 
-# --- [상단: 작업 구분 입력 구역] ---
 st.divider()
 
+# --- [상단: 작업 구분 입력 구역] ---
 with st.container(border=True):
     st.write("작업 구분")
     dropdown_label = st.session_state.final_choice if st.session_state.final_choice else "선택하세요"
@@ -98,11 +89,12 @@ with st.container(border=True):
         st.session_state.menu_open = not st.session_state.menu_open
         st.rerun()
 
-    # 계층형 메뉴 로직 (버튼들이 CSS에 의해 왼쪽 정렬됨)
+    # 계층형 메뉴 로직 (DB 연동형) [cite: 2026-03-05]
     if st.session_state.menu_open:
         inner_container = st.container(border=True)
         for main, subs in task_hierarchy.items():
             if subs:
+                # 서브 카테고리가 있는 경우
                 is_expanded = st.session_state.expanded_main == main
                 icon = "▼" if is_expanded else "▶"
                 if inner_container.button(f"{icon} {main}", key=f"main_{main}", use_container_width=True):
@@ -116,12 +108,13 @@ with st.container(border=True):
                             st.session_state.menu_open = False
                             st.rerun()
             else:
+                # 서브 카테고리가 없는 단일 항목
                 if inner_container.button(f"　 {main}", key=f"none_{main}", use_container_width=True):
                     st.session_state.final_choice = main
                     st.session_state.menu_open = False
                     st.rerun()
 
-    # 작업 정보 입력 (작업 구분 하단 상시 노출)
+    # 작업 정보 입력 폼
     with st.form("new_task_form", clear_on_submit=True):
         st.write("시작 인원")
         t_workers = st.number_input("시작 인원", min_value=1, value=1, label_visibility="collapsed")
@@ -150,7 +143,7 @@ with st.container(border=True):
 
 st.divider()
 
-# --- [하단: 실시간 작업 카드 (Fragment 적용)] ---
+# --- [하단: 실시간 작업 카드 (Fragment)] ---
 @st.fragment(run_every=1)
 def render_active_tasks(place):
     st.subheader(f"📊 {place} 실시간 현황")
@@ -177,6 +170,7 @@ def render_active_tasks(place):
                         h, m, s = int(task['accumulated_seconds'] // 3600), int((task['accumulated_seconds'] % 3600) // 60), int(task['accumulated_seconds'] % 60)
                         st.subheader(f"⏸️ {h:02d}:{m:02d}:{s:02d}")
 
+                    # 인원 수정 및 종료 버튼 (로직 유지) [cite: 2026-03-05]
                     curr_w = int(task['workers'])
                     new_w = st.number_input("인원 수정", min_value=1, value=curr_w, key=f"w_{task['id']}")
                     if new_w != curr_w and st.button("👥 변경 확정", key=f"up_{task['id']}", use_container_width=True):
@@ -231,5 +225,3 @@ def render_active_tasks(place):
 
 # 프래그먼트 실행
 render_active_tasks(selected_place)
-
-
