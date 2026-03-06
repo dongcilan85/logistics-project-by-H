@@ -49,14 +49,41 @@ if "menu_open" not in st.session_state: st.session_state.menu_open = False
 if "expanded_main" not in st.session_state: st.session_state.expanded_main = None
 if "final_choice" not in st.session_state: st.session_state.final_choice = None
 
-# 작업 현장 선택 (기존 로직 유지)
+# 작업 현장 선택
 st.write("### 🚩 작업 현장 선택")
-selected_place = st.segmented_control(
-    "현장을 선택하면 해당 구역의 작업 목록이 나타납니다.",
-    options=workplace_list,
-    default="A동",
-    key="workplace_selector"
-)
+selected_place = st.segmented_control("현장 선택", options=workplace_list, default="A동", key="workplace_selector")
+
+# 💡 [신규] 계획 실행을 위한 인원 입력창 배치
+st.write("### 👥 투입 인원 설정")
+plan_workers = st.number_input("현재 투입 인원", min_value=1, value=1, key="plan_worker_input")
+
+# 💡 [신규] 생산 계획 버튼 영역 (현장 선택과 작업 구분 사이) [cite: 2026-03-05]
+try:
+    plan_res = supabase.table("production_plans").select("*").eq("status", "pending").execute()
+    if plan_res.data:
+        st.write("---")
+        st.write("📅 **대기 중인 생산 계획 (클릭 시 즉시 시작)**")
+        p_cols = st.columns(3)
+        for p_idx, plan in enumerate(plan_res.data):
+            # 버튼 형식: 생산계획_카테고리명_목표건수_인원(예측인원)
+            btn_label = f"🚀 생산계획_{plan['task_type']}_{plan['target_quantity']}건_인원({plan['planned_workers']})"
+            if p_cols[p_idx % 3].button(btn_label, key=f"plan_btn_{plan['id']}", use_container_width=True):
+                now = datetime.now(KST)
+                # 1. active_tasks에 계획 데이터와 함께 삽입
+                supabase.table("active_tasks").insert({
+                    "session_name": f"{selected_place}_계획_{plan['id']}",
+                    "task_type": plan['task_type'],
+                    "workers": plan_workers, # 현재 입력한 인원 적용
+                    "quantity": plan['target_quantity'],
+                    "last_started_at": now.isoformat(),
+                    "plan_id": plan['id'] # 계획 ID 연동
+                }).execute()
+                # 2. 계획 상태를 active로 변경
+                supabase.table("production_plans").update({"status": "active"}).eq("id", plan['id']).execute()
+                st.rerun()
+except: pass
+
+st.divider()
 
 # 헬퍼 함수: 날짜별 공수 분할 로직 (유지) [cite: 2026-03-05]
 def split_man_seconds_by_date(start_dt, end_dt, workers):
