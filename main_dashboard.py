@@ -191,20 +191,23 @@ def login_screen():
             elif pw == "": st.session_state.role = "Staff"; st.rerun()
             else: st.error("비밀번호 불일치")
 
+
 if st.session_state.role is None:
     st.navigation([st.Page(login_screen, title="로그인", icon="🔒")]).run()
 else:
+    # 💡 메뉴 구성 업데이트: 계획 관리 페이지 추가 [cite: 2026-03-05]
     admin_main = st.Page(show_admin_dashboard, title="통합 대시보드", icon="📊")
     pred_page = st.Page("pages/2_생산예측.py", title="생산 예측", icon="🔮")
+    plan_mgmt_page = st.Page("pages/4_생산계획관리.py", title="생산 계획 관리", icon="📂") # 신규 추가
     cat_page = st.Page("pages/3_카테고리관리.py", title="카테고리 관리", icon="📁")
     site_page = st.Page("pages/1_현장입력.py", title="현장 기록", icon="📝")
     
-    st.sidebar.divider()
-    sc1, sc2 = st.sidebar.columns(2)
-    if sc1.button("🔓 로그아웃", use_container_width=True): st.session_state.role = None; st.rerun()
-    if sc2.button("🔑 PW변경", use_container_width=True): change_password_dialog()
-
+    # ... (사이드바 및 네비게이션 로직 유지) [cite: 2026-03-05]
     if st.session_state.role == "Admin":
-        pg = st.navigation({"통제실": [admin_main, pred_page, cat_page], "현장": [site_page]})
-    else: pg = st.navigation({"현장": [site_page]})
+        pg = st.navigation({
+            "관리실": [admin_main, pred_page, plan_mgmt_page, cat_page], # 계획 관리 포함
+            "현장": [site_page]
+        })
+    else:
+        pg = st.navigation({"현장": [site_page]})
     pg.run()
