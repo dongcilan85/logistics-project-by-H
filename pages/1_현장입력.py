@@ -87,9 +87,9 @@ try:
 except Exception as e: st.error(f"계획 조회 오류: {e}")
 st.write("---")
 
-# 3️⃣ 수동 작업 시작
+# 3️⃣ 작업 시작
 with st.container(border=True):
-    st.write("➕ **수동 작업 시작 (계획 외 작업)**")
+    st.write("➕ ** 작업 시작 **")
     dropdown_label = st.session_state.final_choice if st.session_state.final_choice else "작업 카테고리 선택"
     if st.button(f"{dropdown_label} ▾", key="drop_trigger", use_container_width=True):
         st.session_state.menu_open = not st.session_state.menu_open
@@ -211,3 +211,4 @@ def render_active_tasks(place):
     except Exception as e: st.error(f"데이터 로드 오류: {e}")
 
 render_active_tasks(selected_place)
+
