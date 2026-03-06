@@ -55,8 +55,13 @@ with st.container(border=True):
     # 3. 예측 버튼
     predict_clicked = st.button("🚀 예측하기", use_container_width=True, type="primary")
 
-# --- [UI: 예측 결과] ---
+# --- [예측 결과 도출 및 계획 생성] ---
 if predict_clicked:
+    # (연산 로직 유지)
+    needed_mh = work_qty / final_lph if final_lph > 0 else 0
+    total_est_cost = needed_mh * hourly_wage
+    est_workers = int(needed_mh / 8 + 0.99) # 8시간 기준 가이드
+    
     if work_qty <= 0:
         st.error("예측할 작업 건수를 입력해 주세요.")
     else:
@@ -111,3 +116,16 @@ if predict_clicked:
                 "건수": [work_qty, final_lph * 8]
             })
             st.bar_chart(chart_df, x="항목", y="건수", color="#31333F")
+            st.divider()
+
+    # 💡 [신규] 생산 계획 수립 버튼
+    if st.button("📅 위 결과로 생산 계획 수립", use_container_width=True, type="primary"):
+        supabase.table("production_plans").insert({
+            "task_type": selected_task,
+            "target_quantity": work_qty,
+            "planned_workers": est_workers,
+            "status": "pending"
+        }).execute()
+        st.success(f"'{selected_task}' 계획이 현장 기록 페이지로 전달되었습니다.")
+        time.sleep(1); st.rerun()
+            
