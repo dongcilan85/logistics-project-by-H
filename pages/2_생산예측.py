@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
 from datetime import datetime, timezone, timedelta
+import time
 
 # 1. 시스템 설정
 url = st.secrets["supabase"]["url"]
@@ -19,7 +20,6 @@ def get_config(key, default):
         return res.data[0]['value'] if res.data else default
     except: return default
 
-# 💡 [신규] DB에서 카테고리 마스터 정보를 실시간으로 로드 [cite: 2026-03-05]
 def fetch_dynamic_categories():
     try:
         res = supabase.table("task_categories").select("main_category, sub_category").execute()
@@ -32,7 +32,6 @@ def fetch_dynamic_categories():
     except: return ["데이터 로드 오류"]
 
 def get_historical_lph(task_name):
-    """선택된 카테고리의 과거 실적 평균 LPH 계산"""
     try:
         res = supabase.table("work_logs").select("quantity, duration").eq("task", task_name).execute()
         if not res.data: return None
@@ -43,89 +42,47 @@ def get_historical_lph(task_name):
 # --- [UI: 입력 항목] ---
 with st.container(border=True):
     st.subheader("📝 작업 계획 입력")
-    
-    # 1. 동적 카테고리 드롭다운 연동 [cite: 2026-03-05]
     categories = fetch_dynamic_categories()
     selected_task = st.selectbox("작업 구분", options=categories)
-    
-    # 2. 작업 건수 입력
     work_qty = st.number_input("작업 건수 (EA)", min_value=0, value=1000, step=100)
-    
-    st.write("")
-    # 3. 예측 버튼
     predict_clicked = st.button("🚀 예측하기", use_container_width=True, type="primary")
 
-# --- [예측 결과 도출 및 계획 생성] ---
+# --- [UI: 예측 결과 및 계획 수립] ---
 if predict_clicked:
-    # (연산 로직 유지)
-    needed_mh = work_qty / final_lph if final_lph > 0 else 0
-    total_est_cost = needed_mh * hourly_wage
-    est_workers = int(needed_mh / 8 + 0.99) # 8시간 기준 가이드
-    
     if work_qty <= 0:
         st.error("예측할 작업 건수를 입력해 주세요.")
     else:
         with st.spinner("과거 실적 기반 공수 분석 중..."):
-            # 기준 지표 로드 (서버 고정값 반영) [cite: 2026-03-05]
+            # 💡 NameError 해결: 변수 정의 보강 [cite: 2026-03-05]
             hist_lph = get_historical_lph(selected_task)
             base_lph = float(get_config("target_lph", 150))
             hourly_wage = int(get_config("hourly_wage", 10000))
             
-            # 실적 데이터가 있으면 실적 우선, 없으면 목표치 사용
             final_lph = hist_lph if hist_lph else base_lph
             is_historical = hist_lph is not None
             
-            # 📐 MH(Man-Hour) 기반 연산 로직 [cite: 2026-03-05]
             needed_mh = work_qty / final_lph if final_lph > 0 else 0
             total_est_cost = needed_mh * hourly_wage
+            planned_workers = int(needed_mh / 8 + 0.99) # 8시간 기준 가이드 인원
             
             st.divider()
             st.subheader("💡 예측 결과 리포트")
-            
-            res_col1, res_col2, res_col3 = st.columns(3)
-            
-            with res_col1:
-                st.metric("적용 LPH (생산성)", f"{final_lph:.2f}")
-                st.caption("실적 기반 평균" if is_historical else "시스템 목표 지표")
-                
-            with res_col2:
-                # 필요 공수(MH) 지표 노출 [cite: 2026-03-05]
-                st.metric("필요 총 공수 (MH)", f"{needed_mh:.1f} MH")
-                st.caption(f"총 {work_qty:,}건 처리를 위한 누적 시간")
-                
-            with res_col3:
-                st.metric("예상 투입 비용", f"{total_est_cost:,.0f} 원")
-                st.caption(f"시급 {hourly_wage:,}원 기준")
-            
-            # 👥 시간별 필요 인원 가이드 (보수적 올림 처리) [cite: 2026-03-05]
+            c1, c2, c3 = st.columns(3)
+            c1.metric("적용 LPH", f"{final_lph:.2f}")
+            c2.metric("필요 총 공수 (MH)", f"{needed_mh:.1f} MH")
+            c3.metric("예상 투입 비용", f"{total_est_cost:,.0f} 원")
+
             st.write("")
-            with st.expander("👥 마감 시간별 필요 인원 제안", expanded=True):
-                g_col1, g_col2, g_col3 = st.columns(3)
-                g_col1.metric("4시간 내 완료 시", f"{int(needed_mh/4 + 0.99)} 명")
-                g_col2.metric("8시간 내 완료 시", f"{int(needed_mh/8 + 0.99)} 명")
-                g_col3.metric("12시간 내 완료 시", f"{int(needed_mh/12 + 0.99)} 명")
-            
-            if not is_historical:
-                st.info(f"ℹ️ '{selected_task}'의 실적 데이터가 부족하여 설정된 목표치({base_lph} LPH)를 기준으로 계산되었습니다.")
-
-            # 시각화 차트
-            st.write("---")
-            st.subheader("📊 작업 부하 시각화")
-            chart_df = pd.DataFrame({
-                "항목": ["목표 물량", "1인 8시간 처리량"],
-                "건수": [work_qty, final_lph * 8]
-            })
-            st.bar_chart(chart_df, x="항목", y="건수", color="#31333F")
-            st.divider()
-
-    # 💡 [신규] 생산 계획 수립 버튼
-    if st.button("📅 위 결과로 생산 계획 수립", use_container_width=True, type="primary"):
-        supabase.table("production_plans").insert({
-            "task_type": selected_task,
-            "target_quantity": work_qty,
-            "planned_workers": est_workers,
-            "status": "pending"
-        }).execute()
-        st.success(f"'{selected_task}' 계획이 현장 기록 페이지로 전달되었습니다.")
-        time.sleep(1); st.rerun()
-            
+            # 💡 [핵심] 생산 계획 수립 버튼 추가 [cite: 2026-03-05]
+            if st.button("📅 위 결과로 생산 계획 수립하기", use_container_width=True, type="primary"):
+                try:
+                    supabase.table("production_plans").insert({
+                        "task_type": selected_task,
+                        "target_quantity": work_qty,
+                        "planned_workers": planned_workers,
+                        "status": "pending"
+                    }).execute()
+                    st.success(f"'{selected_task}' 계획이 수립되었습니다. 현장 기록 페이지에서 확인하세요!")
+                    time.sleep(1); st.rerun()
+                except Exception as e:
+                    st.error(f"계획 저장 실패: {e}")
