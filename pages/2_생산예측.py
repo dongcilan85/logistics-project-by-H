@@ -11,7 +11,7 @@ supabase: Client = create_client(url, key)
 KST = timezone(timedelta(hours=9))
 
 st.set_page_config(page_title="생산 예측", layout="wide")
-st.title("🔮 생산 예측 (AI TFT)")
+st.title("🔮 생산 계획")
 
 # 💡 [데이터 로드 유틸리티]
 def get_config(key, default):
@@ -86,3 +86,4 @@ if predict_clicked:
                     time.sleep(1); st.rerun()
                 except Exception as e:
                     st.error(f"계획 저장 실패: {e}")
+
