@@ -54,40 +54,32 @@ selected_place = st.segmented_control(
 # ---------------------------------------------------------
 st.write("---")
 try:
-    # 1. 대기 중인 계획(pending)만 실시간으로 읽어옴
+    # 대기(pending) 상태인 계획만 정확히 가져옴
     plan_res = supabase.table("production_plans").select("*").eq("status", "pending").execute()
     
     if plan_res.data:
-        st.write("📅 **현재 가동 가능한 생산 계획**")
-        # 계획 버튼을 2열로 배치하여 가독성 향상
-        p_cols = st.columns(2)
-        for idx, plan in enumerate(plan_res.data):
-            # 버튼 텍스트: 생산계획_카테고리명_목표건수_인원(n) [cite: 2026-03-05]
-            btn_label = f"🚀 [계획] {plan['task_type']} | {plan['target_quantity']:,}건 | 권장:{plan['planned_workers']}명"
-            
-            with p_cols[idx % 2]:
-                if st.button(btn_label, key=f"plan_run_{plan['id']}", use_container_width=True, type="primary"):
-                    now = datetime.now(KST)
-                    # A. active_tasks에 계획 ID와 함께 삽입
-                    supabase.table("active_tasks").insert({
-                        "session_name": f"{selected_place}_P{plan['id']}", 
-                        "task_type": plan['task_type'],
-                        "workers": plan['planned_workers'], 
-                        "quantity": plan['target_quantity'], 
-                        "last_started_at": now.isoformat(),
-                        "status": "running", 
-                        "accumulated_seconds": 0,
-                        "plan_id": plan['id'] # 💡 계획 연결 고리
-                    }).execute()
-                    # B. 해당 계획의 상태를 'active'로 변경하여 중복 노출 방지 [cite: 2026-03-05]
-                    supabase.table("production_plans").update({"status": "active"}).eq("id", plan['id']).execute()
-                    st.success(f"'{plan['task_type']}' 계획 기반 기록이 시작되었습니다.")
-                    time.sleep(1); st.rerun()
+        st.write("📅 **가동 대기 중인 생산 계획**")
+        for plan in plan_res.data:
+            btn_label = f"🚀 [실행] {plan['task_type']} ({plan['target_quantity']:,}건 / {plan['planned_workers']}명)"
+            if st.button(btn_label, key=f"p_btn_{plan['id']}", use_container_width=True, type="primary"):
+                now = datetime.now(KST)
+                # 1. 작업 시작 기록 (plan_id 포함)
+                supabase.table("active_tasks").insert({
+                    "session_name": f"{selected_place}_P{plan['id']}", 
+                    "task_type": plan['task_type'],
+                    "workers": plan['planned_workers'], 
+                    "quantity": plan['target_quantity'], 
+                    "last_started_at": now.isoformat(),
+                    "status": "running", "accumulated_seconds": 0,
+                    "plan_id": plan['id'] 
+                }).execute()
+                # 2. 계획 상태를 'active'로 변경하여 목록에서 제거 [cite: 2026-03-05]
+                supabase.table("production_plans").update({"status": "active"}).eq("id", plan['id']).execute()
+                st.success("계획 기록이 시작되었습니다."); time.sleep(0.5); st.rerun()
     else:
-        st.info("현재 대기 중인 생산 계획이 없습니다. '생산 예측'에서 계획을 먼저 수립해 주세요.")
+        st.info("현재 대기 중인 생산 계획이 없습니다.")
 except Exception as e:
-    st.error(f"계획 로드 중 오류 발생: {e}")
-
+    st.error(f"계획 조회 오류: {e}")
 st.write("---")
 
 # 3️⃣ 수동 작업 구분 및 시작 (기존 로직 유지) [cite: 2026-03-05]
