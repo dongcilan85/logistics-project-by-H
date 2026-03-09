@@ -148,8 +148,8 @@ def show_admin_dashboard():
             st.write("---")
             g1, g2 = st.columns(2)
             with g1:
-                st.plotly_chart(px.bar(df.groupby('task')['quantity'].sum().reset_index(), x='task', y='quantity', title="📊 작업 부하 현황", color='task'), use_container_width=True)
                 st.plotly_chart(px.line(df.groupby('display_date')['LPH'].mean().reset_index(), x='display_date', y='LPH', markers=True, title="📈 생산성 추이"), use_container_width=True)
+                st.plotly_chart(px.bar(df.groupby('task')['quantity'].sum().reset_index(), x='task', y='quantity', title="📊 작업 부하 현황", color='task'), use_container_width=True)
             with g2:
                 st.plotly_chart(px.bar(df.groupby('task')['total_cost'].sum().reset_index(), x='task', y='total_cost', title="💰 인건비 투입 현황", color='task'), use_container_width=True)
                 st.plotly_chart(px.pie(df.groupby('task')['LPH'].mean().reset_index(), values='LPH', names='task', hole=0.4, title="🍕 생산 비중"), use_container_width=True)
@@ -214,4 +214,5 @@ else:
     else:
         pg = st.navigation({"현장": [site_page]})
     pg.run()
+
 
