@@ -133,58 +133,63 @@ st.divider()
 @st.fragment(run_every=1)
 def render_active_tasks(place):
     st.subheader(f"📊 {place} 실시간 현황")
-    try:
-        res = supabase.table("active_tasks").select("*").ilike("session_name", f"{place}_%").execute()
-        tasks = res.data
-        if not tasks:
-            st.info(f"{place} 구역에 진행 중인 작업이 없습니다.")
-            return
+    res = supabase.table("active_tasks").select("*").ilike("session_name", f"{place}_%").execute()
+    tasks = res.data
+    if not tasks:
+        st.info("진행 중인 작업이 없습니다."); return
 
-        cols = st.columns(4)
-        for idx, task in enumerate(tasks):
-            with cols[idx % 4]:
-                with st.container(border=True):
-                    st.markdown(f"#### 🆔 {task['session_name']}")
-                    st.write(f"**{task['task_type']}**")
-                    
-                    # 💡 [신규] 중간 실적 입력 필드 배치 [cite: 2026-03-05]
-                    # 정지 버튼을 누르기 전 여기에 수량을 적으면 저장됩니다.
-                    comp_q = st.number_input("현재까지 완료 수량", min_value=0, 
-                                             value=int(task.get('completed_quantity', 0)), 
-                                             key=f"comp_{task['id']}")
-                    st.write(f"🎯 목표: {task['quantity']:,}개 (남은 물량: {max(0, task['quantity'] - comp_q):,}개)")
-                    
-                    # 시간 표시 로직 (유지)
-                    if task['status'] == "running":
-                        total_sec = task['accumulated_seconds'] + (datetime.now(KST) - datetime.fromisoformat(task['last_started_at'])).total_seconds()
-                        h, m, s = int(total_sec // 3600), int((total_sec % 3600) // 60), int(total_sec % 60)
-                        st.subheader(f"⏱️ {h:02d}:{m:02d}:{s:02d}")
-                    else:
-                        h, m, s = int(task['accumulated_seconds'] // 3600), int((task['accumulated_seconds'] % 3600) // 60), int(task['accumulated_seconds'] % 60)
-                        st.subheader(f"⏸️ {h:02d}:{m:02d}:{s:02d}")
-
-                    # 인원 수정 및 정지/종료 로직 보강 [cite: 2026-03-05]
+    cols = st.columns(4)
+    for idx, task in enumerate(tasks):
+        with cols[idx % 4]:
+            with st.container(border=True):
+                st.markdown(f"#### 🆔 {task['session_name']}")
+                st.write(f"**{task['task_type']}**")
+                
+                # --- 💡 [핵심 로직] 상태에 따른 입력창 전환 --- [cite: 2026-03-10]
+                if task['status'] == "running":
+                    # 1. 진행 중일 때는 '인원 수정' 표시
                     curr_w = int(task['workers'])
-                    # (인원 수정 코드 생략)
-
-                    c1, c2 = st.columns(2)
-                    if task['status'] == "running":
-                        if c1.button("⏸️ 정지 (실적저장)", key=f"p_{task['id']}", use_container_width=True):
+                    new_w = st.number_input("👥 투입 인원 변경", min_value=1, value=curr_w, key=f"w_{task['id']}")
+                    if new_w != curr_w:
+                        if st.button("인원 변경 확정", key=f"up_w_{task['id']}", use_container_width=True):
                             now = datetime.now(KST)
-                            dur = (now - datetime.fromisoformat(task['last_started_at'])).total_seconds()
                             new_segs = split_man_seconds_by_date(datetime.fromisoformat(task['last_started_at']), now, curr_w)
-                            # 정지 시 입력한 완료 수량(comp_q)을 함께 저장 [cite: 2026-03-05]
+                            updated_history = update_history_map(task.get('work_history', []), new_segs)
                             supabase.table("active_tasks").update({
-                                "status": "paused", 
-                                "completed_quantity": comp_q,
-                                "accumulated_seconds": task['accumulated_seconds'] + dur,
-                                "work_history": update_history_map(task.get('work_history', []), new_segs)
+                                "workers": new_w, "work_history": updated_history,
+                                "accumulated_seconds": task['accumulated_seconds'] + (now - datetime.fromisoformat(task['last_started_at'])).total_seconds(),
+                                "last_started_at": now.isoformat()
                             }).eq("id", task['id']).execute()
                             st.rerun()
-                    else:
-                        if c1.button("▶️ 재개", key=f"r_{task['id']}", use_container_width=True, type="primary"):
-                            supabase.table("active_tasks").update({"status": "running", "last_started_at": datetime.now(KST).isoformat()}).eq("id", task['id']).execute()
-                            st.rerun()
+                else:
+                    # 2. 일시정지 중일 때는 '완료 작업량' 입력으로 변경
+                    done_q = st.number_input("📦 현재까지 완료 수량", min_value=0, value=int(task.get('completed_quantity', 0)), key=f"q_{task['id']}")
+                    if st.button("완료 수량 저장", key=f"up_q_{task['id']}", use_container_width=True):
+                        supabase.table("active_tasks").update({"completed_quantity": done_q}).eq("id", task['id']).execute()
+                        st.success("수량이 저장되었습니다."); st.rerun()
+
+                # --- 타이머 및 제어 버튼 ---
+                total_sec = task['accumulated_seconds']
+                if task['status'] == "running":
+                    total_sec += (datetime.now(KST) - datetime.fromisoformat(task['last_started_at'])).total_seconds()
+                
+                h, m, s = int(total_sec // 3600), int((total_sec % 3600) // 60), int(total_sec % 60)
+                st.subheader(f"{'⏱️' if task['status'] == 'running' else '⏸️'} {h:02d}:{m:02d}:{s:02d}")
+
+                c1, c2 = st.columns(2)
+                if task['status'] == "running":
+                    if c1.button("⏸️ 정지", key=f"p_{task['id']}", use_container_width=True):
+                        now = datetime.now(KST)
+                        new_segs = split_man_seconds_by_date(datetime.fromisoformat(task['last_started_at']), now, int(task['workers']))
+                        supabase.table("active_tasks").update({
+                            "status": "paused", "accumulated_seconds": total_sec,
+                            "work_history": update_history_map(task.get('work_history', []), new_segs)
+                        }).eq("id", task['id']).execute()
+                        st.rerun()
+                else:
+                    if c1.button("▶️ 재개", key=f"r_{task['id']}", use_container_width=True, type="primary"):
+                        supabase.table("active_tasks").update({"status": "running", "last_started_at": datetime.now(KST).isoformat()}).eq("id", task['id']).execute()
+                        st.rerun()
 
                     if c2.button("🏁 종료", key=f"e_{task['id']}", type="primary", use_container_width=True):
                         # 종료 시에도 입력된 comp_q를 최종 실적으로 기록 [cite: 2026-03-05]
@@ -208,5 +213,6 @@ def render_active_tasks(place):
     except Exception as e: st.error(f"데이터 로드 오류: {e}")
 
 render_active_tasks(selected_place)
+
 
 
