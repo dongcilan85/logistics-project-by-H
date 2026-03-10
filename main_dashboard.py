@@ -77,22 +77,37 @@ def show_admin_dashboard():
         if active_res.data:
             cols = st.columns(4)
             for i, row in enumerate(active_res.data):
-                display_name = row['session_name'].replace("_", " - ")
+                # 💡 [신규] 요청하신 포맷으로 가공 (A동_1 -> A동) [cite: 2026-03-05]
+                location = row['session_name'].split('_')[0]
+                task_type = row['task_type']
+                
+                # Day 계산 (오늘 - 생성일 + 1) [cite: 2026-03-05]
+                created_at = pd.to_datetime(row['created_at']).astimezone(KST)
+                day_count = (datetime.now(KST).date() - created_at.date()).days + 1
+                
+                target_qty = row['quantity']
+                done_qty = row.get('completed_quantity', 0)
+                
                 with cols[i % 4]:
                     with st.container(border=True):
-                        st.markdown(f"📍 **{display_name}**")
-                        st.write(f"작업: **{row['task_type']}**")
+                        st.markdown(f"📍 **{location} {task_type}**")
+                        st.write(f"📊 {day_count} Day {target_qty:,}개 중 {done_qty:,}개 완료")
+                        
+                        # 실시간 진행 시간 계산
+                        total_sec = row['accumulated_seconds']
+                        if row['status'] == 'running' and row['last_started_at']:
+                            total_sec += (datetime.now(KST) - datetime.fromisoformat(row['last_started_at'])).total_seconds()
+                        h, m, s = int(total_sec // 3600), int((total_sec % 3600) // 60), int(total_sec % 60)
+                        st.subheader(f"⏱️ {h:02d}:{m:02d}:{s:02d}")
+                        
                         if st.button(f"🏁 원격 종료", key=f"stop_{row['id']}", use_container_width=True):
+                            # 종료 시점의 중간 실적을 최종 실적으로 로그에 기록 [cite: 2026-03-05]
                             now = datetime.now(KST)
-                            dur = row['accumulated_seconds']
-                            if row['status'] == 'running' and row['last_started_at']:
-                                dur += (now - datetime.fromisoformat(row['last_started_at'])).total_seconds()
-                            
+                            dur = round(total_sec / 3600, 2)
                             supabase.table("work_logs").insert({
-                                "work_date": now.strftime("%Y-%m-%d"), "task": row['task_type'],
-                                "workers": row['workers'], "quantity": row['quantity'],
-                                "duration": round(dur / 3600, 2), "memo": "관리자 원격 종료",
-                                "plan_id": row.get('plan_id') # 계획 연동 유지 [cite: 2026-03-05]
+                                "work_date": now.strftime("%Y-%m-%d"), "task": task_type,
+                                "workers": row['workers'], "quantity": done_qty, # 입력된 완료 수량 기록
+                                "duration": dur, "memo": "관리자 원격 종료", "plan_id": row.get('plan_id')
                             }).execute()
                             supabase.table("active_tasks").delete().eq("id", row['id']).execute()
                             st.rerun()
@@ -214,5 +229,6 @@ else:
     else:
         pg = st.navigation({"현장": [site_page]})
     pg.run()
+
 
 
