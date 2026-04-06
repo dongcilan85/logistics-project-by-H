@@ -3,10 +3,10 @@ import streamlit as st
 def apply_premium_style():
     st.markdown("""
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Orbit&family=Inter:wght@300;400;600&display=swap');
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
 
         html, body, [data-testid="stAppViewContainer"] {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', sans-serif;
             background-color: #0E1117;
             color: #E0E0E0;
         }
@@ -35,7 +35,7 @@ def apply_premium_style():
 
         /* Gradient Header */
         .main-header {
-            font-family: 'Orbit', sans-serif;
+            font-family: 'Pretendard', sans-serif;
             background: linear-gradient(90deg, #00FFAA 0%, #00AAFF 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
