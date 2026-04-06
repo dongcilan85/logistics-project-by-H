@@ -34,8 +34,20 @@ def fetch_dynamic_categories():
         return sorted(list(set(options)))
     except: return ["데이터 로드 오류"]
 
+def get_historical_lph(task_type):
+    """과거 작업 기록에서 해당 카테고리의 평균 LPH 산출"""
+    try:
+        res = supabase.table("work_logs").select("quantity, duration").eq("task", task_type).execute()
+        if res.data:
+            df = pd.DataFrame(res.data)
+            total_qty = df['quantity'].sum()
+            total_dur = df['duration'].sum()
+            return total_qty / total_dur if total_dur > 0 else None
+        return None
+    except: return None
+
 # --- [PART 1: 지능형 생산 예측 및 계획 수립] --- [cite: 2026-03-05]
-with st.expander("🔮 새로운 생산 계획 수립 (예측 시뮬레이터)", expanded=True):
+with st.expander("🔮 생산 계획 수립 (실데이터 기반 예측)", expanded=True):
     st.subheader("📝 작업 계획 입력")
     c1, c2, c3 = st.columns([2, 1, 1])
     with c1:
@@ -45,23 +57,28 @@ with st.expander("🔮 새로운 생산 계획 수립 (예측 시뮬레이터)",
     with c3:
         num_workers = st.number_input("투입 인원 (명)", min_value=1, value=6, step=1)
     
-    # 지표 자동 계산 (실시간 반영을 위해 버튼 밖으로 배치 가능하지만 UX를 위해 버튼 클릭 시 세션 저장)
-    base_lph = float(get_config("target_lph", 150))
+    # 지표 자동 계산
+    base_target_lph = float(get_config("target_lph", 150))
+    hist_lph = get_historical_lph(sel_task)
+    # 실제 데이터가 있으면 우선 사용, 없으면 목표치 사용
+    lph_to_use = hist_lph if hist_lph else base_target_lph
     hourly_wage = int(get_config("hourly_wage", 10000))
 
     if st.button("🚀 예측 시뮬레이션 실행", use_container_width=True, type="primary"):
-        total_mh = work_qty / base_lph if base_lph > 0 else 0
-        elapsed_time = total_mh / num_workers if num_workers > 0 else 0
-        total_cost = total_mh * hourly_wage
+        total_time_1p = work_qty / lph_to_use if lph_to_use > 0 else 0
+        elapsed_time = total_time_1p / num_workers if num_workers > 0 else 0
+        total_cost = total_time_1p * hourly_wage
         
         st.session_state.prediction_done = True
         st.session_state.pred_data = {
             "task": sel_task,
             "qty": work_qty,
-            "total_mh": total_mh,
+            "total_time_1p": total_time_1p,
             "elapsed_time": elapsed_time,
             "total_cost": total_cost,
-            "workers": num_workers
+            "workers": num_workers,
+            "lph_source": "과거 실적 평균" if hist_lph else "시스템 목표치",
+            "lph_val": lph_to_use
         }
 
     # 예측 결과 표시
@@ -69,14 +86,15 @@ with st.expander("🔮 새로운 생산 계획 수립 (예측 시뮬레이터)",
         data = st.session_state.pred_data
         st.divider()
         st.markdown(f"### 📊 '{data['task']}' 작업 예측 결과")
+        st.info(f"💡 이 예측은 **{data['lph_source']}(LPH {data['lph_val']:.1f})**을 기준으로 계산되었습니다.")
         
         res_c1, res_c2, res_c3 = st.columns(3)
         with res_c1:
-            st.metric("총 필요 공수 (Total MH)", f"{data['total_mh']:.1f} MH", help="1인이 작업 시 필요한 시간")
+            st.metric("1인 작업 시 총 작업 시간", f"{data['total_time_1p']:.1f} 시간", help="한 명이 처음부터 끝까지 수행할 때 필요한 총 시간")
         with res_c2:
-            st.metric(f"예상 소요 시간 ({data['workers']}명 투입)", f"{data['elapsed_time']:.1f} 시간", delta=f"{data['workers']}명 투입 시")
+            st.metric(f"{data['workers']}명 작업 시 소요 시간", f"{data['elapsed_time']:.1f} 시간", delta=f"{data['workers']}명 투입")
         with res_c3:
-            st.metric("총 예상 인건비", f"{data['total_cost']:,.0f} 원", help=f"총 {data['total_mh']:.1f}시간분에 대한 전체 인건비")
+            st.metric("총 예상 인건비", f"{data['total_cost']:,.0f} 원", help="모든 작업자에게 지급될 전체 인건비")
         
         if st.button(f"📅 계획 확정 및 현장 전송", use_container_width=True):
             try:
