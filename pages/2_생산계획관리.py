@@ -3,6 +3,7 @@ import pandas as pd
 from supabase import create_client, Client
 from datetime import datetime, timezone, timedelta
 import time
+import json
 from utils.style import apply_premium_style
 
 # 1. 시스템 설정
@@ -46,6 +47,16 @@ def get_historical_lph(task_type):
         return None
     except: return None
 
+def get_category_target_lph(task_type):
+    """카테고리별 마스터에서 설정한 개별 목표 LPH 로드"""
+    try:
+        res = supabase.table("system_config").select("value").eq("key", "category_lph_map").execute()
+        if res.data:
+            lph_map = json.loads(res.data[0]['value'])
+            return lph_map.get(task_type)
+        return None
+    except: return None
+
 # --- [PART 1: 지능형 생산 예측 및 계획 수립] --- [cite: 2026-03-05]
 with st.expander("🔮 생산 계획 수립 (실데이터 기반 예측)", expanded=True):
     st.subheader("📝 작업 계획 입력")
@@ -57,11 +68,21 @@ with st.expander("🔮 생산 계획 수립 (실데이터 기반 예측)", expan
     with c3:
         num_workers = st.number_input("투입 인원 (명)", min_value=1, value=6, step=1)
     
-    # 지표 자동 계산
-    base_target_lph = float(get_config("target_lph", 150))
+    # 지표 자동 계산 (우선순위: 실적 > 카테고리별 목표 > 시스템 공통 목표)
     hist_lph = get_historical_lph(sel_task)
-    # 실제 데이터가 있으면 우선 사용, 없으면 목표치 사용
-    lph_to_use = hist_lph if hist_lph else base_target_lph
+    cat_target_lph = get_category_target_lph(sel_task)
+    global_target_lph = float(get_config("target_lph", 150))
+    
+    if hist_lph:
+        lph_to_use = hist_lph
+        lph_source = "📋 최근 작업 실적 평균"
+    elif cat_target_lph:
+        lph_to_use = cat_target_lph
+        lph_source = "🎯 카테고리별 개별 목표치"
+    else:
+        lph_to_use = global_target_lph
+        lph_source = "⚙️ 시스템 전체 기본 목표치"
+        
     hourly_wage = int(get_config("hourly_wage", 10000))
 
     if st.button("🚀 예측 시뮬레이션 실행", use_container_width=True, type="primary"):
@@ -77,7 +98,7 @@ with st.expander("🔮 생산 계획 수립 (실데이터 기반 예측)", expan
             "elapsed_time": elapsed_time,
             "total_cost": total_cost,
             "workers": num_workers,
-            "lph_source": "과거 실적 평균" if hist_lph else "시스템 목표치",
+            "lph_source": lph_source,
             "lph_val": lph_to_use
         }
 
