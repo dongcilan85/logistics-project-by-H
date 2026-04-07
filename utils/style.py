@@ -26,13 +26,13 @@ def apply_premium_style():
         }
         [data-testid="stMetric"]:hover {
             transform: translateY(-5px);
-            border-color: #00FFAA;
+            border-color: #00AAFF;
         }
 
         /* Header Styling */
         .main-header {
             font-family: 'Pretendard', sans-serif;
-            background: linear-gradient(90deg, #00FFAA 0%, #00AAFF 100%);
+            background: linear-gradient(90deg, #00AAFF 0%, #0055FF 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             font-size: 2.5rem;
@@ -74,7 +74,7 @@ def apply_premium_style():
             opacity: 0.7;
         }
         .stTabs [aria-selected="true"] {
-            color: #00FFAA !important;
+            color: #00AAFF !important;
             opacity: 1;
             font-weight: 600 !important;
         }
@@ -82,4 +82,4 @@ def apply_premium_style():
         """, unsafe_allow_html=True)
 
 def get_chart_colors():
-    return ['#00FFAA', '#00AAFF', '#5555FF', '#AA00FF', '#FF00AA']
+    return ['#00AAFF', '#5555FF', '#0055FF', '#AA00FF', '#FF00AA']
