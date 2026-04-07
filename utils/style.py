@@ -82,4 +82,5 @@ def apply_premium_style():
         """, unsafe_allow_html=True)
 
 def get_chart_colors():
-    return ['#00AAFF', '#5555FF', '#0055FF', '#AA00FF', '#FF00AA']
+    # 시인성이 좋은 레인보우 팔레트 (빨, 주, 노, 초, 파, 남, 보 계열)
+    return ['#FF4B4B', '#FFAA00', '#FFEF00', '#00DF55', '#00AAFF', '#5555FF', '#AA00FF']
