@@ -190,6 +190,14 @@ def show_admin_dashboard():
                 fig4 = px.pie(df.groupby('작업내용')['LPH'].mean().reset_index(), values='LPH', names='작업내용', hole=0.4, title="🍕 생산 비중", color_discrete_sequence=color_seq, template="plotly_dark")
                 st.plotly_chart(fig4, use_container_width=True)
 
+            # 💡 [편집 준비] 화면 표시용 리네임 및 정렬 (ID 매칭을 위해 버튼 이전에 정의)
+            df_display = df.rename(columns={
+                'id': '순번', 'workers': '투입인원', 'quantity': '작업량', 
+                'duration': '작업시간 (단위 : H)', 'memo': '작업현장',
+                'LPH': '시간당 1인 작업량', 'total_cost': '총 인건비', 'display_date': '기록날짜'
+            }).sort_values('종료시간', ascending=False)
+            cols_order = ['순번', '시작시간', '종료시간', '작업내용', '투입인원', '작업량', '작업시간 (단위 : H)', '작업현장', '시간당 1인 작업량', '총 인건비', 'CPU', '기록날짜']
+
             # 💡 [편집 모드 토글]
             if "edit_mode" not in st.session_state: st.session_state.edit_mode = False
             
@@ -204,11 +212,10 @@ def show_admin_dashboard():
                             editor_state = st.session_state.data_editor
                             # 편집된 행 처리
                             if editor_state.get("edited_rows"):
-                                # 원본 표시용 DF 준비 (ID 매칭용)
-                                df_map = df.rename(columns={'id': '순번'})
                                 for row_idx, changed_values in editor_state["edited_rows"].items():
                                     try:
-                                        row_id = int(df_map.iloc[row_idx]['순번'])
+                                        # 💡 [수정] 정렬된 df_display의 row_idx에서 정확한 '순번'(ID) 추출
+                                        row_id = int(df_display.iloc[row_idx]['순번'])
                                         db_updates = {}
                                         if '작업량' in changed_values: db_updates['quantity'] = changed_values['작업량']
                                         if '투입인원' in changed_values: db_updates['workers'] = changed_values['투입인원']
@@ -223,10 +230,9 @@ def show_admin_dashboard():
                             
                             # 삭제된 행 처리
                             if editor_state.get("deleted_rows"):
-                                df_map = df.rename(columns={'id': '순번'})
                                 for row_idx in editor_state["deleted_rows"]:
                                     try:
-                                        row_id = int(df_map.iloc[row_idx]['순번'])
+                                        row_id = int(df_display.iloc[row_idx]['순번'])
                                         supabase.table("work_logs").delete().eq("id", row_id).execute()
                                     except Exception as e: st.error(f"삭제 오류: {e}")
                                 st.warning("데이터가 삭제되었습니다."); time.sleep(0.5)
@@ -234,14 +240,6 @@ def show_admin_dashboard():
                     st.session_state.edit_mode = not st.session_state.edit_mode
                     st.rerun()
 
-            # 화면 표시용 리네임 및 컬럼 순서 조정
-            df_display = df.rename(columns={
-                'id': '순번', 'workers': '투입인원', 'quantity': '작업량', 
-                'duration': '작업시간 (단위 : H)', 'memo': '작업현장',
-                'LPH': '시간당 1인 작업량', 'total_cost': '총 인건비', 'display_date': '기록날짜'
-            }).sort_values('종료시간', ascending=False)
-            cols_order = ['순번', '시작시간', '종료시간', '작업내용', '투입인원', '작업량', '작업시간 (단위 : H)', '작업현장', '시간당 1인 작업량', '총 인건비', 'CPU', '기록날짜']
-            
             if st.session_state.edit_mode:
                 st.info("💡 테이블 내용을 수정한 후 우측 상단의 💾 아이콘을 눌러 저장하세요.")
                 st.data_editor(
