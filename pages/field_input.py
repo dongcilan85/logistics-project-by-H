@@ -162,7 +162,7 @@ def render_active_tasks(place):
 
                     # 💡 인원 수정 로직 (함수 복구로 정상 작동) [cite: 2026-03-05]
                     curr_w = int(task['workers'])
-                    new_w = st.number_input("인원 수정", min_value=1, value=curr_w, key=f"w_{task['id']}")
+                    new_w = st.number_input("인원 수정", min_value=1, value=max(1, curr_w), key=f"w_{task['id']}")
                     if new_w != curr_w:
                         if st.button("👥 변경 확정", key=f"up_{task['id']}", use_container_width=True):
                             now = datetime.now(KST)
@@ -194,7 +194,7 @@ def render_active_tasks(place):
                         # 💡 [데이터 보정] 일시정지 상태에서 노출
                         with st.expander("🛠️ 데이터 보정 (시간/수량)", expanded=True):
                             # 1. 목표 수량 수정 (컬럼명: quantity)
-                            c_target = st.number_input("목표 수량 수정 (개)", min_value=1, value=int(task['quantity']), key=f"target_{task['id']}")
+                            c_target = st.number_input("목표 수량 수정 (개)", min_value=1, value=max(1, int(task['quantity'])), key=f"target_{task['id']}")
                             # 2. 완료 수량 업데이트 (컬럼명: completed_quantity)
                             c_prog = st.number_input("현재까지 완료 수량 (개)", min_value=0, value=task.get('completed_quantity', 0), key=f"prog_{task['id']}")
                             # 3. 누적 시간 수정 (증감 방식 적용)
