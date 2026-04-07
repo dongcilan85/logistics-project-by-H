@@ -106,6 +106,15 @@ def show_admin_dashboard():
     st.divider()
 
     # [C] 통합 분석 리포트 및 3시트 엑셀 추출
+    # --- [유틸리티] ---
+    def fmt(v):
+        if v is None or pd.isna(v): return "0"
+        try:
+            r = round(float(v), 2)
+            if r == int(r): return f"{int(r):,}"
+            return f"{r:,.2f}".rstrip('0').rstrip('.')
+        except: return str(v)
+
     try:
         res = supabase.table("work_logs").select("*").execute()
         df = pd.DataFrame(res.data)
@@ -173,10 +182,10 @@ def show_admin_dashboard():
             with d_col2: st.download_button(label="📥 리포트 다운로드", data=output.getvalue(), file_name=f"IWP_Report_{datetime.now().strftime('%Y%m%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
             k1, k2, k3, k4 = st.columns(4)
-            with k1: st.metric("누적 총 건수", f"{df['quantity'].sum():,} 건")
-            with k2: st.metric("누적 총 비용", f"{df['total_cost'].sum():,.0f} 원")
-            with k3: st.metric("평균 생산성(LPH)", f"{df['LPH'].mean():.2f}")
-            with k4: st.metric("평균 단가(CPU)", f"{df['CPU'].mean():.2f} 원")
+            with k1: st.metric("누적 총 건수", f"{int(df['quantity'].sum()):,} 건")
+            with k2: st.metric("누적 총 비용", f"{int(df['total_cost'].sum()):,} 원")
+            with k3: st.metric("평균 생산성(LPH)", f"{fmt(df['LPH'].mean())}")
+            with k4: st.metric("평균 단가(CPU)", f"{fmt(df['CPU'].mean())} 원")
 
             # 차트 색상 팔레트
             color_seq = get_chart_colors()
@@ -197,12 +206,18 @@ def show_admin_dashboard():
                 fig4 = px.pie(df.groupby('작업내용')['LPH'].mean().reset_index(), values='LPH', names='작업내용', hole=0.4, title="🍕 생산 비중", color_discrete_sequence=color_seq, template="plotly_dark")
                 st.plotly_chart(fig4, use_container_width=True)
 
-            # 💡 [편집 준비] 화면 표시용 리네임 및 정렬 (ID 매칭을 위해 버튼 이전에 정의)
+            # 💡 [편집 준비] 화면 표시용 리네임 및 정렬 (소수점 포맷 적용)
             df_display = df.rename(columns={
                 'id': '순번', 'workers': '투입인원', 'quantity': '작업량', 
                 'duration': '작업시간 (단위 : H)', 'memo': '작업현장',
                 'LPH': '시간당 1인 작업량', 'total_cost': '총 인건비', 'display_date': '기록날짜'
             }).sort_values('종료시간', ascending=False)
+            
+            # 수치 데이터 포맷팅 적용 (문자열 변환)
+            display_cols_to_fmt = ['작업시간 (단위 : H)', '시간당 1인 작업량', '총 인건비', 'CPU']
+            for col in display_cols_to_fmt:
+                df_display[col] = df_display[col].apply(fmt)
+
             cols_order = ['순번', '시작시간', '종료시간', '작업내용', '투입인원', '작업량', '작업시간 (단위 : H)', '작업현장', '시간당 1인 작업량', '총 인건비', 'CPU', '기록날짜']
 
             # 💡 [편집 모드 토글]
@@ -286,11 +301,15 @@ def show_admin_dashboard():
                     st.plotly_chart(fig_va, use_container_width=True)
                     
                     st.subheader("📑 계획 이행 분석 리포트")
-                    # 리네임 및 표시 순서 조정
+                    # 리네임 및 표시 순서 조정 (포맷팅 적용)
                     a_df_display = a_df.rename(columns={
                         'work_date': '작업날짜', 'task': '작업내용', 'quantity': '실제작업량', 
                         'workers': '실제인원', 'duration': '총인시(H)'
                     })
+                    a_df_display['물량달성률'] = a_df_display['물량달성률'].apply(fmt)
+                    a_df_display['인원 투입률'] = a_df_display['인원 투입률'].apply(fmt)
+                    a_df_display['총인시(H)'] = a_df_display['총인시(H)'].apply(fmt)
+                    
                     disp_cols = ['작업날짜', '작업내용', '목표물량', '실제작업량', '물량달성률', '계획인원', '실제인원', '인원 투입률', '총인시(H)']
                     st.dataframe(a_df_display[disp_cols].sort_values('작업날짜', ascending=False), use_container_width=True, hide_index=True)
                 else:
