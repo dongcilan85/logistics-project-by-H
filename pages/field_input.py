@@ -216,7 +216,7 @@ def render_active_tasks(place):
                                 "work_date": entry['date'], "task": task['task_type'],
                                 "workers": task['workers'], "quantity": round(task['quantity'] * weight),
                                 "duration": round(entry['man_seconds'] / 3600, 2), "plan_id": task.get('plan_id'),
-                                "memo": f"현장: {place} / {task['session_name']}"
+                                "memo": place  # 💡 불필요한 정보 제외, 현장명만 기록
                             }).execute()
                         supabase.table("active_tasks").delete().eq("id", task['id']).execute()
                         st.balloons(); st.rerun()

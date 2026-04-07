@@ -111,6 +111,13 @@ def show_admin_dashboard():
         df = pd.DataFrame(res.data)
         
         if not df.empty:
+            # 💡 시간 데이터 고도화 (시작/종료 시간 역산 및 KST 변환)
+            df['created_at_dt'] = pd.to_datetime(df['created_at']).dt.tz_convert('Asia/Seoul')
+            df['종료시간'] = df['created_at_dt'].dt.strftime('%Y-%m-%d / %H:%M:%S')
+            # 시작시간 = 종료시간 - (duration / 인원) -> duration은 인시(Man-Hours)이므로
+            df['시작시간_dt'] = df['created_at_dt'] - pd.to_timedelta(df['duration'] / df['workers'].replace(0, 1), unit='h')
+            df['시작시간'] = df['시작시간_dt'].dt.strftime('%Y-%m-%d / %H:%M:%S')
+
             df['work_date'] = pd.to_datetime(df['work_date'])
             df['LPH'] = (df['quantity'] / df['duration']).replace([float('inf')], 0).round(2)
             df['total_cost'] = (df['duration'] * hourly_wage).round(0)
@@ -120,14 +127,21 @@ def show_admin_dashboard():
             elif view_option == "주간": df['display_date'] = df['work_date'].dt.strftime('%Y-%U주')
             else: df['display_date'] = df['work_date'].dt.strftime('%Y-%m월')
 
+            # 💡 메모 정제 및 작업내용 명칭 변환 (사용자 요청 형식: 대분류_소분류)
+            df['memo'] = df['memo'].apply(lambda x: x.split('현장: ')[1].split(' /')[0] if '현장: ' in str(x) else x)
+            df['작업내용'] = df['task'].apply(lambda x: str(x).replace(' (', '_').replace(')', '') if '(' in str(x) else x)
+
             # --- 💡 진짜 그래프가 포함된 3시트 엑셀 생성 ---
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 workbook = writer.book
-                sheet1 = df.groupby(['display_date', 'task']).agg({'quantity':'sum', 'duration':'sum', 'total_cost':'sum', 'LPH':'mean'}).reset_index().rename(columns={'display_date': view_option})
+                # 시트 1: 요약 분석
+                sheet1 = df.groupby(['display_date', '작업내용']).agg({'quantity':'sum', 'duration':'sum', 'total_cost':'sum', 'LPH':'mean'}).reset_index()
+                sheet1.columns = [view_option, '작업내용', '총작업량', '총작업시간(H)', '총인건비', '평균LPH']
                 sheet1.to_excel(writer, sheet_name='분석 상세 데이터', index=False)
-                l_st = df.groupby('task')['quantity'].sum().reset_index()
-                c_st = df.groupby('task')['total_cost'].sum().reset_index()
+                
+                l_st = df.groupby('작업내용')['quantity'].sum().reset_index()
+                c_st = df.groupby('작업내용')['total_cost'].sum().reset_index()
                 t_st = df.groupby('display_date')['LPH'].mean().reset_index()
                 l_st.to_excel(writer, sheet_name='그래프 데이터', startrow=1, index=False)
                 c_st.to_excel(writer, sheet_name='그래프 데이터', startrow=12, index=False)
@@ -136,7 +150,15 @@ def show_admin_dashboard():
                 c1 = workbook.add_chart({'type': 'column'}); c1.set_title({'name': '📊 작업 부하'}); c1.add_series({'categories':['그래프 데이터',2,0,len(l_st)+1,0],'values':['그래프 데이터',2,1,len(l_st)+1,1]}); ws.insert_chart('D2', c1)
                 c2 = workbook.add_chart({'type': 'column'}); c2.set_title({'name': '💰 투입 비용'}); c2.add_series({'categories':['그래프 데이터',13,0,13+len(c_st)-1,0],'values':['그래프 데이터',13,1,13+len(c_st)-1,1]}); ws.insert_chart('D13', c2)
                 c3 = workbook.add_chart({'type': 'line'}); c3.set_title({'name': '📈 생산성 추이'}); c3.add_series({'categories':['그래프 데이터',24,0,24+len(t_st)-1,0],'values':['그래프 데이터',24,1,24+len(t_st)-1,1]}); ws.insert_chart('D24', c3)
-                df.sort_values('work_date', ascending=False).to_excel(writer, sheet_name='기록 리포트', index=False)
+                
+                # 시트 3: 상세 기록 데이터 (리네임 적용)
+                df_excel = df.rename(columns={
+                    'id': '순번', 'workers': '투입인원', 'quantity': '작업량', 
+                    'duration': '작업시간 (단위 : H)', 'memo': '작업현장',
+                    'LPH': '시간당 1인 작업량', 'total_cost': '총 인건비', 'display_date': '기록날짜'
+                })
+                cols_order = ['순번', '시작시간', '종료시간', '작업내용', '투입인원', '작업량', '작업시간 (단위 : H)', '작업현장', '시간당 1인 작업량', '총 인건비', 'CPU', '기록날짜']
+                df_excel[cols_order].sort_values('종료시간', ascending=False).to_excel(writer, sheet_name='기록 리포트', index=False)
 
             st.markdown("### 📈 실적 분석 리포트")
             d_col1, d_col2 = st.columns([3, 1])
@@ -155,21 +177,28 @@ def show_admin_dashboard():
             st.write("---")
             g1, g2 = st.columns(2)
             with g1:
-                fig1 = px.bar(df.groupby('task')['quantity'].sum().reset_index(), x='task', y='quantity', title="📊 작업 부하 현황", color='task', color_discrete_sequence=color_seq, template="plotly_dark")
+                fig1 = px.bar(df.groupby('작업내용')['quantity'].sum().reset_index(), x='작업내용', y='quantity', title="📊 작업 부하 현황", color='작업내용', color_discrete_sequence=color_seq, template="plotly_dark")
                 st.plotly_chart(fig1, use_container_width=True)
                 
                 fig2 = px.line(df.groupby('display_date')['LPH'].mean().reset_index(), x='display_date', y='LPH', markers=True, title="📈 생산성 추이", template="plotly_dark")
-                fig2.update_traces(line_color='#00FFAA')
+                fig2.update_traces(line_color='#00AAFF')
                 st.plotly_chart(fig2, use_container_width=True)
             with g2:
-                fig3 = px.bar(df.groupby('task')['total_cost'].sum().reset_index(), x='task', y='total_cost', title="💰 인건비 투입 현황", color='task', color_discrete_sequence=color_seq, template="plotly_dark")
+                fig3 = px.bar(df.groupby('작업내용')['total_cost'].sum().reset_index(), x='작업내용', y='total_cost', title="💰 인건비 투입 현황", color='작업내용', color_discrete_sequence=color_seq, template="plotly_dark")
                 st.plotly_chart(fig3, use_container_width=True)
                 
-                fig4 = px.pie(df.groupby('task')['LPH'].mean().reset_index(), values='LPH', names='task', hole=0.4, title="🍕 생산 비중", color_discrete_sequence=color_seq, template="plotly_dark")
+                fig4 = px.pie(df.groupby('작업내용')['LPH'].mean().reset_index(), values='LPH', names='작업내용', hole=0.4, title="🍕 생산 비중", color_discrete_sequence=color_seq, template="plotly_dark")
                 st.plotly_chart(fig4, use_container_width=True)
 
             st.subheader("📋 전체 상세 데이터")
-            st.dataframe(df.sort_values('work_date', ascending=False), use_container_width=True)
+            # 화면 표시용 리네임 및 컬럼 순서 조정
+            df_display = df.rename(columns={
+                'id': '순번', 'workers': '투입인원', 'quantity': '작업량', 
+                'duration': '작업시간 (단위 : H)', 'memo': '작업현장',
+                'LPH': '시간당 1인 작업량', 'total_cost': '총 인건비', 'display_date': '기록날짜'
+            })
+            cols_order = ['순번', '시작시간', '종료시간', '작업내용', '투입인원', '작업량', '작업시간 (단위 : H)', '작업현장', '시간당 1인 작업량', '총 인건비', 'CPU', '기록날짜']
+            st.dataframe(df_display[cols_order].sort_values('종료시간', ascending=False), use_container_width=True, hide_index=True)
 
             # 💡 [보충] 계획 대비 실적 분석 섹션 (에러 수정됨) [cite: 2026-03-05]
             st.divider()
@@ -182,12 +211,20 @@ def show_admin_dashboard():
                     a_df['목표물량'] = a_df['production_plans'].apply(lambda x: x['target_quantity'] if x else 0)
                     a_df['계획인원'] = a_df['production_plans'].apply(lambda x: x['planned_workers'] if x else 0)
                     a_df['물량달성률'] = (a_df['quantity'] / a_df['목표물량'] * 100).round(1)
+                    a_df['인원 투입률'] = (a_df['workers'] / a_df['계획인원'].replace(0, 1) * 100).round(1)
                     
-                    fig_va = px.bar(a_df, x='task', y=['목표물량', 'quantity'], barmode='group', title="계획 물량 vs 실제 처리 물량")
+                    fig_va = px.bar(a_df, x='task', y=['목표물량', 'quantity'], barmode='group', title="🎯 계획 물량 vs 실제 처리 물량", template="plotly_dark")
+                    fig_va.update_layout(xaxis_title="작업내용", yaxis_title="수량")
                     st.plotly_chart(fig_va, use_container_width=True)
                     
                     st.subheader("📑 계획 이행 분석 리포트")
-                    st.dataframe(a_df[['work_date', 'task', '목표물량', 'quantity', '물량달성률', '계획인원', 'workers', 'duration']], use_container_width=True)
+                    # 리네임 및 표시 순서 조정
+                    a_df_display = a_df.rename(columns={
+                        'work_date': '작업날짜', 'task': '작업내용', 'quantity': '실제작업량', 
+                        'workers': '실제인원', 'duration': '총인시(H)'
+                    })
+                    disp_cols = ['작업날짜', '작업내용', '목표물량', '실제작업량', '물량달성률', '계획인원', '실제인원', '인원 투입률', '총인시(H)']
+                    st.dataframe(a_df_display[disp_cols].sort_values('작업날짜', ascending=False), use_container_width=True, hide_index=True)
                 else:
                     st.info("아직 완료된 생산 계획 실적이 없습니다.")
             except Exception as plan_err:
