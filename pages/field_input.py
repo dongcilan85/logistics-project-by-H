@@ -197,16 +197,22 @@ def render_active_tasks(place):
                             c_target = st.number_input("목표 수량 수정 (개)", min_value=1, value=int(task['quantity']), key=f"target_{task['id']}")
                             # 2. 완료 수량 업데이트 (컬럼명: completed_quantity)
                             c_prog = st.number_input("현재까지 완료 수량 (개)", min_value=0, value=task.get('completed_quantity', 0), key=f"prog_{task['id']}")
-                            # 3. 누적 시간 수정 (분 단위)
-                            curr_mins = int(task['accumulated_seconds'] // 60)
-                            c_mins = st.number_input("누적 작업 시간 수정 (분)", min_value=0, value=curr_mins, key=f"mins_{task['id']}")
+                            # 3. 누적 시간 수정 (증감 방식 적용)
+                            st.write(f"⏱️ 현재 누적 시간: {int(task['accumulated_seconds'] // 3600)}시간 {int((task['accumulated_seconds'] % 3600) // 60)}분")
+                            adj_mode = st.radio("시간 보정 방식", ["변동 없음", "추가 (+)", "차감 (-)"], horizontal=True, key=f"mode_{task['id']}")
+                            adj_mins = st.number_input("보정할 분 (분 단위)", min_value=0, value=0, key=f"adj_{task['id']}")
                             
                             if st.button("✅ 보정 내용 반영", key=f"up_all_{task['id']}", use_container_width=True):
                                 try:
+                                    # 증감 계산
+                                    new_acc_sec = task['accumulated_seconds']
+                                    if adj_mode == "추가 (+)": new_acc_sec += adj_mins * 60
+                                    elif adj_mode == "차감 (-)": new_acc_sec = max(0, new_acc_sec - adj_mins * 60)
+
                                     supabase.table("active_tasks").update({
                                         "quantity": c_target,
                                         "completed_quantity": c_prog,
-                                        "accumulated_seconds": c_mins * 60
+                                        "accumulated_seconds": new_acc_sec
                                     }).eq("id", task['id']).execute()
                                     st.success("보정 내용이 반영되었습니다."); time.sleep(0.5); st.rerun()
                                 except Exception as e:
