@@ -214,9 +214,9 @@ if st.session_state.role is None:
 else:
     # 💡 메뉴 통합: 생산 예측과 계획 관리를 하나로 합침
     admin_main = st.Page(show_admin_dashboard, title="통합 대시보드", icon="📊")
-    plan_mgmt_page = st.Page("pages/2_생산계획관리.py", title="생산 계획 관리", icon="📅") # 통합된 페이지
-    cat_page = st.Page("pages/3_카테고리관리.py", title="카테고리 관리", icon="📁")
-    site_page = st.Page("pages/1_현장입력.py", title="현장 기록", icon="📝")
+    plan_mgmt_page = st.Page("pages/planning_mgmt.py", title="생산 계획 관리", icon="📅") 
+    cat_page = st.Page("pages/category_mgmt.py", title="카테고리 관리", icon="📁")
+    site_page = st.Page("pages/field_input.py", title="현장 기록", icon="📝")
     
     st.sidebar.divider()
     sc1, sc2 = st.sidebar.columns(2)

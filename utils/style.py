@@ -7,33 +7,29 @@ def apply_premium_style():
 
         html, body, [data-testid="stAppViewContainer"] {
             font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', sans-serif;
-            background-color: #0E1117;
-            color: #E0E0E0;
         }
 
         /* Glassmorphism Sidebar */
         [data-testid="stSidebar"] {
-            background: rgba(23, 28, 35, 0.7) !important;
-            backdrop-filter: blur(10px);
-            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            background-color: var(--background-color) !important;
+            border-right: 1px solid rgba(128, 128, 128, 0.2);
         }
 
         /* Premium Metric Styling */
         [data-testid="stMetric"] {
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background-color: var(--secondary-background-color) !important;
+            border: 1px solid rgba(128, 128, 128, 0.2);
             padding: 20px;
             border-radius: 15px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
             transition: transform 0.3s ease;
         }
         [data-testid="stMetric"]:hover {
             transform: translateY(-5px);
-            background: rgba(255, 255, 255, 0.05);
             border-color: #00FFAA;
         }
 
-        /* Gradient Header */
+        /* Header Styling */
         .main-header {
             font-family: 'Pretendard', sans-serif;
             background: linear-gradient(90deg, #00FFAA 0%, #00AAFF 100%);
@@ -49,20 +45,20 @@ def apply_premium_style():
             border-radius: 10px;
             border: none;
             background: linear-gradient(90deg, #00AAFF 0%, #0055FF 100%);
-            color: white;
+            color: white !important;
             font-weight: 600;
             transition: all 0.3s ease;
         }
         .stButton>button:hover {
             box-shadow: 0 0 15px rgba(0, 170, 255, 0.5);
-            transform: scale(1.02);
+            transform: scale(1.01);
         }
 
         /* Divider */
         hr {
             border: 0;
             height: 1px;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            background: linear-gradient(90deg, transparent, rgba(128,128,128,0.2), transparent);
             margin: 2rem 0;
         }
 
@@ -74,12 +70,12 @@ def apply_premium_style():
             height: 50px;
             white-space: pre-wrap;
             background-color: transparent;
-            border-radius: 4px 4px 0px 0px;
-            color: #888;
-            font-weight: 400;
+            color: var(--text-color);
+            opacity: 0.7;
         }
         .stTabs [aria-selected="true"] {
             color: #00FFAA !important;
+            opacity: 1;
             font-weight: 600 !important;
         }
         </style>
