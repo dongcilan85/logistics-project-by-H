@@ -193,15 +193,18 @@ def render_active_tasks(place):
                     else:
                         # 💡 [데이터 보정] 일시정지 상태에서 노출
                         with st.expander("🛠️ 데이터 보정 (시간/수량)", expanded=True):
-                            # 1. 수량 업데이트 (컬럼명: completed_quantity)
+                            # 1. 목표 수량 수정 (컬럼명: quantity)
+                            c_target = st.number_input("목표 수량 수정 (개)", min_value=1, value=int(task['quantity']), key=f"target_{task['id']}")
+                            # 2. 완료 수량 업데이트 (컬럼명: completed_quantity)
                             c_prog = st.number_input("현재까지 완료 수량 (개)", min_value=0, value=task.get('completed_quantity', 0), key=f"prog_{task['id']}")
-                            # 2. 누적 시간 수정 (분 단위)
+                            # 3. 누적 시간 수정 (분 단위)
                             curr_mins = int(task['accumulated_seconds'] // 60)
                             c_mins = st.number_input("누적 작업 시간 수정 (분)", min_value=0, value=curr_mins, key=f"mins_{task['id']}")
                             
                             if st.button("✅ 보정 내용 반영", key=f"up_all_{task['id']}", use_container_width=True):
                                 try:
                                     supabase.table("active_tasks").update({
+                                        "quantity": c_target,
                                         "completed_quantity": c_prog,
                                         "accumulated_seconds": c_mins * 60
                                     }).eq("id", task['id']).execute()
