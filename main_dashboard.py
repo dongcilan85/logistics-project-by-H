@@ -140,6 +140,13 @@ def show_admin_dashboard():
                 sheet1.columns = [view_option, '작업내용', '총작업량', '총작업시간(H)', '총인건비', '평균LPH']
                 sheet1.to_excel(writer, sheet_name='분석 상세 데이터', index=False)
                 
+                # 💡 [NEW] 카테고리별 요약 데이터 (요청 사항)
+                df_cat_summary = df.groupby('작업내용').agg({
+                    'quantity': 'sum', 'LPH': 'mean', 'total_cost': 'sum', 'CPU': 'mean'
+                }).reset_index()
+                df_cat_summary.columns = ['카테고리', '작업 총수량', '평균 생산성(LPH)', '누적 인건비', '평균 단가(CPU)']
+                df_cat_summary.to_excel(writer, sheet_name='카테고리별 요약', index=False)
+                
                 l_st = df.groupby('작업내용')['quantity'].sum().reset_index()
                 c_st = df.groupby('작업내용')['total_cost'].sum().reset_index()
                 t_st = df.groupby('display_date')['LPH'].mean().reset_index()
