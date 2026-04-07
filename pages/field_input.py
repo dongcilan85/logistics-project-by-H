@@ -148,7 +148,7 @@ def render_active_tasks(place):
                     st.write(f"**{task['task_type']}**")
                     
                     # 💡 수량 표시 개선 (목표와 중간 진행 상황 분리)
-                    prog = task.get('progress', 0)
+                    prog = task.get('completed_quantity', 0)
                     st.write(f"📦 **목표: {task['quantity']:,}** | 📑 진행: {prog:,}")
                     st.write(f"👥 인원: {task['workers']}명")
                     
@@ -193,18 +193,22 @@ def render_active_tasks(place):
                     else:
                         # 💡 [데이터 보정] 일시정지 상태에서 노출
                         with st.expander("🛠️ 데이터 보정 (시간/수량)", expanded=True):
-                            # 1. 수량 업데이트
-                            c_prog = st.number_input("현재까지 완료 수량 (개)", min_value=0, value=task.get('progress', 0), key=f"prog_{task['id']}")
+                            # 1. 수량 업데이트 (컬럼명: completed_quantity)
+                            c_prog = st.number_input("현재까지 완료 수량 (개)", min_value=0, value=task.get('completed_quantity', 0), key=f"prog_{task['id']}")
                             # 2. 누적 시간 수정 (분 단위)
                             curr_mins = int(task['accumulated_seconds'] // 60)
                             c_mins = st.number_input("누적 작업 시간 수정 (분)", min_value=0, value=curr_mins, key=f"mins_{task['id']}")
                             
                             if st.button("✅ 보정 내용 반영", key=f"up_all_{task['id']}", use_container_width=True):
-                                supabase.table("active_tasks").update({
-                                    "progress": c_prog,
-                                    "accumulated_seconds": c_mins * 60
-                                }).eq("id", task['id']).execute()
-                                st.success("보정 내용이 반영되었습니다."); time.sleep(0.5); st.rerun()
+                                try:
+                                    supabase.table("active_tasks").update({
+                                        "completed_quantity": c_prog,
+                                        "accumulated_seconds": c_mins * 60
+                                    }).eq("id", task['id']).execute()
+                                    st.success("보정 내용이 반영되었습니다."); time.sleep(0.5); st.rerun()
+                                except Exception as e:
+                                    st.error(f"보정 중 오류가 발생했습니다: {e}")
+                                    st.stop()
 
                         if c1.button("▶️ 재개", key=f"r_{task['id']}", use_container_width=True, type="primary"):
                             supabase.table("active_tasks").update({"status": "running", "last_started_at": datetime.now(KST).isoformat()}).eq("id", task['id']).execute()
