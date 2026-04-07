@@ -146,7 +146,11 @@ def render_active_tasks(place):
                 with st.container(border=True):
                     st.markdown(f"#### 🆔 {task['session_name']}")
                     st.write(f"**{task['task_type']}**")
-                    st.write(f"📦 건수: {task['quantity']:,} | 👥 {task['workers']}명")
+                    
+                    # 💡 수량 표시 개선 (목표와 중간 진행 상황 분리)
+                    prog = task.get('progress', 0)
+                    st.write(f"📦 **목표: {task['quantity']:,}** | 📑 진행: {prog:,}")
+                    st.write(f"👥 인원: {task['workers']}명")
                     
                     if task['status'] == "running":
                         total_sec = task['accumulated_seconds'] + (datetime.now(KST) - datetime.fromisoformat(task['last_started_at'])).total_seconds()
@@ -187,6 +191,14 @@ def render_active_tasks(place):
                             }).eq("id", task['id']).execute()
                             st.rerun()
                     else:
+                        # 💡 [진행 상황 입력] 일시정지 상태에서만 노출
+                        with st.expander("📊 중간 진행 상황 입력", expanded=True):
+                            # progress 컬럼이 없다면 0으로 시작
+                            current_prog = st.number_input("현재까지 완료 수량 (개)", min_value=0, value=task.get('progress', 0), key=f"prog_{task['id']}")
+                            if st.button("📝 수량 업데이트", key=f"up_prog_{task['id']}", use_container_width=True):
+                                supabase.table("active_tasks").update({"progress": current_prog}).eq("id", task['id']).execute()
+                                st.success("진행 상황이 반영되었습니다."); time.sleep(0.5); st.rerun()
+
                         if c1.button("▶️ 재개", key=f"r_{task['id']}", use_container_width=True, type="primary"):
                             supabase.table("active_tasks").update({"status": "running", "last_started_at": datetime.now(KST).isoformat()}).eq("id", task['id']).execute()
                             st.rerun()
