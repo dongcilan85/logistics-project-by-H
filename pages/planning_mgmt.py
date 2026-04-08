@@ -108,8 +108,8 @@ with st.expander("🔮 생산 계획 수립 (실데이터 기반 예측)", expan
     if st.session_state.prediction_done:
         data = st.session_state.pred_data
         st.divider()
-        st.markdown(f"### 📊 '{data['task']}' 작업 예측 결과 (v1.1 업데이트됨)")
-        st.info(f"💡 이 예측은 **{data['lph_source']}(LPH {data['lph_val']:.1f})**을 기준으로 계산되었습니다. 결과가 보이지 않으면 시뮬레이션 버튼을 다시 눌러주세요.")
+        st.markdown(f"### 📊 '{data['task']}' 작업 예측 결과")
+        st.info(f"💡 이 예측은 **{data['lph_source']}(LPH {data['lph_val']:.1f})**을 기준으로 계산되었습니다.")
         
         res_c1, res_c2, res_c3, res_c4 = st.columns(4)
         with res_c1:
