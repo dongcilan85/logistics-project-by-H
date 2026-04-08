@@ -54,6 +54,25 @@ def change_password_dialog():
                 supabase.table("system_config").update({"value": new_pw}).eq("key", "admin_password").execute()
                 st.success("변경 완료!"); time.sleep(1); st.rerun()
 
+@st.dialog("🏁 작업 종료 확인")
+def confirm_dashboard_finish_dialog(row, total_sec):
+    st.write("⚠️ **작업이 종료되어 기록이 업로드 됩니다.**")
+    st.write("종료하시겠습니까?")
+    st.divider()
+    c1, c2 = st.columns(2)
+    if c1.button("✅ 예 (종료)", use_container_width=True, type="primary"):
+        now = datetime.now(KST)
+        supabase.table("work_logs").insert({
+            "work_date": now.strftime("%Y-%m-%d"), "task": row['task_type'],
+            "workers": row['workers'], "quantity": row['quantity'],
+            "duration": round(total_sec / 3600, 2), "memo": "관리자 원격 종료",
+            "plan_id": row.get('plan_id')
+        }).execute()
+        supabase.table("active_tasks").delete().eq("id", row['id']).execute()
+        st.rerun()
+    if c2.button("❌ 아니오 (취소)", use_container_width=True):
+        st.rerun()
+
 # --- [메인 대시보드 함수] ---
 def show_admin_dashboard():
     st.markdown('<p class="main-header">🏰 IWP 통합 통제실</p>', unsafe_allow_html=True)
@@ -100,16 +119,7 @@ def show_admin_dashboard():
                             
                             btn_c1, btn_c2 = st.columns(2)
                             if btn_c1.button(f"🏁 종료", key=f"stop_{row['id']}", use_container_width=True, type="primary"):
-                                now = datetime.now(KST)
-                                dur = total_sec
-                                supabase.table("work_logs").insert({
-                                    "work_date": now.strftime("%Y-%m-%d"), "task": row['task_type'],
-                                    "workers": row['workers'], "quantity": row['quantity'],
-                                    "duration": round(dur / 3600, 2), "memo": "관리자 원격 종료",
-                                    "plan_id": row.get('plan_id')
-                                }).execute()
-                                supabase.table("active_tasks").delete().eq("id", row['id']).execute()
-                                st.rerun()
+                                confirm_dashboard_finish_dialog(row, total_sec)
                             
                             if btn_c2.button(f"🚫 취소", key=f"cancel_{row['id']}", use_container_width=True):
                                 # 💡 취소 로직: 로그는 남기되 실적(quantity)은 0으로 저장
