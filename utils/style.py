@@ -21,6 +21,12 @@ def apply_premium_style():
         [data-testid="stSidebar"] * {
             color: #ffffff !important;
         }
+        /* Reset Input Text Color inside Sidebar */
+        [data-testid="stSidebar"] input, 
+        [data-testid="stSidebar"] textarea, 
+        [data-testid="stSidebar"] [data-baseweb="select"] * {
+            color: #000000 !important;
+        }
 
         /* Premium Metric Styling */
         [data-testid="stMetric"] {
