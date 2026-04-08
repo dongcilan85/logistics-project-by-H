@@ -89,6 +89,7 @@ with st.expander("🔮 생산 계획 수립 (실데이터 기반 예측)", expan
         total_time_1p = work_qty / lph_to_use if lph_to_use > 0 else 0
         elapsed_time = total_time_1p / num_workers if num_workers > 0 else 0
         total_cost = total_time_1p * hourly_wage
+        cpu = hourly_wage / lph_to_use if lph_to_use > 0 else 0
         
         st.session_state.prediction_done = True
         st.session_state.pred_data = {
@@ -97,6 +98,7 @@ with st.expander("🔮 생산 계획 수립 (실데이터 기반 예측)", expan
             "total_time_1p": total_time_1p,
             "elapsed_time": elapsed_time,
             "total_cost": total_cost,
+            "cpu": cpu,
             "workers": num_workers,
             "lph_source": lph_source,
             "lph_val": lph_to_use
@@ -106,16 +108,19 @@ with st.expander("🔮 생산 계획 수립 (실데이터 기반 예측)", expan
     if st.session_state.prediction_done:
         data = st.session_state.pred_data
         st.divider()
-        st.markdown(f"### 📊 '{data['task']}' 작업 예측 결과")
-        st.info(f"💡 이 예측은 **{data['lph_source']}(LPH {data['lph_val']:.1f})**을 기준으로 계산되었습니다.")
+        st.markdown(f"### 📊 '{data['task']}' 작업 예측 결과 (v1.1 업데이트됨)")
+        st.info(f"💡 이 예측은 **{data['lph_source']}(LPH {data['lph_val']:.1f})**을 기준으로 계산되었습니다. 결과가 보이지 않으면 시뮬레이션 버튼을 다시 눌러주세요.")
         
-        res_c1, res_c2, res_c3 = st.columns(3)
+        res_c1, res_c2, res_c3, res_c4 = st.columns(4)
         with res_c1:
-            st.metric("1인 작업 시 총 작업 시간", f"{data['total_time_1p']:.1f} 시간", help="한 명이 처음부터 끝까지 수행할 때 필요한 총 시간")
+            st.metric("1인 작업 시 총 작업 시간", f"{data.get('total_time_1p', 0):.1f} 시간", help="한 명이 처음부터 끝까지 수행할 때 필요한 총 시간")
         with res_c2:
-            st.metric(f"{data['workers']}명 작업 시 소요 시간", f"{data['elapsed_time']:.1f} 시간", delta=f"{data['workers']}명 투입")
+            st.metric(f"{data.get('workers', 0)}명 작업 시 소요 시간", f"{data.get('elapsed_time', 0):.1f} 시간", delta=f"{data.get('workers', 0)}명 투입")
         with res_c3:
-            st.metric("총 예상 인건비", f"{data['total_cost']:,.0f} 원", help="모든 작업자에게 지급될 전체 인건비")
+            st.metric("총 예상 인건비", f"{data.get('total_cost', 0):,.0f} 원", help="모든 작업자에게 지급될 전체 인건비")
+        with res_c4:
+            cpu_val = data.get('cpu', 0)
+            st.metric("1건(EA) 당 인건비", f"{cpu_val:,.1f} 원", help="물량 1개(EA)당 발생하는 예상 인건비")
         
         if st.button(f"📅 계획 확정 및 현장 전송", use_container_width=True):
             try:
