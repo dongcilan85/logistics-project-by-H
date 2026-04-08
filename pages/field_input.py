@@ -130,6 +130,34 @@ with st.container(border=True):
 st.divider()
 
 # --- 💡 [핵심 수정] 하단 실시간 작업 카드 --- [cite: 2026-03-05]
+# --- 💡 [핵심 보완] 종료 확인 팝업 --- [cite: 2026-04-08]
+@st.dialog("🏁 작업 종료 확인")
+def confirm_finish_dialog(task, curr_w, place):
+    st.write("⚠️ **작업이 종료되어 기록이 업로드 됩니다.**")
+    st.write("종료하시겠습니까?")
+    st.divider()
+    c1, c2 = st.columns(2)
+    if c1.button("✅ 예 (종료)", use_container_width=True, type="primary"):
+        now = datetime.now(KST)
+        final_h = task.get('work_history', [])
+        if task['status'] == "running":
+            new_segs = split_man_seconds_by_date(datetime.fromisoformat(task['last_started_at']), now, curr_w)
+            final_h = update_history_map(final_h, new_segs)
+        total_man_sec = sum(item['man_seconds'] for item in final_h)
+        for entry in final_h:
+            weight = entry['man_seconds'] / total_man_sec if total_man_sec > 0 else 0
+            supabase.table("work_logs").insert({
+                "work_date": entry['date'], "task": task['task_type'],
+                "workers": task['workers'], "quantity": round(task['quantity'] * weight),
+                "duration": round(entry['man_seconds'] / 3600, 2), "plan_id": task.get('plan_id'),
+                "memo": place 
+            }).execute()
+        supabase.table("active_tasks").delete().eq("id", task['id']).execute()
+        st.balloons()
+        st.rerun()
+    if c2.button("❌ 아니오 (취소)", use_container_width=True):
+        st.rerun()
+
 @st.fragment(run_every=1)
 def render_active_tasks(place):
     st.subheader(f"📊 {place} 실시간 현황")
@@ -224,22 +252,7 @@ def render_active_tasks(place):
                             st.rerun()
 
                     if c2.button("🏁 종료", key=f"e_{task['id']}", type="primary", use_container_width=True):
-                        now = datetime.now(KST)
-                        final_h = task.get('work_history', [])
-                        if task['status'] == "running":
-                            new_segs = split_man_seconds_by_date(datetime.fromisoformat(task['last_started_at']), now, curr_w)
-                            final_h = update_history_map(final_h, new_segs)
-                        total_man_sec = sum(item['man_seconds'] for item in final_h)
-                        for entry in final_h:
-                            weight = entry['man_seconds'] / total_man_sec if total_man_sec > 0 else 0
-                            supabase.table("work_logs").insert({
-                                "work_date": entry['date'], "task": task['task_type'],
-                                "workers": task['workers'], "quantity": round(task['quantity'] * weight),
-                                "duration": round(entry['man_seconds'] / 3600, 2), "plan_id": task.get('plan_id'),
-                                "memo": place  # 💡 불필요한 정보 제외, 현장명만 기록
-                            }).execute()
-                        supabase.table("active_tasks").delete().eq("id", task['id']).execute()
-                        st.balloons(); st.rerun()
+                        confirm_finish_dialog(task, curr_w, selected_place)
     except Exception as e: st.error(f"데이터 로드 오류: {e}")
 
 render_active_tasks(selected_place)
