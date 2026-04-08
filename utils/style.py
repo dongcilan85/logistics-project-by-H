@@ -9,10 +9,13 @@ def apply_premium_style():
             font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', sans-serif;
         }
 
-        /* Glassmorphism Sidebar */
+        /* Solid Sidebar for better mobile visibility */
         [data-testid="stSidebar"] {
-            background-color: var(--background-color) !important;
+            background-color: #0e1117 !important;
             border-right: 1px solid rgba(128, 128, 128, 0.2);
+        }
+        [data-testid="stSidebar"] > div:first-child {
+            background-color: #0e1117 !important;
         }
 
         /* Premium Metric Styling */
