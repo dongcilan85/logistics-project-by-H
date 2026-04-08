@@ -76,32 +76,60 @@ def show_admin_dashboard():
 
     # [B] 실시간 모니터링 및 원격 종료
     st.header("🕵️ 실시간 현장 작업 현황")
-    try:
-        active_res = supabase.table("active_tasks").select("*").execute()
-        if active_res.data:
-            cols = st.columns(4)
-            for i, row in enumerate(active_res.data):
-                display_name = row['session_name'].replace("_", " - ")
-                with cols[i % 4]:
-                    with st.container(border=True):
-                        st.markdown(f"📍 **{display_name}**")
-                        st.write(f"작업: **{row['task_type']}**")
-                        if st.button(f"🏁 원격 종료", key=f"stop_{row['id']}", use_container_width=True):
-                            now = datetime.now(KST)
-                            dur = row['accumulated_seconds']
-                            if row['status'] == 'running' and row['last_started_at']:
-                                dur += (now - datetime.fromisoformat(row['last_started_at'])).total_seconds()
+    
+    @st.fragment(run_every=1)
+    def show_active_tasks():
+        try:
+            active_res = supabase.table("active_tasks").select("*").execute()
+            if active_res.data:
+                cols = st.columns(4)
+                for i, row in enumerate(active_res.data):
+                    display_name = row['session_name'].replace("_", " - ")
+                    with cols[i % 4]:
+                        with st.container(border=True):
+                            st.markdown(f"📍 **{display_name}**")
+                            st.write(f"작업: **{row['task_type']}**")
                             
-                            supabase.table("work_logs").insert({
-                                "work_date": now.strftime("%Y-%m-%d"), "task": row['task_type'],
-                                "workers": row['workers'], "quantity": row['quantity'],
-                                "duration": round(dur / 3600, 2), "memo": "관리자 원격 종료",
-                                "plan_id": row.get('plan_id') # 계획 연동 유지 [cite: 2026-03-05]
-                            }).execute()
-                            supabase.table("active_tasks").delete().eq("id", row['id']).execute()
-                            st.rerun()
-        else: st.info("현재 가동 중인 세션이 없습니다.")
-    except Exception as e: st.error(f"실시간 로드 실패: {e}")
+                            # 💡 실시간 진행 시간 계산 및 표시
+                            total_sec = row['accumulated_seconds']
+                            if row['status'] == 'running' and row['last_started_at']:
+                                total_sec += (datetime.now(KST) - datetime.fromisoformat(row['last_started_at'])).total_seconds()
+                            
+                            h, m, s = int(total_sec // 3600), int((total_sec % 3600) // 60), int(total_sec % 60)
+                            st.markdown(f"⏱️ **진행 시간: {h:02d}:{m:02d}:{s:02d}**")
+                            
+                            btn_c1, btn_c2 = st.columns(2)
+                            if btn_c1.button(f"🏁 종료", key=f"stop_{row['id']}", use_container_width=True, type="primary"):
+                                now = datetime.now(KST)
+                                dur = total_sec
+                                supabase.table("work_logs").insert({
+                                    "work_date": now.strftime("%Y-%m-%d"), "task": row['task_type'],
+                                    "workers": row['workers'], "quantity": row['quantity'],
+                                    "duration": round(dur / 3600, 2), "memo": "관리자 원격 종료",
+                                    "plan_id": row.get('plan_id')
+                                }).execute()
+                                supabase.table("active_tasks").delete().eq("id", row['id']).execute()
+                                st.rerun()
+                            
+                            if btn_c2.button(f"🚫 취소", key=f"cancel_{row['id']}", use_container_width=True):
+                                # 💡 취소 로직: 로그는 남기되 실적(quantity)은 0으로 저장
+                                now = datetime.now(KST)
+                                supabase.table("work_logs").insert({
+                                    "work_date": now.strftime("%Y-%m-%d"), "task": row['task_type'],
+                                    "workers": row['workers'], "quantity": 0,
+                                    "duration": round(total_sec / 3600, 2), "memo": "관리자 작업 취소",
+                                    "plan_id": None # 계획에서 분리
+                                }).execute()
+                                # 💡 계획이 있는 경우 다시 대기 상태로 복구
+                                if row.get('plan_id'):
+                                    supabase.table("production_plans").update({"status": "pending"}).eq("id", row['plan_id']).execute()
+                                
+                                supabase.table("active_tasks").delete().eq("id", row['id']).execute()
+                                st.warning("작업이 취소되었습니다."); time.sleep(0.5); st.rerun()
+            else: st.info("현재 가동 중인 세션이 없습니다.")
+        except Exception as e: st.error(f"실시간 로드 실패: {e}")
+
+    show_active_tasks()
 
     st.divider()
 
