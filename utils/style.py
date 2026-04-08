@@ -17,6 +17,10 @@ def apply_premium_style():
         [data-testid="stSidebar"] > div:first-child {
             background-color: #0e1117 !important;
         }
+        /* Sidebar Text Color */
+        [data-testid="stSidebar"] * {
+            color: #ffffff !important;
+        }
 
         /* Premium Metric Styling */
         [data-testid="stMetric"] {
