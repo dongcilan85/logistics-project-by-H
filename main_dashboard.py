@@ -254,15 +254,15 @@ def show_admin_dashboard():
             df_display = df.rename(columns={
                 'id': '순번', 'workers': '투입인원', 'quantity': '작업량', 
                 'duration': '작업시간 (단위 : H)', 'memo': '작업현장',
-                'LPH': '시간당 1인 작업량', 'total_cost': '총 인건비', 'display_date': '기록날짜'
+                'LPH': '시간당 1인 작업량', 'total_cost': '총 인건비', 'applied_wage': '평균 시급'
             }).sort_values('종료시간', ascending=False)
             
             # 수치 데이터 포맷팅 적용 (문자열 변환)
-            display_cols_to_fmt = ['작업시간 (단위 : H)', '시간당 1인 작업량', '총 인건비', 'CPU']
+            display_cols_to_fmt = ['작업시간 (단위 : H)', '시간당 1인 작업량', '총 인건비', 'CPU', '평균 시급']
             for col in display_cols_to_fmt:
                 df_display[col] = df_display[col].apply(fmt)
 
-            cols_order = ['순번', '시작시간', '종료시간', '작업내용', '투입인원', '작업량', '작업시간 (단위 : H)', '작업현장', '시간당 1인 작업량', '총 인건비', 'CPU', '기록날짜']
+            cols_order = ['순번', '시작시간', '종료시간', '작업내용', '투입인원', '작업량', '작업시간 (단위 : H)', '작업현장', '시간당 1인 작업량', '총 인건비', 'CPU', '평균 시급']
 
             # 💡 [편집 모드 토글]
             if "edit_mode" not in st.session_state: st.session_state.edit_mode = False
@@ -319,7 +319,7 @@ def show_admin_dashboard():
                         "시작시간": st.column_config.TextColumn(disabled=True),
                         "종료시간": st.column_config.TextColumn(disabled=True),
                         "CPU": st.column_config.NumberColumn(disabled=True),
-                        "기록날짜": st.column_config.TextColumn(disabled=True),
+                        "평균 시급": st.column_config.TextColumn(disabled=True),
                         "시간당 1인 작업량": st.column_config.NumberColumn(disabled=True),
                         "총 인건비": st.column_config.NumberColumn(disabled=True)
                     }
