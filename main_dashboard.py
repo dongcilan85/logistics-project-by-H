@@ -247,7 +247,8 @@ def show_admin_dashboard():
                 fig1 = px.bar(df.groupby('작업내용')['quantity'].sum().reset_index(), x='작업내용', y='quantity', title="📊 작업 부하 현황", color='작업내용', color_discrete_map=color_map, template="plotly_dark", labels={'quantity': '현장 총 작업량', '작업내용': '작업 내용'})
                 st.plotly_chart(fig1, use_container_width=True)
             with g2:
-                fig3 = px.bar(df.groupby('작업내용')['total_cost'].sum().reset_index(), x='작업내용', y='total_cost', title="💰 인건비 투입 현황", color='작업내용', color_discrete_map=color_map, template="plotly_dark", labels={'total_cost': '총 인건비 (원)', '작업내용': '작업 내용'})
+                fig3 = px.pie(df.groupby('작업내용')['total_cost'].sum().reset_index(), values='total_cost', names='작업내용', color='작업내용', hole=0.4, title="💰 인건비 투입 현황", color_discrete_map=color_map, template="plotly_dark", labels={'total_cost': '총 인건비 (원)', '작업내용': '작업 내용'})
+                fig3.update_traces(texttemplate='<b>%{label}</b><br>%{percent}<br>%{value:,.0f}원', textposition='inside')
                 st.plotly_chart(fig3, use_container_width=True)
                 
                 rank_df = df.groupby('작업내용')['LPH'].mean().reset_index().sort_values('LPH', ascending=False)
