@@ -231,8 +231,10 @@ def show_admin_dashboard():
             with k3: st.metric("평균 생산성(LPH)", f"{fmt(df['LPH'].mean())}")
             with k4: st.metric("평균 단가(CPU)", f"{fmt(df['CPU'].mean())} 원")
 
-            # 차트 색상 팔레트
+            # 차트 색상 팔레트 및 카테고리 매핑 고정
             color_seq = get_chart_colors()
+            unique_tasks = sorted(df['작업내용'].dropna().unique())
+            color_map = {task: color_seq[i % len(color_seq)] for i, task in enumerate(unique_tasks)}
             
             st.write("---")
             g1, g2 = st.columns(2)
@@ -241,13 +243,13 @@ def show_admin_dashboard():
                 fig2.update_traces(line_color='#00AAFF')
                 st.plotly_chart(fig2, use_container_width=True)
 
-                fig1 = px.bar(df.groupby('작업내용')['quantity'].sum().reset_index(), x='작업내용', y='quantity', title="📊 작업 부하 현황", color='작업내용', color_discrete_sequence=color_seq, template="plotly_dark", labels={'quantity': '현장 총 작업량', '작업내용': '작업 내용'})
+                fig1 = px.bar(df.groupby('작업내용')['quantity'].sum().reset_index(), x='작업내용', y='quantity', title="📊 작업 부하 현황", color='작업내용', color_discrete_map=color_map, template="plotly_dark", labels={'quantity': '현장 총 작업량', '작업내용': '작업 내용'})
                 st.plotly_chart(fig1, use_container_width=True)
             with g2:
-                fig3 = px.bar(df.groupby('작업내용')['total_cost'].sum().reset_index(), x='작업내용', y='total_cost', title="💰 인건비 투입 현황", color='작업내용', color_discrete_sequence=color_seq, template="plotly_dark", labels={'total_cost': '총 인건비 (원)', '작업내용': '작업 내용'})
+                fig3 = px.bar(df.groupby('작업내용')['total_cost'].sum().reset_index(), x='작업내용', y='total_cost', title="💰 인건비 투입 현황", color='작업내용', color_discrete_map=color_map, template="plotly_dark", labels={'total_cost': '총 인건비 (원)', '작업내용': '작업 내용'})
                 st.plotly_chart(fig3, use_container_width=True)
                 
-                fig4 = px.pie(df.groupby('작업내용')['LPH'].mean().reset_index(), values='LPH', names='작업내용', hole=0.4, title="🍕 생산 비중", color_discrete_sequence=color_seq, template="plotly_dark", labels={'LPH': '평균 생산성', '작업내용': '작업 내용'})
+                fig4 = px.pie(df.groupby('작업내용')['LPH'].mean().reset_index(), values='LPH', names='작업내용', color='작업내용', hole=0.4, title="🍕 생산 비중", color_discrete_map=color_map, template="plotly_dark", labels={'LPH': '평균 생산성', '작업내용': '작업 내용'})
                 st.plotly_chart(fig4, use_container_width=True)
 
             # 💡 [편집 준비] 화면 표시용 리네임 및 정렬 (소수점 포맷 적용)
