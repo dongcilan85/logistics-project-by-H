@@ -44,11 +44,23 @@ def apply_premium_style():
             color: #000000 !important;
             font-weight: 600 !important;
         }
-        /* Expander Input Border */
+        /* Expander Input Border - Square Box */
         [data-testid="stSidebar"] [data-testid="stExpander"] div[data-baseweb="input"] {
             border: 1px solid #000000 !important;
-            border-radius: 8px !important;
+            border-radius: 2px !important;
             overflow: hidden;
+        }
+        /* Number Input Step Buttons */
+        [data-testid="stSidebar"] [data-testid="stExpander"] button[data-testid="stNumberInputStepUp"],
+        [data-testid="stSidebar"] [data-testid="stExpander"] button[data-testid="stNumberInputStepDown"] {
+            background: linear-gradient(90deg, #00AAFF 0%, #0055FF 100%) !important;
+            border-radius: 2px !important;
+            border: none !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stExpander"] button[data-testid="stNumberInputStepUp"] svg,
+        [data-testid="stSidebar"] [data-testid="stExpander"] button[data-testid="stNumberInputStepDown"] svg {
+            fill: #ffffff !important;
+            color: #ffffff !important;
         }
 
         /* Premium Metric Styling */
