@@ -7,6 +7,7 @@ def apply_premium_style():
 
         html, body, [data-testid="stAppViewContainer"] {
             font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', sans-serif;
+            transition: background-color 0.4s ease, color 0.4s ease;
         }
 
         /* Solid Sidebar for better mobile visibility */
@@ -27,30 +28,35 @@ def apply_premium_style():
         [data-testid="stSidebar"] [data-baseweb="select"] * {
             color: #000000 !important;
         }
-        /* Sidebar Expander Area Background */
+        /* Sidebar Expander & Metric Box - Theme Adaptive */
         [data-testid="stSidebar"] [data-testid="stExpander"], 
         [data-testid="stSidebar"] [data-testid="stExpander"] details {
-            background-color: #ffffff !important;
+            background-color: rgba(255, 255, 255, 0.05) !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
             border-radius: 10px;
         }
-        /* Sidebar Expander Title & Internal Content */
+        /* Sidebar Titles, Labels & Markdown - Always White for Dark Sidebar */
         [data-testid="stSidebar"] [data-testid="stExpander"] summary,
-        [data-testid="stSidebar"] [data-testid="stExpander"] summary * {
-            color: #000000 !important;
-            font-weight: 900 !important;
-        }
+        [data-testid="stSidebar"] [data-testid="stExpander"] summary *,
         [data-testid="stSidebar"] [data-testid="stExpander"] label,
-        [data-testid="stSidebar"] [data-testid="stExpander"] div[data-testid="stMarkdownContainer"] p {
-            color: #000000 !important;
+        [data-testid="stSidebar"] [data-testid="stExpander"] div[data-testid="stMarkdownContainer"] p,
+        [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+        [data-testid="stSidebar"] .stRadio label {
+            color: #ffffff !important;
             font-weight: 600 !important;
         }
-        /* Expander Input Border - Bulletproof Complete Box */
+        [data-testid="stSidebar"] [data-testid="stExpander"] summary {
+            font-weight: 900 !important;
+        }
+        /* Expander Input Border - Bright Box for High Contrast */
         [data-testid="stSidebar"] [data-testid="stExpander"] div[data-testid="stNumberInput"] > div:last-child {
-            border: 1px solid #000000 !important;
+            border: 1px solid rgba(255, 255, 255, 0.5) !important;
             border-radius: 4px !important;
-            background-color: #ffffff !important;
+            background-color: rgba(0, 0, 0, 0.2) !important;
             overflow: hidden !important;
-            box-shadow: none !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stExpander"] input {
+            color: #ffffff !important;
         }
         [data-testid="stSidebar"] [data-testid="stExpander"] div[data-baseweb="base-input"],
         [data-testid="stSidebar"] [data-testid="stExpander"] div[data-baseweb="input"] {

@@ -243,9 +243,9 @@ def show_admin_dashboard():
             st.write("---")
             g1, g2 = st.columns(2)
             with g1:
-                fig2 = px.line(df.groupby('display_date')['LPH'].mean().reset_index(), x='display_date', y='LPH', markers=True, title="📈 생산성 추이", template="plotly_dark", labels={'display_date': '작업 일자', 'LPH': '평균 생산성(LPH)'})
+                fig2 = px.line(df.groupby('display_date')['LPH'].mean().reset_index(), x='display_date', y='LPH', markers=True, title="📈 생산성 추이", labels={'display_date': '작업 일자', 'LPH': '평균 생산성(LPH)'})
                 fig2.update_traces(line_color='#00AAFF')
-                st.plotly_chart(fig2, use_container_width=True)
+                st.plotly_chart(fig2, use_container_width=True, theme="streamlit")
 
                 # 최신 기간 데이터 필터링
                 unique_dates = sorted(df['display_date'].dropna().unique())
@@ -255,13 +255,13 @@ def show_admin_dashboard():
                 df_recent = df[df['display_date'] == curr_date] if curr_date else df
                 title_suffix = f" ({curr_date})" if curr_date else ""
 
-                fig1 = px.bar_polar(df_recent.groupby('작업내용')['quantity'].sum().reset_index(), r='quantity', theta='작업내용', color='작업내용', title=f"🎯 작업 부하 현황{title_suffix}", color_discrete_map=color_map, template="plotly_dark", labels={'quantity': '현장 총 작업량', '작업내용': '작업 내용'})
+                fig1 = px.bar_polar(df_recent.groupby('작업내용')['quantity'].sum().reset_index(), r='quantity', theta='작업내용', color='작업내용', title=f"🎯 작업 부하 현황{title_suffix}", color_discrete_map=color_map, labels={'quantity': '현장 총 작업량', '작업내용': '작업 내용'})
                 fig1.update_layout(polar=dict(radialaxis=dict(showticklabels=False, ticks=''), angularaxis=dict(tickfont=dict(size=13))), margin=dict(t=50, b=20, l=20, r=20))
-                st.plotly_chart(fig1, use_container_width=True)
+                st.plotly_chart(fig1, use_container_width=True, theme="streamlit")
             with g2:
-                fig3 = px.pie(df_recent.groupby('작업내용')['total_cost'].sum().reset_index(), values='total_cost', names='작업내용', color='작업내용', hole=0.4, title=f"💰 인건비 투입 현황{title_suffix}", color_discrete_map=color_map, template="plotly_dark", labels={'total_cost': '총 인건비 (원)', '작업내용': '작업 내용'})
+                fig3 = px.pie(df_recent.groupby('작업내용')['total_cost'].sum().reset_index(), values='total_cost', names='작업내용', color='작업내용', hole=0.4, title=f"💰 인건비 투입 현황{title_suffix}", color_discrete_map=color_map, labels={'total_cost': '총 인건비 (원)', '작업내용': '작업 내용'})
                 fig3.update_traces(texttemplate='<b>%{label}</b><br>%{percent}<br>%{value:,.0f}원', textposition='inside')
-                st.plotly_chart(fig3, use_container_width=True)
+                st.plotly_chart(fig3, use_container_width=True, theme="streamlit")
                 
                 if curr_date:
                     c_rank = df_recent.groupby('작업내용')['LPH'].mean().reset_index().sort_values('LPH', ascending=False)
@@ -292,8 +292,8 @@ def show_admin_dashboard():
                                fill_color='#1a1e23', align=['center', 'center', 'right'], font=dict(color='white', size=13), height=35)
                 )])
                 title_postfix = f" ({curr_date} 기준)" if curr_date else ""
-                fig4.update_layout(title=f"📊 카테고리별 생산성 순위{title_postfix}", template="plotly_dark", margin=dict(l=10, r=10, t=50, b=10))
-                st.plotly_chart(fig4, use_container_width=True)
+                fig4.update_layout(title=f"📊 카테고리별 생산성 순위{title_postfix}", margin=dict(l=10, r=10, t=50, b=10))
+                st.plotly_chart(fig4, use_container_width=True, theme="streamlit")
 
             # 💡 [편집 준비] 화면 표시용 리네임 및 정렬 (소수점 포맷 적용)
             df_display = df.rename(columns={
@@ -386,9 +386,9 @@ def show_admin_dashboard():
                     a_df['물량달성률'] = (a_df['실제처리물량'] / a_df['목표물량'] * 100).round(1)
                     a_df['인원 투입률'] = (a_df['workers'] / a_df['계획인원'].replace(0, 1) * 100).round(1)
                     
-                    fig_va = px.bar(a_df, x='task', y=['목표물량', '실제처리물량'], barmode='group', title="🎯 계획 물량 vs 실제 처리 물량", template="plotly_dark", labels={'value': '작업 건수', 'variable': '구분', 'task': '작업 내용'})
+                    fig_va = px.bar(a_df, x='task', y=['목표물량', '실제처리물량'], barmode='group', title="🎯 계획 물량 vs 실제 처리 물량", labels={'value': '작업 건수', 'variable': '구분', 'task': '작업 내용'})
                     fig_va.update_layout(xaxis_title="작업내용", yaxis_title="수량(건)", legend_title_text="범례")
-                    st.plotly_chart(fig_va, use_container_width=True)
+                    st.plotly_chart(fig_va, use_container_width=True, theme="streamlit")
                     
                     st.subheader("📑 계획 이행 분석 리포트")
                     # 리네임 및 표시 순서 조정 (포맷팅 적용)
