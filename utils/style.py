@@ -44,17 +44,19 @@ def apply_premium_style():
             color: #000000 !important;
             font-weight: 600 !important;
         }
-        /* Expander Input Border - Complete Rounded Box */
-        [data-testid="stSidebar"] [data-testid="stExpander"] div[data-baseweb="base-input"] {
+        /* Expander Input Border - Bulletproof Complete Box */
+        [data-testid="stSidebar"] [data-testid="stExpander"] div[data-testid="stNumberInput"] > div:last-child {
             border: 1px solid #000000 !important;
-            border-radius: 6px !important;
-            box-sizing: border-box !important;
+            border-radius: 4px !important;
             background-color: #ffffff !important;
-            overflow: visible !important;
+            overflow: hidden !important;
+            box-shadow: none !important;
         }
+        [data-testid="stSidebar"] [data-testid="stExpander"] div[data-baseweb="base-input"],
         [data-testid="stSidebar"] [data-testid="stExpander"] div[data-baseweb="input"] {
             border: none !important;
             background-color: transparent !important;
+            box-shadow: none !important;
         }
         /* Number Input Step Buttons */
         [data-testid="stSidebar"] [data-testid="stExpander"] button[data-testid="stNumberInputStepUp"],
