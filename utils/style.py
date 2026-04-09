@@ -26,6 +26,7 @@ def apply_premium_style():
         [data-testid="stSidebar"] textarea, 
         [data-testid="stSidebar"] [data-baseweb="select"] * {
             color: #000000 !important;
+        }
         /* Sidebar Expander Area Background */
         [data-testid="stSidebar"] [data-testid="stExpander"], 
         [data-testid="stSidebar"] [data-testid="stExpander"] details {
