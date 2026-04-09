@@ -62,10 +62,12 @@ def confirm_dashboard_finish_dialog(row, total_sec):
     c1, c2 = st.columns(2)
     if c1.button("✅ 예 (종료)", use_container_width=True, type="primary"):
         now = datetime.now(KST)
+        current_wage = int(get_config("hourly_wage", 10000))
         supabase.table("work_logs").insert({
             "work_date": now.strftime("%Y-%m-%d"), "task": row['task_type'],
             "workers": row['workers'], "quantity": row['quantity'],
             "duration": round(total_sec / 3600, 2), "memo": "관리자 원격 종료",
+            "applied_wage": current_wage,
             "plan_id": row.get('plan_id')
         }).execute()
         supabase.table("active_tasks").delete().eq("id", row['id']).execute()
@@ -124,10 +126,12 @@ def show_admin_dashboard():
                             if btn_c2.button(f"🚫 취소", key=f"cancel_{row['id']}", use_container_width=True):
                                 # 💡 취소 로직: 로그는 남기되 실적(quantity)은 0으로 저장
                                 now = datetime.now(KST)
+                                current_wage = int(get_config("hourly_wage", 10000))
                                 supabase.table("work_logs").insert({
                                     "work_date": now.strftime("%Y-%m-%d"), "task": row['task_type'],
                                     "workers": row['workers'], "quantity": 0,
                                     "duration": round(total_sec / 3600, 2), "memo": "관리자 작업 취소",
+                                    "applied_wage": current_wage,
                                     "plan_id": None # 계획에서 분리
                                 }).execute()
                                 # 💡 계획이 있는 경우 다시 대기 상태로 복구
@@ -167,7 +171,9 @@ def show_admin_dashboard():
 
             df['work_date'] = pd.to_datetime(df['work_date'])
             df['LPH'] = (df['quantity'] / df['duration']).replace([float('inf')], 0).round(2)
-            df['total_cost'] = (df['duration'] * hourly_wage).round(0)
+            # 💡 applied_wage 적용 (비어있으면 현재 hourly_wage로 보완)
+            df['applied_wage'] = df.get('applied_wage', pd.Series([None]*len(df))).fillna(hourly_wage).astype(int)
+            df['total_cost'] = (df['duration'] * df['applied_wage']).round(0)
             df['CPU'] = (df['total_cost'] / df['quantity']).replace([float('inf')], 0).round(2)
             
             if view_option == "일간": df['display_date'] = df['work_date'].dt.strftime('%Y-%m-%d')

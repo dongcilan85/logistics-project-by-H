@@ -35,6 +35,12 @@ def update_history_map(current_history, new_segments):
         h_dict[d] = h_dict.get(d, 0) + s
     return [{"date": d, "man_seconds": s} for d, s in h_dict.items()]
 
+def get_config(key, default):
+    try:
+        res = supabase.table("system_config").select("value").eq("key", key).execute()
+        return int(res.data[0]['value']) if res.data else default
+    except: return default
+
 # 💡 DB에서 실시간 카테고리 로드
 def get_dynamic_hierarchy():
     try:
@@ -139,6 +145,7 @@ def confirm_finish_dialog(task, curr_w, place):
     c1, c2 = st.columns(2)
     if c1.button("✅ 예 (종료)", use_container_width=True, type="primary"):
         now = datetime.now(KST)
+        current_wage = get_config("hourly_wage", 10000)
         final_h = task.get('work_history', [])
         if task['status'] == "running":
             new_segs = split_man_seconds_by_date(datetime.fromisoformat(task['last_started_at']), now, curr_w)
@@ -150,6 +157,7 @@ def confirm_finish_dialog(task, curr_w, place):
                 "work_date": entry['date'], "task": task['task_type'],
                 "workers": task['workers'], "quantity": round(task['quantity'] * weight),
                 "duration": round(entry['man_seconds'] / 3600, 2), "plan_id": task.get('plan_id'),
+                "applied_wage": current_wage,
                 "memo": place 
             }).execute()
         supabase.table("active_tasks").delete().eq("id", task['id']).execute()
