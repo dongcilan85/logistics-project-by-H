@@ -10,49 +10,49 @@ def apply_premium_style():
             transition: background-color 0.4s ease, color 0.4s ease;
         }
 
-        /* Solid Sidebar for better mobile visibility */
+        /* Inverted Sidebar: Dark in Light mode, White in Dark mode */
         [data-testid="stSidebar"] {
-            background-color: #0e1117 !important;
+            background-color: var(--text-color) !important;
             border-right: 1px solid rgba(128, 128, 128, 0.2);
         }
         [data-testid="stSidebar"] > div:first-child {
-            background-color: #0e1117 !important;
+            background-color: var(--text-color) !important;
         }
-        /* Sidebar Text Color */
+        /* Sidebar General Text & Elements - Inverted */
         [data-testid="stSidebar"] * {
-            color: #ffffff !important;
+            color: var(--background-color) !important;
         }
-        /* Reset Input Text Color inside Sidebar */
+        /* Reset Input Text Color inside Sidebar to follow Inverted Theme */
         [data-testid="stSidebar"] input, 
         [data-testid="stSidebar"] textarea, 
         [data-testid="stSidebar"] [data-baseweb="select"] * {
-            color: #000000 !important;
+            color: var(--text-color) !important;
         }
-        /* Sidebar Expander & Metric Box - Theme Adaptive */
+        /* Sidebar Expander & Metric Box - High Contrast Inversion */
         [data-testid="stSidebar"] [data-testid="stExpander"], 
         [data-testid="stSidebar"] [data-testid="stExpander"] details {
-            background-color: rgba(255, 255, 255, 0.05) !important;
-            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            background-color: var(--background-color) !important;
+            border: 1px solid var(--text-color) !important;
             border-radius: 10px;
         }
-        /* Sidebar Titles, Labels & Markdown - Always White for Dark Sidebar */
+        /* Sidebar Titles & Labels - Inverted Contrast */
         [data-testid="stSidebar"] [data-testid="stExpander"] summary,
         [data-testid="stSidebar"] [data-testid="stExpander"] summary *,
         [data-testid="stSidebar"] [data-testid="stExpander"] label,
         [data-testid="stSidebar"] [data-testid="stExpander"] div[data-testid="stMarkdownContainer"] p,
         [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
         [data-testid="stSidebar"] .stRadio label {
-            color: #ffffff !important;
+            color: var(--text-color) !important;
             font-weight: 600 !important;
         }
         [data-testid="stSidebar"] [data-testid="stExpander"] summary {
             font-weight: 900 !important;
         }
-        /* Expander Input Border - Bright Box for High Contrast */
+        /* Expander Input Border - Distinct Contrast */
         [data-testid="stSidebar"] [data-testid="stExpander"] div[data-testid="stNumberInput"] > div:last-child {
-            border: 1px solid rgba(255, 255, 255, 0.5) !important;
+            border: 1px solid var(--text-color) !important;
             border-radius: 4px !important;
-            background-color: rgba(0, 0, 0, 0.2) !important;
+            background-color: var(--background-color) !important;
             overflow: hidden !important;
         }
         [data-testid="stSidebar"] [data-testid="stExpander"] input {
