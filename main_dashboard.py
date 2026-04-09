@@ -255,15 +255,40 @@ def show_admin_dashboard():
                 fig3.update_traces(texttemplate='<b>%{label}</b><br>%{percent}<br>%{value:,.0f}원', textposition='inside')
                 st.plotly_chart(fig3, use_container_width=True)
                 
-                rank_df = df.groupby('작업내용')['LPH'].mean().reset_index().sort_values('LPH', ascending=False)
-                rank_df['순위'] = range(1, len(rank_df) + 1)
+                unique_dates = sorted(df['display_date'].dropna().unique())
+                curr_date = unique_dates[-1] if len(unique_dates) > 0 else None
+                prev_date = unique_dates[-2] if len(unique_dates) > 1 else None
+
+                if curr_date:
+                    c_rank = df[df['display_date'] == curr_date].groupby('작업내용')['LPH'].mean().reset_index().sort_values('LPH', ascending=False)
+                    c_rank['순위'] = range(1, len(c_rank) + 1)
+                    if prev_date:
+                        p_rank = df[df['display_date'] == prev_date].groupby('작업내용')['LPH'].mean().reset_index().sort_values('LPH', ascending=False)
+                        p_rank['과거순위'] = range(1, len(p_rank) + 1)
+                        rank_df = pd.merge(c_rank, p_rank[['작업내용', '과거순위']], on='작업내용', how='left')
+                    else:
+                        rank_df = c_rank
+                        rank_df['과거순위'] = pd.NA
+
+                    def fmt_rank(row):
+                        if pd.isna(row['과거순위']): return f"{int(row['순위'])} (🆕)"
+                        diff = int(row['과거순위']) - int(row['순위'])
+                        if diff > 0: return f"{int(row['순위'])} (🔺 {diff})"
+                        elif diff < 0: return f"{int(row['순위'])} (🔻 {abs(diff)})"
+                        else: return f"{int(row['순위'])} (-)"
+                    
+                    rank_df['표시순위'] = rank_df.apply(fmt_rank, axis=1)
+                else:
+                    rank_df = pd.DataFrame(columns=['표시순위', '작업내용', 'LPH'])
+
                 fig4 = go.Figure(data=[go.Table(
-                    header=dict(values=['<b>🏆 순위</b>', '<b>작업 내용</b>', '<b>평균 생산성(LPH)</b>'],
+                    header=dict(values=['<b>순위 (변동)</b>', '<b>작업 내용</b>', '<b>평균 생산성(LPH)</b>'],
                                 fill_color='#0055FF', align='center', font=dict(color='white', size=14)),
-                    cells=dict(values=[rank_df['순위'], rank_df['작업내용'], rank_df['LPH'].apply(lambda x: f"{x:,.2f}")],
+                    cells=dict(values=[rank_df['표시순위'], rank_df['작업내용'], rank_df['LPH'].apply(lambda x: f"{x:,.2f}" if pd.notnull(x) else "0.00")],
                                fill_color='#1a1e23', align=['center', 'center', 'right'], font=dict(color='white', size=13), height=35)
                 )])
-                fig4.update_layout(title="🏆 카테고리별 생산성 순위", template="plotly_dark", margin=dict(l=10, r=10, t=50, b=10))
+                title_postfix = f" ({curr_date} 기준)" if curr_date else ""
+                fig4.update_layout(title=f"📊 카테고리별 생산성 순위{title_postfix}", template="plotly_dark", margin=dict(l=10, r=10, t=50, b=10))
                 st.plotly_chart(fig4, use_container_width=True)
 
             # 💡 [편집 준비] 화면 표시용 리네임 및 정렬 (소수점 포맷 적용)
