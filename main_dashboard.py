@@ -178,11 +178,11 @@ def show_admin_dashboard():
             df['CPU'] = (df['total_cost'] / df['quantity']).replace([float('inf')], 0).round(2)
             
             if view_option == "일간": 
-                df['display_date'] = df['work_date'].dt.strftime('%m-%d')
+                df['display_date'] = df['work_date'].dt.strftime('%m/%d')
             elif view_option == "주간": 
                 df['display_date'] = df['work_date'].apply(lambda x: f"{x.month}월 {(x.day - 1) // 7 + 1}주차" if pd.notnull(x) else "")
             else: 
-                df['display_date'] = df['work_date'].dt.strftime('%Y-%m')
+                df['display_date'] = df['work_date'].dt.strftime('%Y/%m')
 
             # 💡 메모 정제 및 작업내용 명칭 변환 (사용자 요청 형식: 대분류_소분류)
             df['memo'] = df['memo'].apply(lambda x: x.split('현장: ')[1].split(' /')[0] if '현장: ' in str(x) else x)
