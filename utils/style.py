@@ -33,11 +33,22 @@ def apply_premium_style():
             background-color: #ffffff !important;
             border-radius: 10px;
         }
-        /* Sidebar Expander Title */
+        /* Sidebar Expander Title & Internal Content */
         [data-testid="stSidebar"] [data-testid="stExpander"] summary,
         [data-testid="stSidebar"] [data-testid="stExpander"] summary * {
             color: #000000 !important;
             font-weight: 900 !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stExpander"] label,
+        [data-testid="stSidebar"] [data-testid="stExpander"] div[data-testid="stMarkdownContainer"] p {
+            color: #000000 !important;
+            font-weight: 600 !important;
+        }
+        /* Expander Input Border */
+        [data-testid="stSidebar"] [data-testid="stExpander"] div[data-baseweb="input"] {
+            border: 1px solid #000000 !important;
+            border-radius: 8px !important;
+            overflow: hidden;
         }
 
         /* Premium Metric Styling */
