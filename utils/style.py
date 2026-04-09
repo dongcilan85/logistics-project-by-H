@@ -56,7 +56,7 @@ def apply_premium_style():
             overflow: hidden !important;
         }
         [data-testid="stSidebar"] [data-testid="stExpander"] input {
-            color: #ffffff !important;
+            color: var(--text-color) !important;
         }
         [data-testid="stSidebar"] [data-testid="stExpander"] div[data-baseweb="base-input"],
         [data-testid="stSidebar"] [data-testid="stExpander"] div[data-baseweb="input"] {
