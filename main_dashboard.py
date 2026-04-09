@@ -237,12 +237,12 @@ def show_admin_dashboard():
             st.write("---")
             g1, g2 = st.columns(2)
             with g1:
-                fig1 = px.bar(df.groupby('작업내용')['quantity'].sum().reset_index(), x='작업내용', y='quantity', title="📊 작업 부하 현황", color='작업내용', color_discrete_sequence=color_seq, template="plotly_dark", labels={'quantity': '현장 총 작업량', '작업내용': '작업 내용'})
-                st.plotly_chart(fig1, use_container_width=True)
-                
                 fig2 = px.line(df.groupby('display_date')['LPH'].mean().reset_index(), x='display_date', y='LPH', markers=True, title="📈 생산성 추이", template="plotly_dark", labels={'display_date': '작업 일자', 'LPH': '평균 생산성(LPH)'})
                 fig2.update_traces(line_color='#00AAFF')
                 st.plotly_chart(fig2, use_container_width=True)
+
+                fig1 = px.bar(df.groupby('작업내용')['quantity'].sum().reset_index(), x='작업내용', y='quantity', title="📊 작업 부하 현황", color='작업내용', color_discrete_sequence=color_seq, template="plotly_dark", labels={'quantity': '현장 총 작업량', '작업내용': '작업 내용'})
+                st.plotly_chart(fig1, use_container_width=True)
             with g2:
                 fig3 = px.bar(df.groupby('작업내용')['total_cost'].sum().reset_index(), x='작업내용', y='total_cost', title="💰 인건비 투입 현황", color='작업내용', color_discrete_sequence=color_seq, template="plotly_dark", labels={'total_cost': '총 인건비 (원)', '작업내용': '작업 내용'})
                 st.plotly_chart(fig3, use_container_width=True)
