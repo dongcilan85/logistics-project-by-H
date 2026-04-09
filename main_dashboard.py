@@ -86,8 +86,8 @@ def show_admin_dashboard():
     c_wage = int(get_config("hourly_wage", 10000))
     
     with st.sidebar.expander("💰 고정 운영 지표 설정", expanded=True):
-        target_lph = st.number_input("목표 LPH", value=c_lph)
-        hourly_wage = st.number_input("평균 시급", value=c_wage)
+        target_lph = st.number_input("목표 LPH", value=c_lph, step=1.0)
+        hourly_wage = st.number_input("평균 시급", value=c_wage, step=1000)
         if st.button("💾 서버에 설정 고정", use_container_width=True):
             set_config("target_lph", target_lph)
             set_config("hourly_wage", hourly_wage)
