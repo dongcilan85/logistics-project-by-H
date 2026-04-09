@@ -27,6 +27,12 @@ def apply_premium_style():
         [data-testid="stSidebar"] [data-baseweb="select"] * {
             color: #000000 !important;
         }
+        /* Sidebar Expander Title */
+        [data-testid="stSidebar"] [data-testid="stExpander"] summary,
+        [data-testid="stSidebar"] [data-testid="stExpander"] summary * {
+            color: #000000 !important;
+            font-weight: 900 !important;
+        }
 
         /* Premium Metric Styling */
         [data-testid="stMetric"] {
