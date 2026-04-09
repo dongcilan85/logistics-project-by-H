@@ -247,7 +247,8 @@ def show_admin_dashboard():
                 fig2.update_traces(line_color='#00AAFF')
                 st.plotly_chart(fig2, use_container_width=True)
 
-                fig1 = px.bar(df.groupby('작업내용')['quantity'].sum().reset_index(), x='작업내용', y='quantity', title="📊 작업 부하 현황", color='작업내용', color_discrete_map=color_map, template="plotly_dark", labels={'quantity': '현장 총 작업량', '작업내용': '작업 내용'})
+                fig1 = px.bar_polar(df.groupby('작업내용')['quantity'].sum().reset_index(), r='quantity', theta='작업내용', color='작업내용', title="🎯 작업 부하 방사형 현황", color_discrete_map=color_map, template="plotly_dark", labels={'quantity': '현장 총 작업량', '작업내용': '작업 내용'})
+                fig1.update_layout(polar=dict(radialaxis=dict(showticklabels=False, ticks=''), angularaxis=dict(tickfont=dict(size=13))), margin=dict(t=50, b=20, l=20, r=20))
                 st.plotly_chart(fig1, use_container_width=True)
             with g2:
                 fig3 = px.pie(df.groupby('작업내용')['total_cost'].sum().reset_index(), values='total_cost', names='작업내용', color='작업내용', hole=0.4, title="💰 인건비 투입 현황", color_discrete_map=color_map, template="plotly_dark", labels={'total_cost': '총 인건비 (원)', '작업내용': '작업 내용'})
