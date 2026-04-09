@@ -44,15 +44,17 @@ def apply_premium_style():
             color: #000000 !important;
             font-weight: 600 !important;
         }
-        /* Expander Input Border - Rounded Box */
+        /* Expander Input Border - Complete Rounded Box */
         [data-testid="stSidebar"] [data-testid="stExpander"] div[data-baseweb="base-input"] {
             border: 1px solid #000000 !important;
-            border-radius: 8px !important;
-            overflow: hidden !important;
-            background-color: transparent !important;
+            border-radius: 6px !important;
+            box-sizing: border-box !important;
+            background-color: #ffffff !important;
+            overflow: visible !important;
         }
         [data-testid="stSidebar"] [data-testid="stExpander"] div[data-baseweb="input"] {
             border: none !important;
+            background-color: transparent !important;
         }
         /* Number Input Step Buttons */
         [data-testid="stSidebar"] [data-testid="stExpander"] button[data-testid="stNumberInputStepUp"],
