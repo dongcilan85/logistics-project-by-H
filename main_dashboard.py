@@ -192,10 +192,21 @@ def show_admin_dashboard():
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 workbook = writer.book
-                # 시트 1: 요약 분석
-                sheet1 = df.groupby(['display_date', '작업내용']).agg({'quantity':'sum', 'duration':'sum', 'total_cost':'sum', 'LPH':'mean'}).reset_index()
-                sheet1.columns = [view_option, '작업내용', '총작업량', '총작업시간(H)', '총인건비', '평균LPH']
-                sheet1.to_excel(writer, sheet_name='분석 상세 데이터', index=False)
+                # 시트 1: 요약 분석 (피벗 테이블 형태)
+                agg_df = df.groupby(['display_date', '작업내용']).agg({'quantity':'sum', 'duration':'sum', 'total_cost':'sum', 'LPH':'mean'}).reset_index()
+                agg_df.columns = ['날짜', '카테고리', '총작업량', '총작업시간(H)', '총인건비', '평균LPH']
+                
+                # 피벗 생성 (인덱스: 카테고리, 컬럼: 날짜)
+                sheet1_pivot = agg_df.pivot(index='카테고리', columns='날짜', values=['총작업량', '총작업시간(H)', '총인건비', '평균LPH'])
+                
+                # 멀티헤더 순서 조정 (날짜가 상위 레벨로 오게 변경)
+                sheet1_pivot = sheet1_pivot.reorder_levels([1, 0], axis=1).sort_index(axis=1)
+                
+                # 평균 지표 계산 및 추가 (전체 기간 평균)
+                sheet1_pivot[('평균 지표', '월평균 인건비')] = agg_df.groupby('카테고리')['총인건비'].mean().round(0)
+                sheet1_pivot[('평균 지표', '월평균 LPH')] = agg_df.groupby('카테고리')['평균LPH'].mean().round(2)
+                
+                sheet1_pivot.to_excel(writer, sheet_name='분석 상세 데이터')
                 
                 # 💡 [NEW] 카테고리별 요약 데이터 (요청 사항)
                 df_cat_summary = df.groupby('작업내용').agg({
