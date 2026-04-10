@@ -227,8 +227,8 @@ def show_admin_dashboard():
                 total_row.index = ['Total']
                 sheet1_final = pd.concat([sheet1_pivot, total_row])
 
-                # 7. XlsxWriter 서식 적용
-                sheet1_final.to_excel(writer, sheet_name='분석 상세 데이터')
+                # 7. XlsxWriter 서식 적용 (서식 충돌 방지를 위해 헤더 수동 제어)
+                sheet1_final.to_excel(writer, sheet_name='분석 상세 데이터', startrow=2, header=False)
                 ws1 = writer.sheets['분석 상세 데이터']
                 
                 # 공통 서식 정의
@@ -242,39 +242,35 @@ def show_admin_dashboard():
                 ws1.merge_range(0, 0, 1, 0, '카테고리', header_fmt)
                 ws1.set_column('A:A', 25)
                 
-                # 데이터 영역 숫자 포맷 및 Total 행 하이라이트 (직접 쓰기 루프)
-                # MultiIndex로 인해 데이터는 2행(index 2)부터 시작
-                for r_idx, (cat_name, row_data) in enumerate(sheet1_final.iterrows()):
-                    row_num = r_idx + 2
-                    is_total_row = (cat_name == 'Total')
-                    
-                    # 카테고리 셀 서식
-                    cat_fmt = workbook.add_format({'bg_color': 'yellow', 'bold': True, 'border': 1}) if is_total_row else workbook.add_format({'border': 1})
-                    ws1.write(row_num, 0, cat_name, cat_fmt)
-
-                    col_offset = 1
-                    for val_idx, val in enumerate(row_data):
-                        # 인건비 컬럼 여부 (각 날짜별 4번째 혹은 평균지표 2번째)
-                        # 현재 컬럼 구조: [[Date1_Qty, Date1_Time, Date1_LPH, Date1_Cost], ..., [AvgLPH, AvgCost]]
-                        is_cost_col = False
-                        if val_idx < len(u_dates) * 4:
-                            if (val_idx + 1) % 4 == 0: is_cost_col = True
-                        else: # 평균 지표 영역
-                            if (val_idx - len(u_dates) * 4) == 1: is_cost_col = True
-
-                        if is_total_row:
-                            target_fmt = total_cost_fmt if is_cost_col else total_num_fmt
-                        else:
-                            target_fmt = cost_init_fmt if is_cost_col else num_fmt
-                        
-                        ws1.write(row_num, col_offset + val_idx, val if pd.notnull(val) else "", target_fmt)
-
-                # 상위 헤더(날짜/평균 지표) 병합 서식 다시 입히기
+                # 상위 헤더 및 하위 헤더 수동 작성 (병합 오류 방지)
                 curr_col = 1
                 for d_str in u_dates:
                     ws1.merge_range(0, curr_col, 0, curr_col + 3, d_str, header_fmt)
+                    for i, m_name in enumerate(m_order):
+                        ws1.write(1, curr_col + i, m_name, header_fmt)
                     curr_col += 4
+                
+                # 평균 지표 헤더 작성
                 ws1.merge_range(0, curr_col, 0, curr_col + 1, '평균 지표', header_fmt)
+                ws1.write(1, curr_col, '월평균 LPH', header_fmt)
+                ws1.write(1, curr_col + 1, '월평균 인건비', header_fmt)
+
+                # 데이터 영역 숫자 포맷 및 Total 행 하이라이트
+                for r_idx, (cat_name, row_data) in enumerate(sheet1_final.iterrows()):
+                    row_num = r_idx + 2
+                    is_total_row = (cat_name == 'Total')
+                    cat_fmt = workbook.add_format({'bg_color': 'yellow', 'bold': True, 'border': 1}) if is_total_row else workbook.add_format({'border': 1})
+                    ws1.write(row_num, 0, cat_name, cat_fmt)
+
+                    for val_idx, val in enumerate(row_data):
+                        is_cost_col = False
+                        if val_idx < len(u_dates) * 4:
+                            if (val_idx + 1) % 4 == 0: is_cost_col = True
+                        else:
+                            if (val_idx - len(u_dates) * 4) == 1: is_cost_col = True
+
+                        target_fmt = (total_cost_fmt if is_cost_col else total_num_fmt) if is_total_row else (cost_init_fmt if is_cost_col else num_fmt)
+                        ws1.write(row_num, 1 + val_idx, val if pd.notnull(val) else "", target_fmt)
                 
                 # 💡 [NEW] 카테고리별 요약 데이터 (요청 사항)
                 df_cat_summary = df.groupby('작업내용').agg({
