@@ -200,7 +200,7 @@ def show_admin_dashboard():
                     c_name = c['main_category']
                     if c.get('sub_category'): c_name += f"_{c['sub_category']}"
                     all_cats.append(c_name)
-                all_cats = sorted(list(set([c for c in all_cats if c != 'Total'])))
+                all_cats = sorted(list(set([c.strip() if pd.notnull(c) else c for c in all_cats if (str(c).strip().lower() if pd.notnull(c) else "") != 'total'])), key=lambda x: (pd.notnull(x), str(x)))
 
                 # 2. 데이터 집계
                 agg_df = df.groupby(['display_date', '작업내용']).agg({
@@ -223,7 +223,8 @@ def show_admin_dashboard():
                 sheet1_pivot[('평균 지표', '월평균 인건비')] = agg_df.groupby('카테고리')['총인건비'].mean()
                 
                 # 6. Total 행 추가 (기존에 'Total'이 있다면 제거 후 다시 합산하여 중복 방지)
-                sheet1_pivot = sheet1_pivot[sheet1_pivot.index != 'Total']
+                # 대소문자나 공백 차이로 인한 중복을 방지하기 위해 정규화된 매칭 사용
+                sheet1_pivot = sheet1_pivot[~sheet1_pivot.index.str.strip().str.lower().isin(['total'])]
                 total_row = sheet1_pivot.sum(numeric_only=True).to_frame().T
                 total_row.index = ['Total']
                 sheet1_final = pd.concat([sheet1_pivot, total_row])
