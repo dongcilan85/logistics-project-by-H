@@ -192,21 +192,89 @@ def show_admin_dashboard():
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 workbook = writer.book
-                # 시트 1: 요약 분석 (피벗 테이블 형태)
-                agg_df = df.groupby(['display_date', '작업내용']).agg({'quantity':'sum', 'duration':'sum', 'total_cost':'sum', 'LPH':'mean'}).reset_index()
+                # --- [시트 1: 요약 분석 (정밀 고도화)] ---
+                # 1. 모든 카테고리 로드 및 포맷팅 (전수 노출용)
+                cat_res = supabase.table("task_categories").select("*").execute()
+                all_cats = []
+                for c in cat_res.data:
+                    c_name = c['main_category']
+                    if c.get('sub_category'): c_name += f" ({c['sub_category']})"
+                    all_cats.append(c_name)
+                all_cats = sorted(list(set(all_cats)))
+
+                # 2. 데이터 집계
+                agg_df = df.groupby(['display_date', '작업내용']).agg({
+                    'quantity': 'sum', 'duration': 'sum', 'total_cost': 'sum', 'LPH': 'mean'
+                }).reset_index()
                 agg_df.columns = ['날짜', '카테고리', '총작업량', '총작업시간(H)', '총인건비', '평균LPH']
                 
-                # 피벗 생성 (인덱스: 카테고리, 컬럼: 날짜)
-                sheet1_pivot = agg_df.pivot(index='카테고리', columns='날짜', values=['총작업량', '총작업시간(H)', '총인건비', '평균LPH'])
+                # 3. 상세 피벗 및 전수 재색인
+                u_dates = sorted(agg_df['날짜'].unique())
+                m_order = ['총작업량', '총작업시간(H)', '평균LPH', '총인건비']
+                sheet1_pivot = agg_df.pivot(index='카테고리', columns='날짜', values=m_order)
+                sheet1_pivot = sheet1_pivot.reindex(all_cats) # 모든 카테고리 강제 노출
                 
-                # 멀티헤더 순서 조정 (날짜가 상위 레벨로 오게 변경)
-                sheet1_pivot = sheet1_pivot.reorder_levels([1, 0], axis=1).sort_index(axis=1)
+                # 4. 멀티헤더 및 컬럼 순서 조정
+                sheet1_pivot = sheet1_pivot.reorder_levels([1, 0], axis=1)
+                sheet1_pivot = sheet1_pivot.reindex(columns=pd.MultiIndex.from_product([u_dates, m_order]))
                 
-                # 평균 지표 계산 및 추가 (전체 기간 평균)
-                sheet1_pivot[('평균 지표', '월평균 인건비')] = agg_df.groupby('카테고리')['총인건비'].mean().round(0)
-                sheet1_pivot[('평균 지표', '월평균 LPH')] = agg_df.groupby('카테고리')['평균LPH'].mean().round(2)
+                # 5. 평균 지표 추가
+                sheet1_pivot[('평균 지표', '월평균 LPH')] = agg_df.groupby('카테고리')['평균LPH'].mean()
+                sheet1_pivot[('평균 지표', '월평균 인건비')] = agg_df.groupby('카테고리')['총인건비'].mean()
                 
-                sheet1_pivot.to_excel(writer, sheet_name='분석 상세 데이터')
+                # 6. Total 행 추가 (합계 계산)
+                total_row = sheet1_pivot.sum(numeric_only=True).to_frame().T
+                total_row.index = ['Total']
+                sheet1_final = pd.concat([sheet1_pivot, total_row])
+
+                # 7. XlsxWriter 서식 적용
+                sheet1_final.to_excel(writer, sheet_name='분석 상세 데이터')
+                ws1 = writer.sheets['분석 상세 데이터']
+                
+                # 공통 서식 정의
+                header_fmt = workbook.add_format({'bold': True, 'align': 'center', 'valign': 'vcenter', 'border': 1, 'bg_color': '#D9E1F2'})
+                num_fmt = workbook.add_format({'num_format': '#,##0.00', 'border': 1})
+                cost_init_fmt = workbook.add_format({'num_format': '#,##0', 'border': 1})
+                total_num_fmt = workbook.add_format({'bg_color': 'yellow', 'bold': True, 'border': 1, 'num_format': '#,##0.00'})
+                total_cost_fmt = workbook.add_format({'bg_color': 'yellow', 'bold': True, 'border': 1, 'num_format': '#,##0'})
+
+                # A1:A2 병합
+                ws1.merge_range(0, 0, 1, 0, '카테고리', header_fmt)
+                ws1.set_column('A:A', 25)
+                
+                # 데이터 영역 숫자 포맷 및 Total 행 하이라이트 (직접 쓰기 루프)
+                # MultiIndex로 인해 데이터는 2행(index 2)부터 시작
+                for r_idx, (cat_name, row_data) in enumerate(sheet1_final.iterrows()):
+                    row_num = r_idx + 2
+                    is_total_row = (cat_name == 'Total')
+                    
+                    # 카테고리 셀 서식
+                    cat_fmt = workbook.add_format({'bg_color': 'yellow', 'bold': True, 'border': 1}) if is_total_row else workbook.add_format({'border': 1})
+                    ws1.write(row_num, 0, cat_name, cat_fmt)
+
+                    col_offset = 1
+                    for val_idx, val in enumerate(row_data):
+                        # 인건비 컬럼 여부 (각 날짜별 4번째 혹은 평균지표 2번째)
+                        # 현재 컬럼 구조: [[Date1_Qty, Date1_Time, Date1_LPH, Date1_Cost], ..., [AvgLPH, AvgCost]]
+                        is_cost_col = False
+                        if val_idx < len(u_dates) * 4:
+                            if (val_idx + 1) % 4 == 0: is_cost_col = True
+                        else: # 평균 지표 영역
+                            if (val_idx - len(u_dates) * 4) == 1: is_cost_col = True
+
+                        if is_total_row:
+                            target_fmt = total_cost_fmt if is_cost_col else total_num_fmt
+                        else:
+                            target_fmt = cost_init_fmt if is_cost_col else num_fmt
+                        
+                        ws1.write(row_num, col_offset + val_idx, val if pd.notnull(val) else "", target_fmt)
+
+                # 상위 헤더(날짜/평균 지표) 병합 서식 다시 입히기
+                curr_col = 1
+                for d_str in u_dates:
+                    ws1.merge_range(0, curr_col, 0, curr_col + 3, d_str, header_fmt)
+                    curr_col += 4
+                ws1.merge_range(0, curr_col, 0, curr_col + 1, '평균 지표', header_fmt)
                 
                 # 💡 [NEW] 카테고리별 요약 데이터 (요청 사항)
                 df_cat_summary = df.groupby('작업내용').agg({
