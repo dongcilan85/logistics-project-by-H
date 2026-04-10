@@ -82,7 +82,7 @@ def show_admin_dashboard():
     
     # [A] 사이드바 설정
     st.sidebar.header("⚙️ 분석 및 시스템 설정")
-    view_option = st.sidebar.selectbox("조회 단위", ["일간", "주간", "월간"])
+    view_option = st.sidebar.selectbox("📈 조회 단위 (월간 기본)", ["월간", "주간", "일간"], key="view_unit_selector_final")
     
     # 서버 저장된 설정값 로드
     c_lph = float(get_config("target_lph", 150))
@@ -177,12 +177,12 @@ def show_admin_dashboard():
             df['total_cost'] = (df['duration'] * df['applied_wage']).round(0)
             df['CPU'] = (df['total_cost'] / df['quantity']).replace([float('inf')], 0).round(2)
             
-            if view_option == "일간": 
-                df['display_date'] = df['work_date'].dt.strftime('%m/%d')
+            if view_option == "월간": 
+                df['display_date'] = df['work_date'].dt.strftime('%Y/%m')
             elif view_option == "주간": 
                 df['display_date'] = df['work_date'].apply(lambda x: f"{x.month}월 {(x.day - 1) // 7 + 1}주차" if pd.notnull(x) else "")
             else: 
-                df['display_date'] = df['work_date'].dt.strftime('%Y/%m')
+                df['display_date'] = df['work_date'].dt.strftime('%m/%d')
 
             # 💡 메모 정제 및 작업내용 명칭 변환 (사용자 요청 형식: 대분류_소분류)
             df['memo'] = df['memo'].apply(lambda x: x.split('현장: ')[1].split(' /')[0] if '현장: ' in str(x) else x)
