@@ -200,7 +200,8 @@ def show_admin_dashboard():
                     c_name = c['main_category']
                     if c.get('sub_category'): c_name += f"_{c['sub_category']}"
                     all_cats.append(c_name)
-                all_cats = sorted(list(set([c.strip() if pd.notnull(c) else c for c in all_cats if (str(c).strip().lower() if pd.notnull(c) else "") != 'total'])), key=lambda x: (pd.notnull(x), str(x)))
+                # 빈 값이나 'Total' 관련 키워드 제외 및 유니크화
+                all_cats = sorted(list(set([str(c).strip() for c in all_cats if pd.notnull(c) and str(c).strip() and str(c).strip().lower() != 'total'])))
 
                 # 2. 데이터 집계
                 agg_df = df.groupby(['display_date', '작업내용']).agg({
@@ -222,12 +223,14 @@ def show_admin_dashboard():
                 sheet1_pivot[('평균 지표', '월평균 LPH')] = agg_df.groupby('카테고리')['평균LPH'].mean()
                 sheet1_pivot[('평균 지표', '월평균 인건비')] = agg_df.groupby('카테고리')['총인건비'].mean()
                 
-                # 6. Total 행 완전 제거 (사용자 요청에 따라 합계 행을 추가하지 않음)
+                # 6. Total 행 다시 합산 및 추가 (중복 방지를 위해 안전하게 처리)
                 sheet1_pivot = sheet1_pivot[~sheet1_pivot.index.str.strip().str.lower().isin(['total'])]
-                sheet1_final = sheet1_pivot
+                total_row = sheet1_pivot.sum(numeric_only=True).to_frame().T
+                total_row.index = ['Total']
+                sheet1_final = pd.concat([sheet1_pivot, total_row])
 
-                # 7. XlsxWriter 서식 적용 (서식 충돌 방지를 위해 헤더 수동 제어)
-                sheet1_final.to_excel(writer, sheet_name='분석 상세 데이터', startrow=2, header=False)
+                # 7. XlsxWriter 서식 적용 (중복 방지를 위해 index=False, startcol=1 사용)
+                sheet1_final.to_excel(writer, sheet_name='분석 상세 데이터', startrow=2, header=False, index=False, startcol=1)
                 ws1 = writer.sheets['분석 상세 데이터']
                 
                 # 공통 서식 정의
