@@ -250,9 +250,10 @@ def show_admin_dashboard():
 
                 sheet1_final = pd.concat([sheet1_pivot, total_row])
 
-                # 7. XlsxWriter 서식 적용 (MultiIndex 오류 방지를 위해 index=True 유지)
-                sheet1_final.index.name = None # 인덱스명 행 중복 방지
-                sheet1_final.to_excel(writer, sheet_name='분석 상세 데이터', startrow=2, header=False)
+                # 7. XlsxWriter 서식 적용 (중복 및 MultiIndex 오류 방지를 위해 컬럼 평탄화 및 수동 출력 제어)
+                sheet1_export = sheet1_final.copy()
+                sheet1_export.columns = [f"{c[0]}_{c[1]}" for c in sheet1_export.columns]
+                sheet1_export.to_excel(writer, sheet_name='분석 상세 데이터', startrow=2, header=False, index=False, startcol=1)
                 ws1 = writer.sheets['분석 상세 데이터']
                 
                 # 공통 서식 정의
