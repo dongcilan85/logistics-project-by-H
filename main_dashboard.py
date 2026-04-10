@@ -219,14 +219,35 @@ def show_admin_dashboard():
                 sheet1_pivot = sheet1_pivot.reorder_levels([1, 0], axis=1)
                 sheet1_pivot = sheet1_pivot.reindex(columns=pd.MultiIndex.from_product([u_dates, m_order]))
                 
-                # 5. 평균 지표 추가
-                sheet1_pivot[('평균 지표', '월평균 LPH')] = agg_df.groupby('카테고리')['평균LPH'].mean()
-                sheet1_pivot[('평균 지표', '월평균 인건비')] = agg_df.groupby('카테고리')['총인건비'].mean()
+                # 5. 평균 지표 추가 (월별 가중 평균 및 평균 비용 산출)
+                cat_totals = agg_df.groupby('카테고리').agg({'총작업량': 'sum', '총작업시간(H)': 'sum', '총인건비': 'sum'})
+                sheet1_pivot[('평균 지표', '월평균 LPH')] = (cat_totals['총작업량'] / cat_totals['총작업시간(H)'].replace(0, 1)).round(2)
+                sheet1_pivot[('평균 지표', '월평균 인건비')] = (cat_totals['총인건비'] / len(u_dates) if u_dates else 1).round(0)
                 
                 # 6. Total 행 다시 합산 및 추가 (중복 방지를 위해 안전하게 처리)
                 sheet1_pivot = sheet1_pivot[~sheet1_pivot.index.str.strip().str.lower().isin(['total'])]
                 total_row = sheet1_pivot.sum(numeric_only=True).to_frame().T
                 total_row.index = ['Total']
+
+                # 💡 [고도화] Total 행의 평균 지표 재계산 (단순 합계가 아닌 가중 평균/통계 수치 적용)
+                for d_str in u_dates:
+                    q_val = total_row.get((d_str, '총작업량'), pd.Series([0])).iloc[0]
+                    h_val = total_row.get((d_str, '총작업시간(H)'), pd.Series([0])).iloc[0]
+                    if h_val > 0:
+                        total_row[(d_str, '평균LPH')] = round(q_val / h_val, 2)
+                    else:
+                        total_row[(d_str, '평균LPH')] = 0
+
+                # 전역 평균 지표 재계산
+                glob_q = total_row.xs('총작업량', axis=1, level=1).sum(axis=1).iloc[0]
+                glob_h = total_row.xs('총작업시간(H)', axis=1, level=1).sum(axis=1).iloc[0]
+                glob_c = total_row.xs('총인건비', axis=1, level=1).sum(axis=1).iloc[0]
+
+                if glob_h > 0:
+                    total_row[('평균 지표', '월평균 LPH')] = round(glob_q / glob_h, 2)
+                if len(u_dates) > 0:
+                    total_row[('평균 지표', '월평균 인건비')] = round(glob_c / len(u_dates), 0)
+
                 sheet1_final = pd.concat([sheet1_pivot, total_row])
 
                 # 7. XlsxWriter 서식 적용 (MultiIndex 오류 방지를 위해 index=True 유지)
