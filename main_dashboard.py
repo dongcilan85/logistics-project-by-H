@@ -198,7 +198,7 @@ def show_admin_dashboard():
                 all_cats = []
                 for c in cat_res.data:
                     c_name = c['main_category']
-                    if c.get('sub_category'): c_name += f" ({c['sub_category']})"
+                    if c.get('sub_category'): c_name += f"_{c['sub_category']}"
                     all_cats.append(c_name)
                 all_cats = sorted(list(set(all_cats)))
 
