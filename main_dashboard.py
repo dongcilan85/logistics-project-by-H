@@ -222,12 +222,9 @@ def show_admin_dashboard():
                 sheet1_pivot[('평균 지표', '월평균 LPH')] = agg_df.groupby('카테고리')['평균LPH'].mean()
                 sheet1_pivot[('평균 지표', '월평균 인건비')] = agg_df.groupby('카테고리')['총인건비'].mean()
                 
-                # 6. Total 행 추가 (기존에 'Total'이 있다면 제거 후 다시 합산하여 중복 방지)
-                # 대소문자나 공백 차이로 인한 중복을 방지하기 위해 정규화된 매칭 사용
+                # 6. Total 행 완전 제거 (사용자 요청에 따라 합계 행을 추가하지 않음)
                 sheet1_pivot = sheet1_pivot[~sheet1_pivot.index.str.strip().str.lower().isin(['total'])]
-                total_row = sheet1_pivot.sum(numeric_only=True).to_frame().T
-                total_row.index = ['Total']
-                sheet1_final = pd.concat([sheet1_pivot, total_row])
+                sheet1_final = sheet1_pivot
 
                 # 7. XlsxWriter 서식 적용 (서식 충돌 방지를 위해 헤더 수동 제어)
                 sheet1_final.to_excel(writer, sheet_name='분석 상세 데이터', startrow=2, header=False)
