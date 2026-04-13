@@ -343,8 +343,25 @@ def show_admin_dashboard():
             st.write("---")
             g1, g2 = st.columns(2)
             with g1:
-                fig2 = px.line(df.groupby('display_date')['LPH'].mean().reset_index(), x='display_date', y='LPH', markers=True, title="📈 생산성 추이", labels={'display_date': '작업 일자', 'LPH': '평균 생산성(LPH)'})
-                fig2.update_traces(line_color='#00AAFF')
+                # 💡 생산성 추이 (LPH & CPU) 데이터 집계 및 막대 그래프 변환
+                trend_df = df.groupby('display_date').agg({'LPH': 'mean', 'CPU': 'mean'}).reset_index()
+                fig2 = px.bar(
+                    trend_df, 
+                    x='display_date', 
+                    y=['LPH', 'CPU'], 
+                    barmode='group', 
+                    title="📈 생산성 추이 (LPH & CPU)", 
+                    labels={'display_date': '작업 일자', 'value': '수치', 'variable': '구분'},
+                    text_auto='.1f' # 막대 위에 소수점 1자리까지 수치 표기
+                )
+                # 범례 상단 수평 배치 및 색상 지정
+                fig2.update_layout(
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    margin=dict(t=80)
+                )
+                fig2.update_traces(marker_color='#00AAFF', selector=dict(name='LPH'))
+                fig2.update_traces(marker_color='#FF5500', selector=dict(name='CPU'))
+                
                 st.plotly_chart(fig2, use_container_width=True, theme="streamlit")
 
                 # 최신 기간 데이터 필터링
