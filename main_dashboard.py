@@ -372,8 +372,28 @@ def show_admin_dashboard():
                 df_recent = df[df['display_date'] == curr_date] if curr_date else df
                 title_suffix = f" ({curr_date})" if curr_date else ""
 
-                fig1 = px.bar_polar(df_recent.groupby('작업내용')['quantity'].sum().reset_index(), r='quantity', theta='작업내용', color='작업내용', title=f"🎯 작업 부하 현황{title_suffix}", color_discrete_map=color_map, labels={'quantity': '현장 총 작업량', '작업내용': '작업 내용'})
-                fig1.update_layout(polar=dict(radialaxis=dict(showticklabels=False, ticks=''), angularaxis=dict(tickfont=dict(size=13))), margin=dict(t=50, b=20, l=20, r=20))
+                # 💡 [개선] 작업량 vs 효율(LPH) 분석을 위한 버블 차트 도입
+                summary_df = df_recent.groupby('작업내용').agg({
+                    'quantity': 'sum', 
+                    'LPH': 'mean',
+                    'duration': 'sum'
+                }).reset_index()
+                
+                fig1 = px.scatter(
+                    summary_df, 
+                    x='quantity', 
+                    y='LPH', 
+                    size='duration', 
+                    color='작업내용',
+                    hover_name='작업내용',
+                    title=f"🎯 작업 부하 vs 생산성 분석 (크기: 투입시간){title_suffix}",
+                    color_discrete_map=color_map,
+                    labels={'quantity': '총 작업량', 'LPH': '평균 생산성(LPH)', 'duration': '투입시간(H)'},
+                    size_max=40
+                )
+                # 기준선 및 레이아웃 설정 (하단 우측일수록 위험 지점)
+                fig1.add_hline(y=target_lph, line_dash="dash", line_color="orange", annotation_text=f"목표 LPH ({target_lph})", annotation_position="top left")
+                fig1.update_layout(margin=dict(t=50, b=20, l=20, r=20), showlegend=False)
                 st.plotly_chart(fig1, use_container_width=True, theme="streamlit")
             with g2:
                 fig3 = px.pie(df_recent.groupby('작업내용')['total_cost'].sum().reset_index(), values='total_cost', names='작업내용', color='작업내용', hole=0.4, title=f"💰 인건비 투입 현황{title_suffix}", color_discrete_map=color_map, labels={'total_cost': '총 인건비 (원)', '작업내용': '작업 내용'})
