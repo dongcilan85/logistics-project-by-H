@@ -11,12 +11,20 @@ def apply_premium_style():
         }
 
         /* --- [Standard Sidebar Styling: Background follows theme (White in Light, Black in Dark)] --- */
-        [data-testid="stSidebar"] {
+        /* --- [Standard Sidebar Styling: Solid Background (No Transparency)] --- */
+        [data-testid="stSidebar"], 
+        [data-testid="stSidebar"] > div:first-child,
+        [data-testid="stSidebarNav"],
+        [data-testid="stSidebarUserContent"],
+        section[data-testid="stSidebar"] {
             background-color: var(--background-color) !important;
-            border-right: 1px solid rgba(128, 128, 128, 0.2);
+            opacity: 1 !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
         }
-        [data-testid="stSidebar"] > div:first-child {
-            background-color: var(--background-color) !important;
+        
+        [data-testid="stSidebar"] {
+            border-right: 1px solid rgba(128, 128, 128, 0.2);
         }
         
         /* Sidebar General Text & Elements - Default Contrast */
