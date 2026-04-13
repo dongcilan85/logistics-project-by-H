@@ -10,32 +10,30 @@ def apply_premium_style():
             transition: background-color 0.4s ease, color 0.4s ease;
         }
 
-        /* Inverted Sidebar: Dark in Light mode, White in Dark mode */
+        /* --- [Standard Sidebar Styling: Background follows theme (White in Light, Black in Dark)] --- */
         [data-testid="stSidebar"] {
-            background-color: var(--text-color) !important;
+            background-color: var(--background-color) !important;
             border-right: 1px solid rgba(128, 128, 128, 0.2);
         }
         [data-testid="stSidebar"] > div:first-child {
-            background-color: var(--text-color) !important;
+            background-color: var(--background-color) !important;
         }
-        /* Sidebar General Text & Elements - Inverted */
+        
+        /* Sidebar General Text & Elements - Default Contrast */
         [data-testid="stSidebar"] * {
-            color: var(--background-color) !important;
-        }
-        /* Reset Input Text Color inside Sidebar to follow Inverted Theme */
-        [data-testid="stSidebar"] input, 
-        [data-testid="stSidebar"] textarea, 
-        [data-testid="stSidebar"] [data-baseweb="select"] * {
             color: var(--text-color) !important;
         }
-        /* Sidebar Expander & Metric Box - High Contrast Inversion */
+        
+        /* Sidebar Expander & Metric Box - High Contrast Over Theme */
         [data-testid="stSidebar"] [data-testid="stExpander"], 
         [data-testid="stSidebar"] [data-testid="stExpander"] details {
-            background-color: var(--background-color) !important;
-            border: 1px solid var(--text-color) !important;
+            background-color: var(--secondary-background-color) !important;
+            border: 1px solid rgba(128, 128, 128, 0.1) !important;
             border-radius: 10px;
+            margin-bottom: 10px;
         }
-        /* Sidebar Titles & Labels - Inverted Contrast */
+        
+        /* Sidebar Titles & Labels */
         [data-testid="stSidebar"] [data-testid="stExpander"] summary,
         [data-testid="stSidebar"] [data-testid="stExpander"] summary *,
         [data-testid="stSidebar"] [data-testid="stExpander"] label,
@@ -48,9 +46,10 @@ def apply_premium_style():
         [data-testid="stSidebar"] [data-testid="stExpander"] summary {
             font-weight: 900 !important;
         }
+        
         /* Expander Input Border - Distinct Contrast */
         [data-testid="stSidebar"] [data-testid="stExpander"] div[data-testid="stNumberInput"] > div:last-child {
-            border: 1px solid var(--text-color) !important;
+            border: 1px solid rgba(128, 128, 128, 0.3) !important;
             border-radius: 4px !important;
             background-color: var(--background-color) !important;
             overflow: hidden !important;
@@ -64,7 +63,8 @@ def apply_premium_style():
             background-color: transparent !important;
             box-shadow: none !important;
         }
-        /* Number Input Step Buttons */
+        
+        /* Number Input Step Buttons - Maintain Premium Blue Gradient */
         [data-testid="stSidebar"] [data-testid="stExpander"] button[data-testid="stNumberInputStepUp"],
         [data-testid="stSidebar"] [data-testid="stExpander"] button[data-testid="stNumberInputStepDown"] {
             background: linear-gradient(90deg, #00AAFF 0%, #0055FF 100%) !important;
