@@ -10,7 +10,6 @@ def apply_premium_style():
             transition: background-color 0.4s ease, color 0.4s ease;
         }
 
-        /* --- [Standard Sidebar Styling: Background follows theme (White in Light, Black in Dark)] --- */
         /* --- [Standard Sidebar Styling: Solid Background (No Transparency)] --- */
         [data-testid="stSidebar"], 
         [data-testid="stSidebar"] > div:first-child,
@@ -18,13 +17,16 @@ def apply_premium_style():
         [data-testid="stSidebarUserContent"],
         section[data-testid="stSidebar"] {
             background-color: var(--background-color) !important;
+            background-image: none !important; /* 그라디언트나 이미지 제거 */
             opacity: 1 !important;
             backdrop-filter: none !important;
             -webkit-backdrop-filter: none !important;
+            z-index: 1000001 !important;
         }
         
         [data-testid="stSidebar"] {
             border-right: 1px solid rgba(128, 128, 128, 0.2);
+            box-shadow: none !important; /* 그림자로 인한 그림자 효과 제거 */
         }
         
         /* Sidebar General Text & Elements - Default Contrast */
