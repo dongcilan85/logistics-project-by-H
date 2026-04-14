@@ -113,16 +113,16 @@ def show_admin_dashboard():
                             st.markdown(f"📍 **{display_name}**")
                             st.write(f"작업: **{row['task_type']}**")
                             
-                            # 💡 진척도(수량) 표시 추가
+                            # 💡 진척도(수량) 표시 형식 수정
                             target_qty = row['production_plans']['target_quantity'] if row.get('production_plans') else None
                             current_qty = row.get('quantity', 0)
                             
                             if target_qty:
+                                st.write(f"🔢 **목표 : {target_qty:,}, 진행 : {current_qty:,}**")
                                 progress_pct = (current_qty / target_qty * 100) if target_qty > 0 else 0
-                                st.markdown(f"📊 **진도: {current_qty:,} / {target_qty:,} ({progress_pct:.1f}%)**")
                                 st.progress(min(progress_pct / 100, 1.0))
                             else:
-                                st.markdown(f"🔢 **진행수량: {current_qty:,} 건**")
+                                st.write(f"🔢 **목표 : -, 진행 : {current_qty:,}**")
 
                             # 💡 실시간 진행 시간 계산 및 표시
                             total_sec = row['accumulated_seconds']
@@ -130,7 +130,7 @@ def show_admin_dashboard():
                                 total_sec += (datetime.now(KST) - datetime.fromisoformat(row['last_started_at'])).total_seconds()
                             
                             h, m, s = int(total_sec // 3600), int((total_sec % 3600) // 60), int(total_sec % 60)
-                            st.markdown(f"⏱️ **진행 시간: {h:02d}:{m:02d}:{s:02d}**")
+                            st.write(f"⏱️ **진행 시간 : {h:02d}:{m:02d}:{s:02d}**")
                             
                             btn_c1, btn_c2 = st.columns(2)
                             if btn_c1.button(f"🏁 종료", key=f"stop_{row['id']}", use_container_width=True, type="primary"):
