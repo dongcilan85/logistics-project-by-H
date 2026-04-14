@@ -102,7 +102,8 @@ def show_admin_dashboard():
     @st.fragment(run_every=1)
     def show_active_tasks():
         try:
-            active_res = supabase.table("active_tasks").select("*").execute()
+            # 💡 [개선] 계획 정보를 함께 가져와서 목표수량 파악
+            active_res = supabase.table("active_tasks").select("*, production_plans(target_quantity)").execute()
             if active_res.data:
                 cols = st.columns(4)
                 for i, row in enumerate(active_res.data):
@@ -112,6 +113,17 @@ def show_admin_dashboard():
                             st.markdown(f"📍 **{display_name}**")
                             st.write(f"작업: **{row['task_type']}**")
                             
+                            # 💡 진척도(수량) 표시 추가
+                            target_qty = row['production_plans']['target_quantity'] if row.get('production_plans') else None
+                            current_qty = row.get('quantity', 0)
+                            
+                            if target_qty:
+                                progress_pct = (current_qty / target_qty * 100) if target_qty > 0 else 0
+                                st.markdown(f"📊 **진도: {current_qty:,} / {target_qty:,} ({progress_pct:.1f}%)**")
+                                st.progress(min(progress_pct / 100, 1.0))
+                            else:
+                                st.markdown(f"🔢 **진행수량: {current_qty:,} 건**")
+
                             # 💡 실시간 진행 시간 계산 및 표시
                             total_sec = row['accumulated_seconds']
                             if row['status'] == 'running' and row['last_started_at']:
