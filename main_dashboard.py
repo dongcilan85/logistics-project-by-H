@@ -113,13 +113,14 @@ def show_admin_dashboard():
                             st.markdown(f"📍 **{display_name}**")
                             st.write(f"작업: **{row['task_type']}**")
                             
-                            # 💡 진척도(수량) 표시 형식 수정
-                            target_qty = row['production_plans']['target_quantity'] if row.get('production_plans') else None
-                            current_qty = row.get('quantity', 0)
+                            # 💡 진척도(수량) 표시 형식 수정 및 매핑 교정
+                            # active_tasks: quantity=목표, completed_quantity=진행
+                            target_qty = row.get('quantity', 0)
+                            current_qty = row.get('completed_quantity', 0)
                             
-                            if target_qty:
+                            if target_qty > 0:
                                 st.write(f"🔢 **목표 : {target_qty:,}, 진행 : {current_qty:,}**")
-                                progress_pct = (current_qty / target_qty * 100) if target_qty > 0 else 0
+                                progress_pct = (current_qty / target_qty * 100)
                                 st.progress(min(progress_pct / 100, 1.0))
                             else:
                                 st.write(f"🔢 **목표 : -, 진행 : {current_qty:,}**")
