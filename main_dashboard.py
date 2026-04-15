@@ -385,13 +385,14 @@ def show_admin_dashboard():
                 df_recent = df[df['display_date'] == curr_date] if curr_date else df
                 title_suffix = f" ({curr_date})" if curr_date else ""
 
-                # 💡 [개선] 작업량 vs 효율(LPH) 분석을 위한 버블 차트 도입
+                # 💡 [개선] 작업량 대비 생산성 분석을 위한 버블 차트 고도화
                 summary_df = df_recent.groupby('작업내용').agg({
                     'quantity': 'sum', 
                     'LPH': 'mean',
                     'duration': 'sum'
                 }).reset_index()
                 
+                # 텍스트 라벨 추가를 위한 처리
                 fig1 = px.scatter(
                     summary_df, 
                     x='quantity', 
@@ -399,14 +400,31 @@ def show_admin_dashboard():
                     size='duration', 
                     color='작업내용',
                     hover_name='작업내용',
-                    title=f"🎯 작업 부하 vs 생산성 분석 (크기: 투입시간){title_suffix}",
+                    text='작업내용', # 버블 위에 직접 텍스트 표기
+                    title=f"📊 작업량 대비 생산성 (크기: 투입시간){title_suffix}",
                     color_discrete_map=color_map,
                     labels={'quantity': '총 작업량', 'LPH': '평균 생산성(LPH)', 'duration': '투입시간(H)'},
-                    size_max=40
+                    size_max=50 # 버블 크기 약간 키워 시인성 확보
                 )
-                # 기준선 및 레이아웃 설정 (하단 우측일수록 위험 지점)
-                fig1.add_hline(y=target_lph, line_dash="dash", line_color="orange", annotation_text=f"목표 LPH ({target_lph})", annotation_position="top left")
-                fig1.update_layout(margin=dict(t=50, b=20, l=20, r=20), showlegend=False)
+                
+                # 가독성 개선: 텍스트 위치 및 스타일 설정
+                fig1.update_traces(
+                    textposition='top center',
+                    marker=dict(line=dict(width=1, color='DarkSlateGrey')), # 버블 테두리 추가
+                    opacity=0.8
+                )
+                
+                # 4분면 분석 가이드 라인 (세로: 평균 작업량, 가로: 목표 LPH)
+                mean_qty = summary_df['quantity'].mean() if not summary_df.empty else 0
+                fig1.add_vline(x=mean_qty, line_dash="dot", line_color="gray", opacity=0.5, annotation_text="평균 작업량", annotation_position="bottom right")
+                fig1.add_hline(y=target_lph, line_dash="dash", line_color="#FF5500", annotation_text=f"목표 LPH ({target_lph})", annotation_position="top left")
+                
+                fig1.update_layout(
+                    margin=dict(t=80, b=40, l=40, r=40), 
+                    showlegend=False,
+                    xaxis=dict(gridcolor='rgba(128,128,128,0.1)'),
+                    yaxis=dict(gridcolor='rgba(128,128,128,0.1)')
+                )
                 st.plotly_chart(fig1, use_container_width=True, theme="streamlit")
             with g2:
                 fig3 = px.pie(df_recent.groupby('작업내용')['total_cost'].sum().reset_index(), values='total_cost', names='작업내용', color='작업내용', hole=0.4, title=f"💰 인건비 투입 현황{title_suffix}", color_discrete_map=color_map, labels={'total_cost': '총 인건비 (원)', '작업내용': '작업 내용'})
