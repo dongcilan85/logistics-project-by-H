@@ -355,7 +355,7 @@ def show_admin_dashboard():
                         template="plotly_white", size_max=40
                     )
                     report_fig1.update_traces(textposition='top center', marker=dict(line=dict(width=1, color='DarkSlateGrey')), opacity=0.8)
-                    report_fig1.update_layout(font_family="Malgun Gothic")
+                    report_fig1.update_layout(font_family="NanumGothic, Malgun Gothic, sans-serif")
                     img_bytes1 = report_fig1.to_image(format="png", width=800, height=500, scale=2)
                     ws.insert_image('D2', 'fig1.png', {'image_data': io.BytesIO(img_bytes1), 'x_scale': 0.6, 'y_scale': 0.6})
 
@@ -367,7 +367,7 @@ def show_admin_dashboard():
                         template="plotly_white"
                     )
                     report_fig3.update_traces(texttemplate='<b>%{label}</b><br>%{percent}', textposition='inside')
-                    report_fig3.update_layout(font_family="Malgun Gothic")
+                    report_fig3.update_layout(font_family="NanumGothic, Malgun Gothic, sans-serif")
                     img_bytes3 = report_fig3.to_image(format="png", width=800, height=500, scale=2)
                     ws.insert_image('D18', 'fig3.png', {'image_data': io.BytesIO(img_bytes3), 'x_scale': 0.6, 'y_scale': 0.6})
 
@@ -380,7 +380,7 @@ def show_admin_dashboard():
                     )
                     report_fig2.update_traces(marker_color='#00AAFF', selector=dict(name='LPH'))
                     report_fig2.update_traces(marker_color='#FF5500', selector=dict(name='CPU'))
-                    report_fig2.update_layout(font_family="Malgun Gothic")
+                    report_fig2.update_layout(font_family="NanumGothic, Malgun Gothic, sans-serif")
                     img_bytes2 = report_fig2.to_image(format="png", width=800, height=500, scale=2)
                     ws.insert_image('D34', 'fig2.png', {'image_data': io.BytesIO(img_bytes2), 'x_scale': 0.6, 'y_scale': 0.6})
                 except Exception as img_err:
