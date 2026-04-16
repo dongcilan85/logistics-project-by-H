@@ -338,6 +338,10 @@ def show_admin_dashboard():
                     'quantity': 'sum', 'LPH': 'mean', 'total_cost': 'sum', 'CPU': 'mean'
                 }).reset_index()
                 df_cat_summary.columns = ['카테고리', '작업 총수량', '평균 생산성(LPH)', '누적 인건비', '평균 단가(CPU)']
+                # 💡 [NEW] 소수점 2자리 반올림 적용
+                df_cat_summary['평균 생산성(LPH)'] = df_cat_summary['평균 생산성(LPH)'].round(2)
+                df_cat_summary['평균 단가(CPU)'] = df_cat_summary['평균 단가(CPU)'].round(2)
+                
                 df_cat_summary.to_excel(writer, sheet_name='카테고리별 요약', index=False)
                 
                 # 💡 [NEW] 카테고리별 요약 시트 열 너비 자동 조정
