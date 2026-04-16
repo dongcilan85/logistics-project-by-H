@@ -338,11 +338,13 @@ def show_admin_dashboard():
                 l_st = df.groupby('작업내용')['quantity'].sum().reset_index()
                 c_st = df.groupby('작업내용')['total_cost'].sum().reset_index()
                 t_st = df.groupby('display_date')['LPH'].mean().reset_index()
-                l_st.to_excel(writer, sheet_name='그래프 데이터', startrow=1, index=False)
-                c_st.to_excel(writer, sheet_name='그래프 데이터', startrow=12, index=False)
-                t_st.to_excel(writer, sheet_name='그래프 데이터', startrow=23, index=False)
+                # l_st.to_excel(writer, sheet_name='그래프 데이터', startrow=1, index=False)
+                # c_st.to_excel(writer, sheet_name='그래프 데이터', startrow=12, index=False)
+                # t_st.to_excel(writer, sheet_name='그래프 데이터', startrow=23, index=False)
                 
-                # 💡 [NEW] Plotly 프리미엄 그래프 이미지 삽입
+                # 💡 [NEW] Plotly 프리미엄 그래프 이미지 삽입 (규격 및 배치 조정)
+                if '그래프 데이터' not in writer.sheets:
+                    workbook.add_worksheet('그래프 데이터')
                 ws = writer.sheets['그래프 데이터']
                 
                 try:
@@ -356,8 +358,9 @@ def show_admin_dashboard():
                     )
                     report_fig1.update_traces(textposition='top center', marker=dict(line=dict(width=1, color='DarkSlateGrey')), opacity=0.8)
                     report_fig1.update_layout(font_family="NanumGothic, Malgun Gothic, sans-serif")
-                    img_bytes1 = report_fig1.to_image(format="png", width=800, height=500, scale=2)
-                    ws.insert_image('D2', 'fig1.png', {'image_data': io.BytesIO(img_bytes1), 'x_scale': 0.6, 'y_scale': 0.6})
+                    # 규격 조정: 218mm x 133mm (824px x 503px)
+                    img_bytes1 = report_fig1.to_image(format="png", width=824, height=503, scale=2)
+                    ws.insert_image('AB2', 'fig1.png', {'image_data': io.BytesIO(img_bytes1), 'x_scale': 0.5, 'y_scale': 0.5})
 
                     # 2. 인건비 투입 현황 (도넛 차트)
                     report_fig3 = px.pie(
@@ -368,8 +371,9 @@ def show_admin_dashboard():
                     )
                     report_fig3.update_traces(texttemplate='<b>%{label}</b><br>%{percent}', textposition='inside')
                     report_fig3.update_layout(font_family="NanumGothic, Malgun Gothic, sans-serif")
-                    img_bytes3 = report_fig3.to_image(format="png", width=800, height=500, scale=2)
-                    ws.insert_image('D18', 'fig3.png', {'image_data': io.BytesIO(img_bytes3), 'x_scale': 0.6, 'y_scale': 0.6})
+                    # 규격 조정: 218mm x 133mm (824px x 503px)
+                    img_bytes3 = report_fig3.to_image(format="png", width=824, height=503, scale=2)
+                    ws.insert_image('O2', 'fig3.png', {'image_data': io.BytesIO(img_bytes3), 'x_scale': 0.5, 'y_scale': 0.5})
 
                     # 3. 생산성 추이 (그룹 막대 그래프)
                     report_fig2 = px.bar(
@@ -381,8 +385,9 @@ def show_admin_dashboard():
                     report_fig2.update_traces(marker_color='#00AAFF', selector=dict(name='LPH'))
                     report_fig2.update_traces(marker_color='#FF5500', selector=dict(name='CPU'))
                     report_fig2.update_layout(font_family="NanumGothic, Malgun Gothic, sans-serif")
-                    img_bytes2 = report_fig2.to_image(format="png", width=800, height=500, scale=2)
-                    ws.insert_image('D34', 'fig2.png', {'image_data': io.BytesIO(img_bytes2), 'x_scale': 0.6, 'y_scale': 0.6})
+                    # 규격 조정: 218mm x 133mm (824px x 503px)
+                    img_bytes2 = report_fig2.to_image(format="png", width=824, height=503, scale=2)
+                    ws.insert_image('B2', 'fig2.png', {'image_data': io.BytesIO(img_bytes2), 'x_scale': 0.5, 'y_scale': 0.5})
                 except Exception as img_err:
                     st.warning(f"리포트 그래프 생성 중 오류 발생: {img_err}")
                 
