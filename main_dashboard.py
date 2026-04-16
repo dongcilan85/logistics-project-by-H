@@ -201,6 +201,24 @@ def show_admin_dashboard():
             df['memo'] = df['memo'].apply(lambda x: x.split('현장: ')[1].split(' /')[0] if '현장: ' in str(x) else x)
             df['작업내용'] = df['task'].apply(lambda x: str(x).replace(' (', '_').replace(')', '') if '(' in str(x) else x)
 
+            # --- [데이터 집계: 그래프 및 분석용 공통 데이터] ---
+            # 1. 색상 팔레트 및 카테고리 매핑
+            color_seq = get_chart_colors()
+            unique_tasks = sorted(df['작업내용'].dropna().unique())
+            color_map = {task: color_seq[i % len(color_seq)] for i, task in enumerate(unique_tasks)}
+
+            # 2. 생산성 추이 (LPH & CPU) 집계
+            trend_df = df.groupby('display_date').agg({'LPH': 'mean', 'CPU': 'mean'}).reset_index()
+
+            # 3. 최신 기간 필터링 및 요약 집계
+            unique_dates = sorted(df['display_date'].dropna().unique())
+            curr_date = unique_dates[-1] if len(unique_dates) > 0 else None
+            df_recent = df[df['display_date'] == curr_date] if curr_date else df
+            
+            summary_df = df_recent.groupby('작업내용').agg({
+                'quantity': 'sum', 'LPH': 'mean', 'duration': 'sum'
+            }).reset_index()
+
             # --- 💡 진짜 그래프가 포함된 3시트 엑셀 생성 ---
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -323,10 +341,47 @@ def show_admin_dashboard():
                 l_st.to_excel(writer, sheet_name='그래프 데이터', startrow=1, index=False)
                 c_st.to_excel(writer, sheet_name='그래프 데이터', startrow=12, index=False)
                 t_st.to_excel(writer, sheet_name='그래프 데이터', startrow=23, index=False)
+                
+                # 💡 [NEW] Plotly 프리미엄 그래프 이미지 삽입
                 ws = writer.sheets['그래프 데이터']
-                c1 = workbook.add_chart({'type': 'column'}); c1.set_title({'name': '📊 작업 부하'}); c1.add_series({'categories':['그래프 데이터',2,0,len(l_st)+1,0],'values':['그래프 데이터',2,1,len(l_st)+1,1]}); ws.insert_chart('D2', c1)
-                c2 = workbook.add_chart({'type': 'column'}); c2.set_title({'name': '💰 투입 비용'}); c2.add_series({'categories':['그래프 데이터',13,0,13+len(c_st)-1,0],'values':['그래프 데이터',13,1,13+len(c_st)-1,1]}); ws.insert_chart('D13', c2)
-                c3 = workbook.add_chart({'type': 'line'}); c3.set_title({'name': '📈 생산성 추이'}); c3.add_series({'categories':['그래프 데이터',24,0,24+len(t_st)-1,0],'values':['그래프 데이터',24,1,24+len(t_st)-1,1]}); ws.insert_chart('D24', c3)
+                
+                try:
+                    # 1. 작업 부하 (버블 차트)
+                    report_fig1 = px.scatter(
+                        summary_df, x='quantity', y='LPH', size='duration', color='작업내용',
+                        text='작업내용', title=f"📊 작업량 대비 생산성 {f'({curr_date})' if curr_date else ''}",
+                        color_discrete_map=color_map,
+                        labels={'quantity': '총 작업량', 'LPH': '평균 생산성(LPH)', 'duration': '투입시간(H)'},
+                        template="plotly_white", size_max=40
+                    )
+                    report_fig1.update_traces(textposition='top center', marker=dict(line=dict(width=1, color='DarkSlateGrey')), opacity=0.8)
+                    img_bytes1 = report_fig1.to_image(format="png", width=800, height=500, scale=2)
+                    ws.insert_image('D2', 'fig1.png', {'image_data': io.BytesIO(img_bytes1), 'x_scale': 0.6, 'y_scale': 0.6})
+
+                    # 2. 인건비 투입 현황 (도넛 차트)
+                    report_fig3 = px.pie(
+                        df_recent.groupby('작업내용')['total_cost'].sum().reset_index(), 
+                        values='total_cost', names='작업내용', color='작업내용', hole=0.4, 
+                        title=f"💰 인건비 투입 현황 {f'({curr_date})' if curr_date else ''}", color_discrete_map=color_map,
+                        template="plotly_white"
+                    )
+                    report_fig3.update_traces(texttemplate='<b>%{label}</b><br>%{percent}', textposition='inside')
+                    img_bytes3 = report_fig3.to_image(format="png", width=800, height=500, scale=2)
+                    ws.insert_image('D18', 'fig3.png', {'image_data': io.BytesIO(img_bytes3), 'x_scale': 0.6, 'y_scale': 0.6})
+
+                    # 3. 생산성 추이 (그룹 막대 그래프)
+                    report_fig2 = px.bar(
+                        trend_df, x='display_date', y=['LPH', 'CPU'], barmode='group', 
+                        title="📈 생산성 추이 (LPH & CPU)", 
+                        labels={'display_date': '작업 일자', 'value': '수치', 'variable': '구분'},
+                        text_auto='.1f', template="plotly_white"
+                    )
+                    report_fig2.update_traces(marker_color='#00AAFF', selector=dict(name='LPH'))
+                    report_fig2.update_traces(marker_color='#FF5500', selector=dict(name='CPU'))
+                    img_bytes2 = report_fig2.to_image(format="png", width=800, height=500, scale=2)
+                    ws.insert_image('D34', 'fig2.png', {'image_data': io.BytesIO(img_bytes2), 'x_scale': 0.6, 'y_scale': 0.6})
+                except Exception as img_err:
+                    st.warning(f"리포트 그래프 생성 중 오류 발생: {img_err}")
                 
                 # 시트 3: 상세 기록 데이터 (리네임 적용)
                 df_excel = df.rename(columns={
@@ -348,16 +403,12 @@ def show_admin_dashboard():
             with k3: st.metric("평균 생산성(LPH)", f"{fmt(df['LPH'].mean())}")
             with k4: st.metric("평균 단가(CPU)", f"{fmt(df['CPU'].mean())} 원")
 
-            # 차트 색상 팔레트 및 카테고리 매핑 고정
-            color_seq = get_chart_colors()
-            unique_tasks = sorted(df['작업내용'].dropna().unique())
-            color_map = {task: color_seq[i % len(color_seq)] for i, task in enumerate(unique_tasks)}
+            # 차트 팔레트 사용 (위에서 정의한 color_map 사용)
             
             st.write("---")
             g1, g2 = st.columns(2)
             with g1:
-                # 💡 생산성 추이 (LPH & CPU) 데이터 집계 및 막대 그래프 변환
-                trend_df = df.groupby('display_date').agg({'LPH': 'mean', 'CPU': 'mean'}).reset_index()
+                # 💡 생산성 추이 (LPH & CPU) 막대 그래프
                 fig2 = px.bar(
                     trend_df, 
                     x='display_date', 
@@ -377,20 +428,12 @@ def show_admin_dashboard():
                 
                 st.plotly_chart(fig2, use_container_width=True, theme="streamlit")
 
-                # 최신 기간 데이터 필터링
-                unique_dates = sorted(df['display_date'].dropna().unique())
-                curr_date = unique_dates[-1] if len(unique_dates) > 0 else None
+                # 최신 기간 데이터 필터링 (위에서 정의한 curr_date, df_recent, summary_df 사용)
                 prev_date = unique_dates[-2] if len(unique_dates) > 1 else None
-                
-                df_recent = df[df['display_date'] == curr_date] if curr_date else df
                 title_suffix = f" ({curr_date})" if curr_date else ""
 
                 # 💡 [개선] 작업량 대비 생산성 분석을 위한 버블 차트 고도화
-                summary_df = df_recent.groupby('작업내용').agg({
-                    'quantity': 'sum', 
-                    'LPH': 'mean',
-                    'duration': 'sum'
-                }).reset_index()
+                # summary_df 사용
                 
                 # 텍스트 라벨 추가를 위한 처리
                 fig1 = px.scatter(

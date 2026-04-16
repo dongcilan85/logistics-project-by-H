@@ -2,3 +2,4 @@ pandas
 supabase
 plotly
 xlsxwriter
+kaleido==0.2.1
