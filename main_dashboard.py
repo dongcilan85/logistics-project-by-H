@@ -328,12 +328,23 @@ def show_admin_dashboard():
                         target_fmt = (total_cost_fmt if is_cost_col else total_num_fmt) if is_total_row else (cost_init_fmt if is_cost_col else num_fmt)
                         ws1.write(row_num, 1 + val_idx, val if pd.notnull(val) else "", target_fmt)
                 
+                # 💡 [NEW] 분석 상세 데이터 시트 열 너비 자동 조정 (헤더 및 데이터 고려)
+                # 데이터가 가로로 넓으므로 루프를 통해 처리
+                for i in range(len(sheet1_final.columns)):
+                    ws1.set_column(i + 1, i + 1, 15) # 기본 15로 설정 (복잡한 MultiIndex 대응)
+                
                 # 💡 [NEW] 카테고리별 요약 데이터 (요청 사항)
                 df_cat_summary = df.groupby('작업내용').agg({
                     'quantity': 'sum', 'LPH': 'mean', 'total_cost': 'sum', 'CPU': 'mean'
                 }).reset_index()
                 df_cat_summary.columns = ['카테고리', '작업 총수량', '평균 생산성(LPH)', '누적 인건비', '평균 단가(CPU)']
                 df_cat_summary.to_excel(writer, sheet_name='카테고리별 요약', index=False)
+                
+                # 💡 [NEW] 카테고리별 요약 시트 열 너비 자동 조정
+                ws_cat = writer.sheets['카테고리별 요약']
+                for i, col in enumerate(df_cat_summary.columns):
+                    max_len = max(df_cat_summary[col].astype(str).map(len).max(), len(str(col))) + 5
+                    ws_cat.set_column(i, i, max_len)
                 
                 l_st = df.groupby('작업내용')['quantity'].sum().reset_index()
                 c_st = df.groupby('작업내용')['total_cost'].sum().reset_index()
@@ -399,6 +410,12 @@ def show_admin_dashboard():
                 })
                 cols_order = ['순번', '시작시간', '종료시간', '작업내용', '투입인원', '작업량', '작업시간 (단위 : H)', '작업현장', '시간당 1인 작업량', '총 인건비', 'CPU', '기록날짜']
                 df_excel[cols_order].sort_values('종료시간', ascending=False).to_excel(writer, sheet_name='기록 리포트', index=False)
+                
+                # 💡 [NEW] 기록 리포트 시트 열 너비 자동 조정
+                ws_report = writer.sheets['기록 리포트']
+                for i, col in enumerate(cols_order):
+                    max_len = max(df_excel[col].astype(str).map(len).max(), len(str(col))) + 5
+                    ws_report.set_column(i, i, max_len)
 
             st.markdown("### 📈 실적 분석 리포트")
             d_col1, d_col2 = st.columns([3, 1])
