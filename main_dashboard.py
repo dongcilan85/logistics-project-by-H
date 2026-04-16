@@ -343,7 +343,10 @@ def show_admin_dashboard():
                 # 💡 [NEW] 카테고리별 요약 시트 열 너비 자동 조정
                 ws_cat = writer.sheets['카테고리별 요약']
                 for i, col in enumerate(df_cat_summary.columns):
-                    max_len = max(df_cat_summary[col].astype(str).map(len).max(), len(str(col))) + 5
+                    # float 객체에 len() 호출 에러 방지를 위해 강제 형변환 및 예외 처리 강화
+                    data_max_len = df_cat_summary[col].map(lambda x: len(str(x)) if pd.notnull(x) else 0).max()
+                    header_len = len(str(col))
+                    max_len = max(data_max_len, header_len) + 5
                     ws_cat.set_column(i, i, max_len)
                 
                 l_st = df.groupby('작업내용')['quantity'].sum().reset_index()
@@ -414,7 +417,10 @@ def show_admin_dashboard():
                 # 💡 [NEW] 기록 리포트 시트 열 너비 자동 조정
                 ws_report = writer.sheets['기록 리포트']
                 for i, col in enumerate(cols_order):
-                    max_len = max(df_excel[col].astype(str).map(len).max(), len(str(col))) + 5
+                    # float 객체에 len() 호출 에러 방지를 위해 강제 형변환 및 예외 처리 강화
+                    data_max_len = df_excel[col].map(lambda x: len(str(x)) if pd.notnull(x) else 0).max()
+                    header_len = len(str(col))
+                    max_len = max(data_max_len, header_len) + 5
                     ws_report.set_column(i, i, max_len)
 
             st.markdown("### 📈 실적 분석 리포트")
