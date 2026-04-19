@@ -228,94 +228,109 @@ def render_active_tasks(place):
         for idx, task in enumerate(tasks):
             with cols[idx % 4]:
                 with st.container(border=True):
-                    # 타이틀과 메모 버튼을 한 라인에 배치
-                    t_col1, t_col2 = st.columns([5, 1])
+                    # 접힘 상태 관리
+                    fold_key = f"fold_{task['id']}"
+                    if fold_key not in st.session_state: st.session_state[fold_key] = False
+                    
+                    # 타이틀, 메모, 접기 버튼 배치
+                    t_col1, t_col2, t_col3 = st.columns([4, 1, 1])
                     with t_col1:
                         st.markdown(f"#### 🆔 {task['session_name']}")
                     with t_col2:
                         if st.button("📝", key=f"note_btn_{task['id']}", help="메모 작성/보기"):
                             note_dialog(task)
+                    with t_col3:
+                        fold_label = "🔽" if st.session_state[fold_key] else "🔼"
+                        if st.button(fold_label, key=f"fold_btn_{task['id']}", help="접기/펼치기"):
+                            st.session_state[fold_key] = not st.session_state[fold_key]
+                            st.rerun()
                     
+                    # 작업명 요약 (접힌 상태에서도 표시)
                     st.write(f"**{task['task_type']}**")
                     
-                    # 💡 수량 표시 개선 (목표와 중간 진행 상황 분리)
-                    prog = task.get('completed_quantity', 0)
-                    st.write(f"📦 **목표: {task['quantity']:,}** | 📑 진행: {prog:,}")
-                    st.write(f"👥 인원: {task['workers']}명")
-                    
-                    if task['status'] == "running":
-                        total_sec = task['accumulated_seconds'] + (datetime.now(KST) - datetime.fromisoformat(task['last_started_at'])).total_seconds()
-                        h, m, s = int(total_sec // 3600), int((total_sec % 3600) // 60), int(total_sec % 60)
-                        st.subheader(f"⏱️ {h:02d}:{m:02d}:{s:02d}")
+                    if st.session_state[fold_key]:
+                        # [접힌 상태] 요약 정보만 표시
+                        st.write(f"📦 **목표: {task['quantity']:,}**")
                     else:
-                        h, m, s = int(task['accumulated_seconds'] // 3600), int((task['accumulated_seconds'] % 3600) // 60), int(task['accumulated_seconds'] % 60)
-                        st.subheader(f"⏸️ {h:02d}:{m:02d}:{s:02d}")
-
-                    # 💡 인원 수정 로직 (함수 복구로 정상 작동) [cite: 2026-03-05]
-                    curr_w = int(task['workers'])
-                    new_w = st.number_input("인원 수정", min_value=1, value=max(1, curr_w), key=f"w_{task['id']}")
-                    if new_w != curr_w:
-                        if st.button("👥 변경 확정", key=f"up_{task['id']}", use_container_width=True):
-                            now = datetime.now(KST)
-                            if task['status'] == "running":
-                                # 💡 누락되었던 공수 계산 함수 적용 [cite: 2026-03-05]
-                                new_segs = split_man_seconds_by_date(datetime.fromisoformat(task['last_started_at']), now, curr_w)
-                                updated_history = update_history_map(task.get('work_history', []), new_segs)
-                                supabase.table("active_tasks").update({
-                                    "workers": new_w, "work_history": updated_history, 
-                                    "accumulated_seconds": task['accumulated_seconds'] + (now - datetime.fromisoformat(task['last_started_at'])).total_seconds(),
-                                    "last_started_at": now.isoformat()
-                                }).eq("id", task['id']).execute()
-                            else:
-                                supabase.table("active_tasks").update({"workers": new_w}).eq("id", task['id']).execute()
-                            st.success(f"{new_w}명으로 변경됨"); time.sleep(0.5); st.rerun()
+                        # [펼쳐진 상태] 상세 정보 및 제어 버튼 표시
+                        # 💡 수량 표시 개선 (목표와 중간 진행 상황 분리)
+                        prog = task.get('completed_quantity', 0)
+                        st.write(f"📦 **목표: {task['quantity']:,}** | 📑 진행: {prog:,}")
+                        st.write(f"👥 인원: {task['workers']}명")
                         
-                    c1, c2 = st.columns(2)
-                    if task['status'] == "running":
-                        if c1.button("⏸️ 정지", key=f"p_{task['id']}", use_container_width=True):
-                            now = datetime.now(KST)
-                            dur = (now - datetime.fromisoformat(task['last_started_at'])).total_seconds()
-                            new_segs = split_man_seconds_by_date(datetime.fromisoformat(task['last_started_at']), now, curr_w)
-                            supabase.table("active_tasks").update({
-                                "status": "paused", "accumulated_seconds": task['accumulated_seconds'] + dur,
-                                "work_history": update_history_map(task.get('work_history', []), new_segs)
-                            }).eq("id", task['id']).execute()
-                            st.rerun()
-                    else:
-                        # 💡 [데이터 보정] 일시정지 상태에서 노출
-                        with st.expander("🛠️ 데이터 보정 (시간/수량)", expanded=True):
-                            # 1. 목표 수량 수정 (컬럼명: quantity)
-                            c_target = st.number_input("목표 수량 수정 (개)", min_value=1, value=max(1, int(task['quantity'])), key=f"target_{task['id']}")
-                            # 2. 완료 수량 업데이트 (컬럼명: completed_quantity)
-                            c_prog = st.number_input("현재까지 완료 수량 (개)", min_value=0, value=task.get('completed_quantity', 0), key=f"prog_{task['id']}")
-                            # 3. 누적 시간 수정 (증감 방식 적용)
-                            st.write(f"⏱️ 현재 누적 시간: {int(task['accumulated_seconds'] // 3600)}시간 {int((task['accumulated_seconds'] % 3600) // 60)}분")
-                            adj_mode = st.radio("시간 보정 방식", ["변동 없음", "추가 (+)", "차감 (-)"], horizontal=True, key=f"mode_{task['id']}")
-                            adj_mins = st.number_input("보정할 분 (분 단위)", min_value=0, value=0, key=f"adj_{task['id']}")
-                            
-                            if st.button("✅ 보정 내용 반영", key=f"up_all_{task['id']}", use_container_width=True):
-                                try:
-                                    # 증감 계산
-                                    new_acc_sec = task['accumulated_seconds']
-                                    if adj_mode == "추가 (+)": new_acc_sec += adj_mins * 60
-                                    elif adj_mode == "차감 (-)": new_acc_sec = max(0, new_acc_sec - adj_mins * 60)
+                        if task['status'] == "running":
+                            total_sec = task['accumulated_seconds'] + (datetime.now(KST) - datetime.fromisoformat(row['last_started_at'])).total_seconds() if 'row' in locals() else task['accumulated_seconds'] 
+                            # 위에서 row가 정의되지 않았을 수 있으므로 task 사용
+                            if task['status'] == 'running' and task['last_started_at']:
+                                total_sec = task['accumulated_seconds'] + (datetime.now(KST) - datetime.fromisoformat(task['last_started_at'])).total_seconds()
+                            else:
+                                total_sec = task['accumulated_seconds']
+                                
+                            h, m, s = int(total_sec // 3600), int((total_sec % 3600) // 60), int(total_sec % 60)
+                            st.subheader(f"⏱️ {h:02d}:{m:02d}:{s:02d}")
+                        else:
+                            h, m, s = int(task['accumulated_seconds'] // 3600), int((task['accumulated_seconds'] % 3600) // 60), int(task['accumulated_seconds'] % 60)
+                            st.subheader(f"⏸️ {h:02d}:{m:02d}:{s:02d}")
 
+                        # 💡 인원 수정 로직
+                        curr_w = int(task['workers'])
+                        new_w = st.number_input("인원 수정", min_value=1, value=max(1, curr_w), key=f"w_{task['id']}")
+                        if new_w != curr_w:
+                            if st.button("👥 변경 확정", key=f"up_{task['id']}", use_container_width=True):
+                                now = datetime.now(KST)
+                                if task['status'] == "running":
+                                    new_segs = split_man_seconds_by_date(datetime.fromisoformat(task['last_started_at']), now, curr_w)
+                                    updated_history = update_history_map(task.get('work_history', []), new_segs)
                                     supabase.table("active_tasks").update({
-                                        "quantity": c_target,
-                                        "completed_quantity": c_prog,
-                                        "accumulated_seconds": new_acc_sec
+                                        "workers": new_w, "work_history": updated_history, 
+                                        "accumulated_seconds": task['accumulated_seconds'] + (now - datetime.fromisoformat(task['last_started_at'])).total_seconds(),
+                                        "last_started_at": now.isoformat()
                                     }).eq("id", task['id']).execute()
-                                    st.success("보정 내용이 반영되었습니다."); time.sleep(0.5); st.rerun()
-                                except Exception as e:
-                                    st.error(f"보정 중 오류가 발생했습니다: {e}")
-                                    st.stop()
+                                else:
+                                    supabase.table("active_tasks").update({"workers": new_w}).eq("id", task['id']).execute()
+                                st.success(f"{new_w}명으로 변경됨"); time.sleep(0.5); st.rerun()
+                            
+                        c1, c2 = st.columns(2)
+                        if task['status'] == "running":
+                            if c1.button("⏸️ 정지", key=f"p_{task['id']}", use_container_width=True):
+                                now = datetime.now(KST)
+                                dur = (now - datetime.fromisoformat(task['last_started_at'])).total_seconds()
+                                new_segs = split_man_seconds_by_date(datetime.fromisoformat(task['last_started_at']), now, curr_w)
+                                supabase.table("active_tasks").update({
+                                    "status": "paused", "accumulated_seconds": task['accumulated_seconds'] + dur,
+                                    "work_history": update_history_map(task.get('work_history', []), new_segs)
+                                }).eq("id", task['id']).execute()
+                                st.rerun()
+                        else:
+                            with st.expander("🛠️ 데이터 보정 (시간/수량)", expanded=True):
+                                c_target = st.number_input("목표 수량 수정 (개)", min_value=1, value=max(1, int(task['quantity'])), key=f"target_{task['id']}")
+                                c_prog = st.number_input("현재까지 완료 수량 (개)", min_value=0, value=task.get('completed_quantity', 0), key=f"prog_{task['id']}")
+                                st.write(f"⏱️ 현재 누적 시간: {int(task['accumulated_seconds'] // 3600)}시간 {int((task['accumulated_seconds'] % 3600) // 60)}분")
+                                adj_mode = st.radio("시간 보정 방식", ["변동 없음", "추가 (+)", "차감 (-)"], horizontal=True, key=f"mode_{task['id']}")
+                                adj_mins = st.number_input("보정할 분 (분 단위)", min_value=0, value=0, key=f"adj_{task['id']}")
+                                
+                                if st.button("✅ 보정 내용 반영", key=f"up_all_{task['id']}", use_container_width=True):
+                                    try:
+                                        new_acc_sec = task['accumulated_seconds']
+                                        if adj_mode == "추가 (+)": new_acc_sec += adj_mins * 60
+                                        elif adj_mode == "차감 (-)": new_acc_sec = max(0, new_acc_sec - adj_mins * 60)
 
-                        if c1.button("▶️ 재개", key=f"r_{task['id']}", use_container_width=True, type="primary"):
-                            supabase.table("active_tasks").update({"status": "running", "last_started_at": datetime.now(KST).isoformat()}).eq("id", task['id']).execute()
-                            st.rerun()
+                                        supabase.table("active_tasks").update({
+                                            "quantity": c_target,
+                                            "completed_quantity": c_prog,
+                                            "accumulated_seconds": new_acc_sec
+                                        }).eq("id", task['id']).execute()
+                                        st.success("보정 내용이 반영되었습니다."); time.sleep(0.5); st.rerun()
+                                    except Exception as e:
+                                        st.error(f"보정 중 오류가 발생했습니다: {e}")
+                                        st.stop()
 
-                    if c2.button("🏁 종료", key=f"e_{task['id']}", type="primary", use_container_width=True):
-                        confirm_finish_dialog(task, curr_w, selected_place)
+                            if c1.button("▶️ 재개", key=f"r_{task['id']}", use_container_width=True, type="primary"):
+                                supabase.table("active_tasks").update({"status": "running", "last_started_at": datetime.now(KST).isoformat()}).eq("id", task['id']).execute()
+                                st.rerun()
+
+                        if c2.button("🏁 종료", key=f"e_{task['id']}", type="primary", use_container_width=True):
+                            confirm_finish_dialog(task, curr_w, selected_place)
     except Exception as e: st.error(f"데이터 로드 오류: {e}")
 
 render_active_tasks(selected_place)
