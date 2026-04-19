@@ -55,6 +55,30 @@ def change_password_dialog():
                 supabase.table("system_config").update({"value": new_pw}).eq("key", "admin_password").execute()
                 st.success("변경 완료!"); time.sleep(1); st.rerun()
 
+@st.dialog("📝 작업 노트 (관리자)")
+def note_dialog(task):
+    history = task.get('work_history', [])
+    current_note = ""
+    if isinstance(history, list):
+        for item in history:
+            if isinstance(item, dict) and item.get('type') == 'note':
+                current_note = item.get('content', "")
+                break
+    
+    st.write(f"**{task['session_name']}** - {task['task_type']}")
+    new_note = st.text_area("현장 메모 (수정 가능)", value=current_note, height=200)
+    
+    col1, col2 = st.columns(2)
+    if col1.button("💾 저장", use_container_width=True, type="primary"):
+        new_history = [item for item in history if not (isinstance(item, dict) and item.get('type') == 'note')]
+        if new_note.strip():
+            new_history.append({"type": "note", "content": new_note.strip()})
+        try:
+            supabase.table("active_tasks").update({"work_history": new_history}).eq("id", task['id']).execute()
+            st.success("저장되었습니다."); time.sleep(0.5); st.rerun()
+        except: st.error("저장 실패")
+    if col2.button("❌ 닫기", use_container_width=True): st.rerun()
+
 @st.dialog("🏁 작업 종료 확인")
 def confirm_dashboard_finish_dialog(row, total_sec):
     st.write("⚠️ **작업이 종료되어 기록이 업로드 됩니다.**")
@@ -64,10 +88,25 @@ def confirm_dashboard_finish_dialog(row, total_sec):
     if c1.button("✅ 예 (종료)", use_container_width=True, type="primary"):
         now = datetime.now(KST)
         current_wage = int(get_config("hourly_wage", 10000))
+        
+        # 메모 및 히스토리 추출
+        history = row.get('work_history', [])
+        note_content = ""
+        if isinstance(history, list):
+            for item in history:
+                if isinstance(item, dict) and item.get('type') == 'note':
+                    note_content = item.get('content', "")
+                    break
+        
+        place_info = row['session_name'].split('_')[0] # 세션명에서 현장명 추출 (A동_M -> A동)
+        final_memo = f"현장: {place_info} / 관리자 원격 종료"
+        if note_content:
+            final_memo += f" / 노트: {note_content}"
+
         supabase.table("work_logs").insert({
             "work_date": now.strftime("%Y-%m-%d"), "task": row['task_type'],
             "workers": row['workers'], "quantity": row['quantity'],
-            "duration": round(total_sec / 3600, 2), "memo": "관리자 원격 종료",
+            "duration": round(total_sec / 3600, 2), "memo": final_memo,
             "applied_wage": current_wage,
             "plan_id": row.get('plan_id')
         }).execute()
@@ -110,7 +149,13 @@ def show_admin_dashboard():
                     display_name = row['session_name'].replace("_", " - ")
                     with cols[i % 4]:
                         with st.container(border=True):
-                            st.markdown(f"📍 **{display_name}**")
+                            t_col1, t_col2 = st.columns([5, 1])
+                            with t_col1:
+                                st.markdown(f"📍 **{display_name}**")
+                            with t_col2:
+                                if st.button("📝", key=f"note_admin_{row['id']}", help="메모 확인/수정"):
+                                    note_dialog(row)
+                            
                             st.write(f"작업: **{row['task_type']}**")
                             
                             # 💡 진척도(수량) 표시 형식 수정 및 매핑 교정

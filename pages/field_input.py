@@ -137,6 +137,36 @@ st.divider()
 
 # --- 💡 [핵심 수정] 하단 실시간 작업 카드 --- [cite: 2026-03-05]
 # --- 💡 [핵심 보완] 종료 확인 팝업 --- [cite: 2026-04-08]
+@st.dialog("📝 작업 노트")
+def note_dialog(task):
+    # work_history에서 메모 데이터 추출 (없으면 빈 문자열)
+    history = task.get('work_history', [])
+    current_note = ""
+    if isinstance(history, list):
+        for item in history:
+            if isinstance(item, dict) and item.get('type') == 'note':
+                current_note = item.get('content', "")
+                break
+    
+    st.write(f"**{task['session_name']}** - {task['task_type']}")
+    new_note = st.text_area("현장 특이사항 및 메모", value=current_note, height=200, placeholder="여기에 메모를 입력하세요 (예: 자재 부족, 인원 변경 등)")
+    
+    col1, col2 = st.columns(2)
+    if col1.button("💾 저장", use_container_width=True, type="primary"):
+        # work_history 업데이트 (기존 노트 삭제 후 새로 추가)
+        new_history = [item for item in history if not (isinstance(item, dict) and item.get('type') == 'note')]
+        if new_note.strip():
+            new_history.append({"type": "note", "content": new_note.strip()})
+        
+        try:
+            supabase.table("active_tasks").update({"work_history": new_history}).eq("id", task['id']).execute()
+            st.success("메모가 저장되었습니다."); time.sleep(0.5); st.rerun()
+        except Exception as e:
+            st.error(f"저장 오류: {e}")
+
+    if col2.button("❌ 닫기", use_container_width=True):
+        st.rerun()
+
 @st.dialog("🏁 작업 종료 확인")
 def confirm_finish_dialog(task, curr_w, place):
     st.write("⚠️ **작업이 종료되어 기록이 업로드 됩니다.**")
@@ -146,11 +176,29 @@ def confirm_finish_dialog(task, curr_w, place):
     if c1.button("✅ 예 (종료)", use_container_width=True, type="primary"):
         now = datetime.now(KST)
         current_wage = get_config("hourly_wage", 10000)
-        final_h = task.get('work_history', [])
+        
+        # 메모 추출
+        history = task.get('work_history', [])
+        note_content = ""
+        actual_history = []
+        if isinstance(history, list):
+            for item in history:
+                if isinstance(item, dict) and item.get('type') == 'note':
+                    note_content = item.get('content', "")
+                else:
+                    actual_history.append(item)
+        
+        final_h = actual_history
         if task['status'] == "running":
             new_segs = split_man_seconds_by_date(datetime.fromisoformat(task['last_started_at']), now, curr_w)
             final_h = update_history_map(final_h, new_segs)
+        
         total_man_sec = sum(item['man_seconds'] for item in final_h)
+        # 최종 메모 구성 (현장명 + 노트)
+        final_memo = f"현장: {place}"
+        if note_content:
+            final_memo += f" / 노트: {note_content}"
+            
         for entry in final_h:
             weight = entry['man_seconds'] / total_man_sec if total_man_sec > 0 else 0
             supabase.table("work_logs").insert({
@@ -158,7 +206,7 @@ def confirm_finish_dialog(task, curr_w, place):
                 "workers": task['workers'], "quantity": round(task['quantity'] * weight),
                 "duration": round(entry['man_seconds'] / 3600, 2), "plan_id": task.get('plan_id'),
                 "applied_wage": current_wage,
-                "memo": place 
+                "memo": final_memo
             }).execute()
         supabase.table("active_tasks").delete().eq("id", task['id']).execute()
         st.balloons()
@@ -180,7 +228,14 @@ def render_active_tasks(place):
         for idx, task in enumerate(tasks):
             with cols[idx % 4]:
                 with st.container(border=True):
-                    st.markdown(f"#### 🆔 {task['session_name']}")
+                    # 타이틀과 메모 버튼을 한 라인에 배치
+                    t_col1, t_col2 = st.columns([5, 1])
+                    with t_col1:
+                        st.markdown(f"#### 🆔 {task['session_name']}")
+                    with t_col2:
+                        if st.button("📝", key=f"note_btn_{task['id']}", help="메모 작성/보기"):
+                            note_dialog(task)
+                    
                     st.write(f"**{task['task_type']}**")
                     
                     # 💡 수량 표시 개선 (목표와 중간 진행 상황 분리)
