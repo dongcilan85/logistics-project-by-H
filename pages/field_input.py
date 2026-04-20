@@ -254,6 +254,7 @@ def render_active_tasks(place):
             color: inherit !important;
             min-height: unset !important;
             width: auto !important;
+            white-space: nowrap !important;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -284,7 +285,7 @@ def render_active_tasks(place):
                                 break
                     
                     # 타이틀과 접기 버튼을 상단에 최대한 콤팩트하게 배치 (비율 조정)
-                    t_col1, t_col2 = st.columns([8.5, 1.5])
+                    t_col1, t_col2 = st.columns([7.0, 3.0])
                     with t_col1:
                         st.write(f"🆔 **{task['session_name']}**")
                     with t_col2:
