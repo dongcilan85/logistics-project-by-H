@@ -241,13 +241,13 @@ def render_active_tasks(place):
                                 note_text = item.get('content', "")
                                 break
                     
-                    # 타이틀과 접기 버튼을 상단에 배치
-                    t_col1, t_col2 = st.columns([5, 1])
+                    # 타이틀과 접기 버튼을 상단에 최대한 콤팩트하게 배치
+                    t_col1, t_col2 = st.columns([10, 1])
                     with t_col1:
-                        st.markdown(f"#### 🆔 {task['session_name']}")
+                        st.write(f"🆔 **{task['session_name']}**")
                     with t_col2:
                         fold_label = "🔽" if st.session_state[fold_key] else "🔼"
-                        if st.button(fold_label, key=f"fold_btn_{task['id']}", help="접기/펼치기", use_container_width=True):
+                        if st.button(fold_label, key=f"fold_btn_{task['id']}", help="접기/펼치기", use_container_width=False):
                             st.session_state[fold_key] = not st.session_state[fold_key]
                             st.rerun()
                     
