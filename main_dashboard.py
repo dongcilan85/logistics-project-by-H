@@ -153,15 +153,25 @@ def show_admin_dashboard():
                             fold_key = f"fold_admin_{row['id']}"
                             if fold_key not in st.session_state: st.session_state[fold_key] = False
 
-                            t_col1, t_col2, t_col3 = st.columns([4, 1, 1])
+                            # 메모 내용 추출 (미리보기용)
+                            history = row.get('work_history', [])
+                            note_text = ""
+                            if isinstance(history, list):
+                                for item in history:
+                                    if isinstance(item, dict) and item.get('type') == 'note':
+                                        note_text = item.get('content', "")
+                                        break
+
+                            t_col1, t_col2, t_col3 = st.columns([3, 2, 1])
                             with t_col1:
                                 st.markdown(f"📍 **{display_name}**")
                             with t_col2:
-                                if st.button("📝", key=f"note_admin_{row['id']}", help="메모 확인/수정"):
+                                note_label = f"📝 {note_text[:10]}..." if len(note_text) > 10 else f"📝 {note_text}" if note_text else "📝"
+                                if st.button(note_label, key=f"note_admin_{row['id']}", help=note_text if note_text else "메모 확인/수정", use_container_width=True):
                                     note_dialog(row)
                             with t_col3:
                                 fold_label = "🔽" if st.session_state[fold_key] else "🔼"
-                                if st.button(fold_label, key=f"fold_admin_btn_{row['id']}", help="접기/펼치기"):
+                                if st.button(fold_label, key=f"fold_admin_btn_{row['id']}", help="접기/펼치기", use_container_width=True):
                                     st.session_state[fold_key] = not st.session_state[fold_key]
                                     st.rerun()
                             
