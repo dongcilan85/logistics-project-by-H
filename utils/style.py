@@ -10,26 +10,13 @@ def apply_premium_style():
             transition: background-color 0.4s ease, color 0.4s ease;
         }
 
-        /* --- [Sidebar Hybrid Sync: Solid Background + Theme Compliance] --- */
-        :root {
-            --sb-bg: #FFFFFF;
-            --sb-txt: #31333F;
-        }
-
-        @media (prefers-color-scheme: dark) {
-            :root {
-                --sb-bg: #0E1117;
-                --sb-txt: #FAFAFA;
-            }
-        }
-
-        /* 1. 불투명도 및 배경 강제 고정 (모바일 투명도 완벽 차단) */
+        /* --- [Sidebar Theme Sync: Solid Background + Official Theme Variables] --- */
         [data-testid="stSidebar"], 
         [data-testid="stSidebar"] > div:first-child,
         [data-testid="stSidebarNav"],
         [data-testid="stSidebarUserContent"],
         section[data-testid="stSidebar"] {
-            background-color: var(--sb-bg) !important;
+            background-color: var(--background-color) !important;
             background-image: none !important;
             z-index: 1000001 !important;
             opacity: 1 !important;
@@ -37,19 +24,14 @@ def apply_premium_style():
             -webkit-backdrop-filter: none !important;
         }
         
-        /* 2. 텍스트 색상 강제 동기화 (배경색에 맞춰 항상 대비 유지) */
-        [data-testid="stSidebar"] *,
-        [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
-        [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
-        [data-testid="stSidebar"] label {
-            color: var(--sb-txt) !important;
+        /* 텍스트 색상: 테마 변수 동기화 */
+        [data-testid="stSidebar"] * {
+            color: var(--text-color) !important;
         }
 
-        /* 3. 주요 액션 버튼 예외 처리 (파란색 배경이므로 항상 흰색 텍스트 유지) */
+        /* 주요 액션 버튼: 파란색 배경에는 무조건 흰색 텍스트 */
         [data-testid="stSidebar"] .stButton button,
-        [data-testid="stSidebar"] .stButton button p,
-        [data-testid="stSidebar"] .stButton button span,
-        [data-testid="stSidebar"] .stButton button div {
+        [data-testid="stSidebar"] .stButton button * {
             color: white !important;
         }
 
@@ -70,31 +52,13 @@ def apply_premium_style():
             color: var(--text-color) !important;
         }
         
-        /* Sidebar Input/Selectbox Styling for Dark Mode */
-        [data-testid="stSidebar"] div[data-baseweb="select"],
-        [data-testid="stSidebar"] div[data-baseweb="input"],
-        [data-testid="stSidebar"] div[data-baseweb="base-input"] {
-            background-color: rgba(128, 128, 128, 0.08) !important;
-            border: 1px solid rgba(128, 128, 128, 0.2) !important;
-            border-radius: 8px !important;
-            color: var(--text-color) !important;
+        /* [Override] 조회 단위 선택 박스 - 항상 흰색 배경 / 검정 텍스트 (다크모드에서도 시인성 확보) */
+        [data-testid="stSidebar"] [data-testid="stVerticalBlock"]:has(.view-unit-marker) div[data-baseweb="select"] {
+            background-color: white !important;
+            border: 1px solid #ddd !important;
         }
-
-        /* [Override] 조회 단위 선택 박스 - 다크모드 예외 (흰색 배경 / 검정 텍스트) */
-        @media (prefers-color-scheme: dark) {
-            [data-testid="stSidebar"] [data-testid="stVerticalBlock"]:has(.view-unit-marker) div[data-baseweb="select"] {
-                background-color: white !important;
-                border: 1px solid #ddd !important;
-            }
-            [data-testid="stSidebar"] [data-testid="stVerticalBlock"]:has(.view-unit-marker) div[data-baseweb="select"] * {
-                color: black !important;
-            }
-        }
-
-        /* Expander Number Input Specifics */
-        [data-testid="stSidebar"] [data-testid="stExpander"] div[data-testid="stNumberInput"] > div:last-child {
-            border: none !important;
-            background-color: transparent !important;
+        [data-testid="stSidebar"] [data-testid="stVerticalBlock"]:has(.view-unit-marker) div[data-baseweb="select"] * {
+            color: black !important;
         }
 
         /* Number Input Step Buttons - Maintain Premium Blue Gradient */
