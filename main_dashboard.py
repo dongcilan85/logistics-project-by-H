@@ -144,6 +144,7 @@ def show_admin_dashboard():
         
         # CSS hack: 전역 수준에서 카드 헤더 최적화 적용
         st.markdown("""
+            <style>
             /* 1. 모바일에서도 강제로 한 줄 유지 (미디어 쿼리 상속 차단) */
             [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] {
                 display: flex !important;
