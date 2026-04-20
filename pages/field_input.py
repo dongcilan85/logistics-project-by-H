@@ -291,9 +291,9 @@ def render_active_tasks(place):
         for idx, task in enumerate(tasks):
             with cols[idx % 4]:
                 with st.container(border=True):
-                    # 접힘 상태 관리
+                    # 접힘 상태 관리 (기존: False -> 변경: True [기본 접힘])
                     fold_key = f"fold_{task['id']}"
-                    if fold_key not in st.session_state: st.session_state[fold_key] = False
+                    if fold_key not in st.session_state: st.session_state[fold_key] = True
                     
                     # 메모 내용 추출
                     history = task.get('work_history', [])

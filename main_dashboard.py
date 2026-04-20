@@ -216,9 +216,9 @@ def show_admin_dashboard():
                     display_name = row['session_name'].replace("_", " - ")
                     with cols[i % 4]:
                         with st.container(border=True):
-                            # 접힘 상태 관리
+                            # 접힘 상태 관리 (기존: False -> 변경: True [기본 접힘])
                             fold_key = f"fold_admin_{row['id']}"
-                            if fold_key not in st.session_state: st.session_state[fold_key] = False
+                            if fold_key not in st.session_state: st.session_state[fold_key] = True
 
                             # 메모 내용 추출 (미리보기용)
                             history = row.get('work_history', [])
