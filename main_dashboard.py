@@ -86,32 +86,48 @@ def confirm_dashboard_finish_dialog(row, total_sec):
     st.divider()
     c1, c2 = st.columns(2)
     if c1.button("✅ 예 (종료)", use_container_width=True, type="primary"):
-        now = datetime.now(KST)
-        current_wage = int(get_config("hourly_wage", 10000))
-        
-        # 메모 및 히스토리 추출
-        history = row.get('work_history', [])
-        note_content = ""
-        if isinstance(history, list):
-            for item in history:
-                if isinstance(item, dict) and item.get('type') == 'note':
-                    note_content = item.get('content', "")
-                    break
-        
-        place_info = row['session_name'].split('_')[0] # 세션명에서 현장명 추출 (A동_M -> A동)
-        final_memo = f"현장: {place_info} / 관리자 원격 종료"
-        if note_content:
-            final_memo += f" / 노트: {note_content}"
+        try:
+            now = datetime.now(KST)
+            current_wage = int(get_config("hourly_wage", 10000))
+            
+            # 메모 및 히스토리 추출
+            history = row.get('work_history', [])
+            note_content = ""
+            if isinstance(history, list):
+                for item in history:
+                    if isinstance(item, dict) and item.get('type') == 'note':
+                        note_content = item.get('content', "")
+                        break
+            
+            place_info = row['session_name'].split('_')[0] # 세션명에서 현장명 추출 (A동_M -> A동)
+            final_memo = f"현장: {place_info} / 관리자 원격 종료"
+            if note_content:
+                final_memo += f" / 노트: {note_content}"
 
-        supabase.table("work_logs").insert({
-            "work_date": now.strftime("%Y-%m-%d"), "task": row['task_type'],
-            "workers": row['workers'], "quantity": row['quantity'],
-            "duration": round(total_sec / 3600, 2), "memo": final_memo,
-            "applied_wage": current_wage,
-            "plan_id": row.get('plan_id')
-        }).execute()
-        supabase.table("active_tasks").delete().eq("id", row['id']).execute()
-        st.rerun()
+            # 💡 [디버깅] 삽입할 데이터 준비
+            log_data = {
+                "work_date": now.strftime("%Y-%m-%d"), 
+                "task": row['task_type'],
+                "workers": row['workers'], 
+                "quantity": row['quantity'],
+                "duration": round(total_sec / 3600, 2), 
+                "memo": final_memo,
+                "applied_wage": current_wage,
+                "plan_id": row.get('plan_id')
+            }
+            
+            # 1. 로그 데이터 삽입
+            supabase.table("work_logs").insert(log_data).execute()
+            
+            # 2. 활성 작업 삭제
+            supabase.table("active_tasks").delete().eq("id", row['id']).execute()
+            
+            st.success("정상적으로 종료되었습니다.")
+            time.sleep(0.5)
+            st.rerun()
+        except Exception as e:
+            st.error(f"🛑 종료 중 데이터 오류 발생: {str(e)}")
+            st.info("데이터 형식이 맞지 않거나 필수 값이 누락되었을 수 있습니다.")
     if c2.button("❌ 아니오 (취소)", use_container_width=True):
         st.rerun()
 

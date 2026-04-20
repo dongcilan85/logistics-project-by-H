@@ -174,43 +174,57 @@ def confirm_finish_dialog(task, curr_w, place):
     st.divider()
     c1, c2 = st.columns(2)
     if c1.button("✅ 예 (종료)", use_container_width=True, type="primary"):
-        now = datetime.now(KST)
-        current_wage = get_config("hourly_wage", 10000)
-        
-        # 메모 추출
-        history = task.get('work_history', [])
-        note_content = ""
-        actual_history = []
-        if isinstance(history, list):
-            for item in history:
-                if isinstance(item, dict) and item.get('type') == 'note':
-                    note_content = item.get('content', "")
-                else:
-                    actual_history.append(item)
-        
-        final_h = actual_history
-        if task['status'] == "running":
-            new_segs = split_man_seconds_by_date(datetime.fromisoformat(task['last_started_at']), now, curr_w)
-            final_h = update_history_map(final_h, new_segs)
-        
-        total_man_sec = sum(item['man_seconds'] for item in final_h)
-        # 최종 메모 구성 (현장명 + 노트)
-        final_memo = f"현장: {place}"
-        if note_content:
-            final_memo += f" / 노트: {note_content}"
+        try:
+            now = datetime.now(KST)
+            current_wage = get_config("hourly_wage", 10000)
             
-        for entry in final_h:
-            weight = entry['man_seconds'] / total_man_sec if total_man_sec > 0 else 0
-            supabase.table("work_logs").insert({
-                "work_date": entry['date'], "task": task['task_type'],
-                "workers": task['workers'], "quantity": round(task['quantity'] * weight),
-                "duration": round(entry['man_seconds'] / 3600, 2), "plan_id": task.get('plan_id'),
-                "applied_wage": current_wage,
-                "memo": final_memo
-            }).execute()
-        supabase.table("active_tasks").delete().eq("id", task['id']).execute()
-        st.balloons()
-        st.rerun()
+            # 메모 추출
+            history = task.get('work_history', [])
+            note_content = ""
+            actual_history = []
+            if isinstance(history, list):
+                for item in history:
+                    if isinstance(item, dict) and item.get('type') == 'note':
+                        note_content = item.get('content', "")
+                    else:
+                        actual_history.append(item)
+            
+            final_h = actual_history
+            if task['status'] == "running":
+                # split_man_seconds_by_date, update_history_map 함수는 utils 등에 정의되어 있다고 가정
+                # (실제 코드에 정의되어 있는 함수들임)
+                new_segs = split_man_seconds_by_date(datetime.fromisoformat(task['last_started_at']), now, curr_w)
+                final_h = update_history_map(final_h, new_segs)
+            
+            total_man_sec = sum(item['man_seconds'] for item in final_h)
+            # 최종 메모 구성 (현장명 + 노트)
+            final_memo = f"현장: {place}"
+            if note_content:
+                final_memo += f" / 노트: {note_content}"
+                
+            for entry in final_h:
+                weight = entry['man_seconds'] / total_man_sec if total_man_sec > 0 else 0
+                log_data = {
+                    "work_date": entry['date'], 
+                    "task": task['task_type'],
+                    "workers": task['workers'], 
+                    "quantity": round(task['quantity'] * weight),
+                    "duration": round(entry['man_seconds'] / 3600, 2), 
+                    "plan_id": task.get('plan_id'),
+                    "applied_wage": current_wage,
+                    "memo": final_memo
+                }
+                supabase.table("work_logs").insert(log_data).execute()
+            
+            # 작업기록 저장 후 활성 작업 삭제
+            supabase.table("active_tasks").delete().eq("id", task['id']).execute()
+            
+            st.success("작업이 성공적으로 종료되었습니다.")
+            time.sleep(0.5)
+            st.rerun()
+        except Exception as e:
+            st.error(f"🛑 종료 중 오류 발생: {str(e)}")
+            st.info("데이터 형식이 맞지 않거나 필수 값이 누락되었을 수 있습니다.")
     if c2.button("❌ 아니오 (취소)", use_container_width=True):
         st.rerun()
 
