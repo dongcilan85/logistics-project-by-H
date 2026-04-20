@@ -258,8 +258,7 @@ def render_active_tasks(place):
             return
 
         # [Last Update: 2026-04-20 12:12]
-        # (CSS는 함수 상단으로 이동됨)
-        
+        cols = st.columns(4)
         for idx, task in enumerate(tasks):
             with cols[idx % 4]:
                 with st.container(border=True):

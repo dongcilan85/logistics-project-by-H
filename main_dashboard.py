@@ -177,6 +177,8 @@ def show_admin_dashboard():
         try:
             # 💡 [개선] 계획 정보를 함께 가져와서 목표수량 파악
             active_res = supabase.table("active_tasks").select("*, production_plans(target_quantity)").execute()
+            
+            if active_res.data:
                 # [Last Update: 2026-04-20 12:12]
                 cols = st.columns(4)
                 for i, row in enumerate(active_res.data):
