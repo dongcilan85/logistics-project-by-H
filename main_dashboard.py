@@ -145,8 +145,8 @@ def show_admin_dashboard():
         # CSS hack: 전역 수준에서 카드 헤더 최적화 적용
         st.markdown("""
             <style>
-            /* 1. 모바일 줄바꿈 차단: 특정 식별자(.mobile-inline-card)가 있는 블록 강제 덮어쓰기 */
-            div[data-testid="stHorizontalBlock"]:has(.mobile-inline-card) {
+            /* 1. 모바일 줄바꿈 차단: 중첩 방지 조건 추가 - 안쪽의 개별 카드 헤더(현장명-버튼) 블록만 정확히 타겟팅 */
+            div[data-testid="stHorizontalBlock"]:has(.mobile-inline-card):not(:has(div[data-testid="stHorizontalBlock"])) {
                 display: flex !important;
                 flex-direction: row !important;
                 flex-wrap: nowrap !important;
@@ -156,14 +156,14 @@ def show_admin_dashboard():
             }
 
             /* 왼쪽 영역 (현장명) */
-            div[data-testid="stHorizontalBlock"]:has(.mobile-inline-card) > div:nth-child(1) {
+            div[data-testid="stHorizontalBlock"]:has(.mobile-inline-card):not(:has(div[data-testid="stHorizontalBlock"])) > div:nth-child(1) {
                 flex: 1 1 auto !important;
                 width: auto !important;
                 min-width: 0 !important;
             }
 
             /* 오른쪽 영역 (접기 버튼) */
-            div[data-testid="stHorizontalBlock"]:has(.mobile-inline-card) > div:nth-child(2) {
+            div[data-testid="stHorizontalBlock"]:has(.mobile-inline-card):not(:has(div[data-testid="stHorizontalBlock"])) > div:nth-child(2) {
                 flex: 0 0 auto !important;
                 width: auto !important;
                 min-width: 0 !important;
@@ -172,7 +172,7 @@ def show_admin_dashboard():
             }
 
             /* 2. 버튼 스타일 완전 초기화 */
-            div[data-testid="stHorizontalBlock"]:has(.mobile-inline-card) .stButton button,
+            div[data-testid="stHorizontalBlock"]:has(.mobile-inline-card):not(:has(div[data-testid="stHorizontalBlock"])) .stButton button,
             [data-testid="stVerticalBlockBorderWrapper"] .stButton button {
                 background: transparent !important;
                 border: none !important;
