@@ -104,16 +104,16 @@ def confirm_dashboard_finish_dialog(row, total_sec):
             if note_content:
                 final_memo += f" / 노트: {note_content}"
 
-            # 💡 [디버깅] 삽입할 데이터 준비
+            # 💡 [디버깅] 삽입할 데이터 준비 (결측치 및 형식 보강)
             log_data = {
                 "work_date": now.strftime("%Y-%m-%d"), 
-                "task": row['task_type'],
-                "workers": row['workers'], 
-                "quantity": row['quantity'],
-                "duration": round(total_sec / 3600, 2), 
+                "task": row.get('task_type', '미지정'),
+                "workers": int(row.get('workers', 1)), 
+                "quantity": int(row.get('quantity', 0)),
+                "duration": round(max(0, float(total_sec)) / 3600, 2), 
                 "memo": final_memo,
                 "applied_wage": current_wage,
-                "plan_id": row.get('plan_id')
+                "plan_id": row.get('plan_id') if row.get('plan_id') else None
             }
             
             # 1. 로그 데이터 삽입

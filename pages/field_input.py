@@ -191,18 +191,19 @@ def confirm_finish_dialog(task, curr_w, place):
             
             final_h = actual_history
             if task['status'] == "running":
-                # split_man_seconds_by_date, update_history_map 함수는 utils 등에 정의되어 있다고 가정
-                # (실제 코드에 정의되어 있는 함수들임)
                 new_segs = split_man_seconds_by_date(datetime.fromisoformat(task['last_started_at']), now, curr_w)
                 final_h = update_history_map(final_h, new_segs)
             
-            total_man_sec = sum(item['man_seconds'] for item in final_h)
+            # 💡 [핵심 수정] man_seconds를 가진 항목만 필터링 (메모 제외)
+            time_entries = [item for item in final_h if isinstance(item, dict) and 'man_seconds' in item]
+            total_man_sec = sum(item['man_seconds'] for item in time_entries)
+            
             # 최종 메모 구성 (현장명 + 노트)
             final_memo = f"현장: {place}"
             if note_content:
                 final_memo += f" / 노트: {note_content}"
                 
-            for entry in final_h:
+            for entry in time_entries:
                 weight = entry['man_seconds'] / total_man_sec if total_man_sec > 0 else 0
                 log_data = {
                     "work_date": entry['date'], 
@@ -210,7 +211,7 @@ def confirm_finish_dialog(task, curr_w, place):
                     "workers": task['workers'], 
                     "quantity": round(task['quantity'] * weight),
                     "duration": round(entry['man_seconds'] / 3600, 2), 
-                    "plan_id": task.get('plan_id'),
+                    "plan_id": task.get('plan_id') if task.get('plan_id') else None,
                     "applied_wage": current_wage,
                     "memo": final_memo
                 }
