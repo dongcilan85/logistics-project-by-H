@@ -246,7 +246,7 @@ def render_active_tasks(place):
                     with t_col1:
                         st.markdown(f"#### 🆔 {task['session_name']}")
                     with t_col2:
-                        note_label = f"📝 {note_text[:10]}..." if len(note_text) > 10 else f"📝 {note_text}" if note_text else "📝"
+                        note_label = f"📝 {note_text[:25]}..." if len(note_text) > 25 else f"📝 {note_text}" if note_text else "📝"
                         if st.button(note_label, key=f"note_btn_{task['id']}", help=note_text if note_text else "메모 작성/보기", use_container_width=True):
                             note_dialog(task)
                     with t_col3:
