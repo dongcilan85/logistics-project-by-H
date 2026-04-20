@@ -10,40 +10,39 @@ def apply_premium_style():
             transition: background-color 0.4s ease, color 0.4s ease;
         }
 
-        /* --- [Standard Sidebar Styling: Solid Background - Premium Dark/Light] --- */
+        /* --- [Sidebar Hybrid Sync: Solid Background + Theme Compliance] --- */
+        :root {
+            --sb-bg: #FFFFFF;
+            --sb-txt: #31333F;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --sb-bg: #0E1117;
+                --sb-txt: #FAFAFA;
+            }
+        }
+
+        /* 1. 불투명도 및 배경 강제 고정 (모바일 투명도 완벽 차단) */
         [data-testid="stSidebar"], 
         [data-testid="stSidebar"] > div:first-child,
         [data-testid="stSidebarNav"],
         [data-testid="stSidebarUserContent"],
         section[data-testid="stSidebar"] {
-            background-color: var(--background-color) !important;
+            background-color: var(--sb-bg) !important;
             background-image: none !important;
             z-index: 1000001 !important;
-            opacity: 1 !important; /* Force Solid Opacity */
-            backdrop-filter: none !important; /* Block mobile transparency effects */
+            opacity: 1 !important;
+            backdrop-filter: none !important;
             -webkit-backdrop-filter: none !important;
         }
-
-        /* [Robust Fallback] Ensure sidebar is visible even when theme variables are loading */
-        @media (prefers-color-scheme: light) {
-            section[data-testid="stSidebar"] { background-color: #FFFFFF !important; }
-        }
-        @media (prefers-color-scheme: dark) {
-            section[data-testid="stSidebar"] { background-color: #0E1117 !important; }
-        }
         
-        [data-testid="stSidebar"] {
-            border-right: 1px solid rgba(128, 128, 128, 0.1);
-            box-shadow: none !important;
-        }
-        
-        /* Sidebar General Text & Hierarchy */
+        /* 2. 텍스트 색상 강제 동기화 (배경색에 맞춰 항상 대비 유지) */
+        [data-testid="stSidebar"] *,
         [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
         [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
-        [data-testid="stSidebar"] .stRadio label,
         [data-testid="stSidebar"] label {
-            color: var(--text-color) !important;
-            font-weight: 500 !important;
+            color: var(--sb-txt) !important;
         }
 
         /* Sidebar Expander & Metric Box - Lighter than Background */
