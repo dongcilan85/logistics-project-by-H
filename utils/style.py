@@ -10,13 +10,34 @@ def apply_premium_style():
             transition: background-color 0.4s ease, color 0.4s ease;
         }
 
-        /* --- [Sidebar Theme Sync: Solid Background + Official Theme Variables] --- */
+        /* --- [Sidebar Hybrid Sync: Solid Background + Theme Compliance] --- */
+        :root {
+            --sb-bg: #FFFFFF;
+            --sb-txt: #31333F;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --sb-bg: #0E1117;
+                --sb-txt: #FAFAFA;
+            }
+            /* [Override] 조회 단위 선택 박스 - 다크모드 시 흰색 배경/검정 텍스트 */
+            [data-testid="stSidebar"] div:has(.view-unit-marker) div[data-baseweb="select"] {
+                background-color: white !important;
+                border: 1px solid #ddd !important;
+            }
+            [data-testid="stSidebar"] div:has(.view-unit-marker) div[data-baseweb="select"] * {
+                color: black !important;
+            }
+        }
+
+        /* 1. 불투명도 및 배경 강제 고정 (모바일 투명도 완벽 차단) */
         [data-testid="stSidebar"], 
         [data-testid="stSidebar"] > div:first-child,
         [data-testid="stSidebarNav"],
         [data-testid="stSidebarUserContent"],
         section[data-testid="stSidebar"] {
-            background-color: var(--background-color) !important;
+            background-color: var(--sb-bg) !important;
             background-image: none !important;
             z-index: 1000001 !important;
             opacity: 1 !important;
@@ -24,9 +45,9 @@ def apply_premium_style():
             -webkit-backdrop-filter: none !important;
         }
         
-        /* 텍스트 색상: 테마 변수 동기화 */
+        /* 텍스트 색상: 강제 동기화 */
         [data-testid="stSidebar"] * {
-            color: var(--text-color) !important;
+            color: var(--sb-txt) !important;
         }
 
         /* 주요 액션 버튼: 파란색 배경에는 무조건 흰색 텍스트 */
