@@ -237,15 +237,17 @@ def render_active_tasks(place):
             flex: 0 0 auto !important;
             width: fit-content !important;
         }
-        /* 접기 버튼 이모지화 (배경/테두리 제거) */
+        /* 접기 버튼 텍스트화 (배경/테두리 제거 및 현장명 스타일 통일) */
         [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="column"]:last-child button {
             background-color: transparent !important;
             border: none !important;
             padding: 0 !important;
-            font-size: 1.4rem !important;
+            font-weight: bold !important;
+            font-size: 1rem !important;
+            color: inherit !important;
             box-shadow: none !important;
             min-height: unset !important;
-            line-height: 1 !important;
+            line-height: inherit !important;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -280,7 +282,7 @@ def render_active_tasks(place):
                     with t_col1:
                         st.write(f"🆔 **{task['session_name']}**")
                     with t_col2:
-                        fold_label = "🔽" if st.session_state[fold_key] else "🔼"
+                        fold_label = "접기" if not st.session_state[fold_key] else "펼치기"
                         if st.button(fold_label, key=f"fold_btn_{task['id']}", help="접기/펼치기", use_container_width=False):
                             st.session_state[fold_key] = not st.session_state[fold_key]
                             st.rerun()
