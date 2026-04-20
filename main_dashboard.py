@@ -144,6 +144,7 @@ def show_admin_dashboard():
             # 💡 [개선] 계획 정보를 함께 가져와서 목표수량 파악
             active_res = supabase.table("active_tasks").select("*, production_plans(target_quantity)").execute()
             if active_res.data:
+                # [Last Update: 2026-04-20 12:05]
                 # CSS hack: 모바일 한 줄 고정 및 접기 버튼 이모지화
                 st.markdown("""
                     <style>

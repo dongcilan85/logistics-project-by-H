@@ -226,6 +226,7 @@ def render_active_tasks(place):
 
         cols = st.columns(4)
         
+        # [Last Update: 2026-04-20 12:05]
         # CSS hack: 모바일 한 줄 고정 및 접기 버튼 이모지화
         st.markdown("""
             <style>
