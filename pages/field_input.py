@@ -241,19 +241,20 @@ def render_active_tasks(place):
                                 note_text = item.get('content', "")
                                 break
                     
-                    # 타이틀, 메모, 접기 버튼 배치 (메모 공간 확보를 위해 비율 조정 [3, 2, 1])
-                    t_col1, t_col2, t_col3 = st.columns([3, 2, 1])
+                    # 타이틀과 접기 버튼을 상단에 배치
+                    t_col1, t_col2 = st.columns([5, 1])
                     with t_col1:
                         st.markdown(f"#### 🆔 {task['session_name']}")
                     with t_col2:
-                        note_label = f"📝 {note_text[:25]}..." if len(note_text) > 25 else f"📝 {note_text}" if note_text else "📝"
-                        if st.button(note_label, key=f"note_btn_{task['id']}", help=note_text if note_text else "메모 작성/보기", use_container_width=True):
-                            note_dialog(task)
-                    with t_col3:
                         fold_label = "🔽" if st.session_state[fold_key] else "🔼"
                         if st.button(fold_label, key=f"fold_btn_{task['id']}", help="접기/펼치기", use_container_width=True):
                             st.session_state[fold_key] = not st.session_state[fold_key]
                             st.rerun()
+                    
+                    # 메모 버튼을 아래 줄에 배치 (가로 공간 확보)
+                    note_label = f"📝 {note_text[:25]}..." if len(note_text) > 25 else f"📝 {note_text}" if note_text else "📝 메모 추가"
+                    if st.button(note_label, key=f"note_btn_{task['id']}", help=note_text if note_text else "메모 작성/보기", use_container_width=True):
+                        note_dialog(task)
                     
                     # 작업명 요약 (접힌 상태에서도 표시)
                     st.write(f"**{task['task_type']}**")

@@ -162,18 +162,20 @@ def show_admin_dashboard():
                                         note_text = item.get('content', "")
                                         break
 
-                            t_col1, t_col2, t_col3 = st.columns([3, 2, 1])
+                            # 타이틀과 접기 버튼 상단 배치
+                            t_col1, t_col2 = st.columns([5, 1])
                             with t_col1:
                                 st.markdown(f"📍 **{display_name}**")
                             with t_col2:
-                                note_label = f"📝 {note_text[:25]}..." if len(note_text) > 25 else f"📝 {note_text}" if note_text else "📝"
-                                if st.button(note_label, key=f"note_admin_{row['id']}", help=note_text if note_text else "메모 확인/수정", use_container_width=True):
-                                    note_dialog(row)
-                            with t_col3:
                                 fold_label = "🔽" if st.session_state[fold_key] else "🔼"
                                 if st.button(fold_label, key=f"fold_admin_btn_{row['id']}", help="접기/펼치기", use_container_width=True):
                                     st.session_state[fold_key] = not st.session_state[fold_key]
                                     st.rerun()
+                            
+                            # 메모 버튼 아래 줄 배치 (가로 공간 확보)
+                            note_label = f"📝 {note_text[:25]}..." if len(note_text) > 25 else f"📝 {note_text}" if note_text else "📝 메모 추가"
+                            if st.button(note_label, key=f"note_admin_{row['id']}", help=note_text if note_text else "메모 확인/수정", use_container_width=True):
+                                note_dialog(row)
                             
                             st.write(f"작업: **{row['task_type']}**")
 
