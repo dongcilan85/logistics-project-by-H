@@ -216,9 +216,17 @@ def show_admin_dashboard():
                     display_name = row['session_name'].replace("_", " - ")
                     with cols[i % 4]:
                         with st.container(border=True):
-                            # 접힘 상태 관리 (기존: False -> 변경: True [기본 접힘])
+                            # 💡 [영속성] 접힘 상태 관리 (DB 연동 세션 복구)
                             fold_key = f"fold_admin_{row['id']}"
-                            if fold_key not in st.session_state: st.session_state[fold_key] = True
+                            if fold_key not in st.session_state:
+                                # 이전 세션에서 저장된 접힘 상태가 있는지 확인 (기본값: False - 펼침)
+                                db_fold_state = False
+                                if isinstance(history, list):
+                                    for item in history:
+                                        if isinstance(item, dict) and item.get('type') == 'ui_state':
+                                            db_fold_state = item.get('is_folded', False)
+                                            break
+                                st.session_state[fold_key] = db_fold_state
 
                             # 메모 내용 추출 (미리보기용)
                             history = row.get('work_history', [])
@@ -242,6 +250,12 @@ def show_admin_dashboard():
                                 with h_cols[2]:
                                     if st.button("펼치기", key=f"fold_admin_btn_{row['id']}", use_container_width=False):
                                         st.session_state[fold_key] = False
+                                        # 💡 DB에 접힘 상태 저장 (영속성 확보)
+                                        new_h = [item for item in history if not (isinstance(item, dict) and item.get('type') == 'ui_state')]
+                                        new_h.append({"type": "ui_state", "is_folded": False})
+                                        try:
+                                            supabase.table("active_tasks").update({"work_history": new_h}).eq("id", row['id']).execute()
+                                        except: pass
                                         st.rerun()
                             else:
                                 # [펼쳐진 상태] 기존 2단 구성 (작업명은 아래에 별도 표시)
@@ -252,6 +266,12 @@ def show_admin_dashboard():
                                 with t_col2:
                                     if st.button("접기", key=f"fold_admin_btn_{row['id']}", use_container_width=False):
                                         st.session_state[fold_key] = True
+                                        # 💡 DB에 접힘 상태 저장 (영속성 확보)
+                                        new_h = [item for item in history if not (isinstance(item, dict) and item.get('type') == 'ui_state')]
+                                        new_h.append({"type": "ui_state", "is_folded": True})
+                                        try:
+                                            supabase.table("active_tasks").update({"work_history": new_h}).eq("id", row['id']).execute()
+                                        except: pass
                                         st.rerun()
                             
                             # 메모 버튼 아래 줄 배치 (가로 공간 확보)
