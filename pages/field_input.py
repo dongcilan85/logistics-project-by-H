@@ -225,6 +225,26 @@ def render_active_tasks(place):
             return
 
         cols = st.columns(4)
+        
+        # CSS hack: 모바일에서 카드 헤더의 컬럼들이 줄바꿈되지 않도록 강제
+        st.markdown("""
+            <style>
+            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] {
+                flex-wrap: nowrap !important;
+                align-items: center !important;
+                gap: 0.5rem !important;
+            }
+            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="column"]:nth-child(1) {
+                flex: 1 1 auto !important;
+                min-width: 0 !important;
+            }
+            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="column"]:nth-child(2) {
+                flex: 0 0 auto !important;
+                min-width: fit-content !important;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+        
         for idx, task in enumerate(tasks):
             with cols[idx % 4]:
                 with st.container(border=True):
