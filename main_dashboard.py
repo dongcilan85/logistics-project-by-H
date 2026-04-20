@@ -121,6 +121,7 @@ def show_admin_dashboard():
     
     # [A] 사이드바 설정
     st.sidebar.header("⚙️ 분석 및 시스템 설정")
+    st.sidebar.markdown('<div class="view-unit-marker"></div>', unsafe_allow_html=True)
     view_option = st.sidebar.selectbox("📈 조회 단위 (월간 기본)", ["월간", "주간", "일간"], key="view_unit_selector_final")
     
     # 서버 저장된 설정값 로드

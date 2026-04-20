@@ -80,6 +80,17 @@ def apply_premium_style():
             color: var(--text-color) !important;
         }
 
+        /* [Override] 조회 단위 선택 박스 - 다크모드 예외 (흰색 배경 / 검정 텍스트) */
+        @media (prefers-color-scheme: dark) {
+            [data-testid="stSidebar"] [data-testid="stVerticalBlock"]:has(.view-unit-marker) div[data-baseweb="select"] {
+                background-color: white !important;
+                border: 1px solid #ddd !important;
+            }
+            [data-testid="stSidebar"] [data-testid="stVerticalBlock"]:has(.view-unit-marker) div[data-baseweb="select"] * {
+                color: black !important;
+            }
+        }
+
         /* Expander Number Input Specifics */
         [data-testid="stSidebar"] [data-testid="stExpander"] div[data-testid="stNumberInput"] > div:last-child {
             border: none !important;
