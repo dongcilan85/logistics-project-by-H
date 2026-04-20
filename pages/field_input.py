@@ -226,21 +226,31 @@ def render_active_tasks(place):
 
         cols = st.columns(4)
         
-        # CSS hack: 모바일에서 카드 헤더의 컬럼들이 줄바꿈되지 않도록 강제
+        # CSS hack: 모바일 한 줄 고정 및 접기 버튼 이모지화
         st.markdown("""
             <style>
             [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] {
                 flex-wrap: nowrap !important;
                 align-items: center !important;
-                gap: 0.5rem !important;
+                gap: 0.3rem !important;
             }
-            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="column"]:nth-child(1) {
+            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(1) {
                 flex: 1 1 auto !important;
                 min-width: 0 !important;
             }
-            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="column"]:nth-child(2) {
+            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(2) {
                 flex: 0 0 auto !important;
                 min-width: fit-content !important;
+            }
+            /* 접기 버튼 스타일: 테두리/배경 제거하여 이모지만 노출 */
+            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(2) button {
+                background: transparent !important;
+                border: none !important;
+                padding: 0 !important;
+                box-shadow: none !important;
+                font-size: 1.3rem !important;
+                min-height: unset !important;
+                line-height: 1 !important;
             }
             </style>
         """, unsafe_allow_html=True)
