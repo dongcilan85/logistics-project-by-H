@@ -138,10 +138,11 @@ def apply_premium_style():
             transform: scale(1.01);
         }
 
-        /* [Folded Card Styling] - 접힌 상태를 명확히 구분 */
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.folded-card-marker) {
-            background-color: rgba(128, 128, 128, 0.08) !important;
-            border: 1px dashed rgba(128, 128, 128, 0.2) !important;
+        /* [Folded Card Styling] - 접힌 상태를 명확히 구분 (시인성 강화) */
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.folded-card-active-marker) {
+            background-color: rgba(0, 170, 255, 0.08) !important;
+            border: 1.5px dashed rgba(0, 170, 255, 0.4) !important;
+            box-shadow: inset 0 0 10px rgba(0, 170, 255, 0.05) !important;
         }
 
         /* Divider */

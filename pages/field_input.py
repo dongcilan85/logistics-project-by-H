@@ -292,7 +292,7 @@ def render_active_tasks(place):
                     # 타이틀과 접기 버튼 레이아웃
                     if st.session_state[fold_key]:
                         # [접힌 상태] 현장명 - 작업명 - 펼치기 버튼 순으로 3단 구성
-                        st.markdown("<div class='folded-card-marker'></div>", unsafe_allow_html=True)
+                        st.markdown("<div class='folded-card-active-marker' style='display:none;'></div>", unsafe_allow_html=True)
                         f_t1, f_t2, f_t3 = st.columns([3.5, 4.5, 2.0])
                         with f_t1:
                             st.markdown("<span class='mobile-inline-card'></span>", unsafe_allow_html=True)
