@@ -220,36 +220,39 @@ def render_active_tasks(place):
     
     # CSS hack: 전역 수준에서 카드 헤더 최적화 적용
     st.markdown("""
-        <style>
-        /* 작업 카드 헤더 한 줄 고정 */
+        /* 1. 모바일에서도 강제로 한 줄 유지 (미디어 쿼리 상속 차단) */
         [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] {
+            display: flex !important;
             flex-wrap: nowrap !important;
+            flex-direction: row !important;
             align-items: center !important;
             gap: 0.5rem !important;
         }
-        /* 현장명 컬럼 */
-        [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="column"]:first-child {
-            flex: 1 1 auto !important;
-            min-width: 0 !important;
+
+        @media (max-width: 640px) {
+            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] > div {
+                flex-basis: auto !important;
+                flex-grow: 0 !important;
+                width: auto !important;
+            }
+            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] > div:first-child {
+                flex-grow: 1 !important;
+                min-width: 0 !important;
+            }
         }
-        /* 접기 버튼 컬럼 */
-        [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="column"]:last-child {
-            flex: 0 0 auto !important;
-            width: fit-content !important;
-        }
-        /* 접기 버튼 텍스트화 (배경/테두리 제거 및 현장명 스타일 통일) */
-        [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] div[data-testid="stColumn"]:last-child button {
-            background-color: transparent !important;
+
+        /* 2. 버튼 스타일 완전 초기화 (모든 틀 제거) */
+        [data-testid="stVerticalBlockBorderWrapper"] .stButton button {
+            background: transparent !important;
             border: none !important;
             padding: 0 !important;
+            margin: 0 !important;
+            box-shadow: none !important;
             font-weight: bold !important;
             font-size: 1rem !important;
             color: inherit !important;
-            box-shadow: none !important;
             min-height: unset !important;
-            line-height: inherit !important;
-            width: 100% !important;
-            text-align: right !important;
+            width: auto !important;
         }
         </style>
     """, unsafe_allow_html=True)
