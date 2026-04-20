@@ -140,40 +140,44 @@ def show_admin_dashboard():
     
     @st.fragment(run_every=1)
     def show_active_tasks():
+        st.subheader("🚀 실시간 현황 (v2)")
+        
+        # CSS hack: 전역 수준에서 카드 헤더 최적화 적용
+        st.markdown("""
+            <style>
+            /* 작업 카드 헤더 한 줄 고정 */
+            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] {
+                flex-wrap: nowrap !important;
+                align-items: center !important;
+                gap: 0.5rem !important;
+            }
+            /* 현장명 컬럼 */
+            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] div[data-testid="column"]:first-child {
+                flex: 1 1 auto !important;
+                min-width: 0 !important;
+            }
+            /* 접기 버튼 컬럼 */
+            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] div[data-testid="column"]:last-child {
+                flex: 0 0 auto !important;
+                width: fit-content !important;
+            }
+            /* 접기 버튼 이모지화 (배경/테두리 제거) */
+            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] div[data-testid="column"]:last-child button {
+                background-color: transparent !important;
+                border: none !important;
+                padding: 0 !important;
+                font-size: 1.4rem !important;
+                box-shadow: none !important;
+                min-height: unset !important;
+                line-height: 1 !important;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+        
         try:
             # 💡 [개선] 계획 정보를 함께 가져와서 목표수량 파악
             active_res = supabase.table("active_tasks").select("*, production_plans(target_quantity)").execute()
-            if active_res.data:
-                # [Last Update: 2026-04-20 12:05]
-                # CSS hack: 모바일 한 줄 고정 및 접기 버튼 이모지화
-                st.markdown("""
-                    <style>
-                    [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] {
-                        flex-wrap: nowrap !important;
-                        align-items: center !important;
-                        gap: 0.3rem !important;
-                    }
-                    [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(1) {
-                        flex: 1 1 auto !important;
-                        min-width: 0 !important;
-                    }
-                    [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(2) {
-                        flex: 0 0 auto !important;
-                        min-width: fit-content !important;
-                    }
-                    /* 접기 버튼 스타일: 테두리/배경 제거하여 이모지만 노출 */
-                    [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(2) button {
-                        background: transparent !important;
-                        border: none !important;
-                        padding: 0 !important;
-                        box-shadow: none !important;
-                        font-size: 1.3rem !important;
-                        min-height: unset !important;
-                        line-height: 1 !important;
-                    }
-                    </style>
-                """, unsafe_allow_html=True)
-                
+                # [Last Update: 2026-04-20 12:12]
                 cols = st.columns(4)
                 for i, row in enumerate(active_res.data):
                     display_name = row['session_name'].replace("_", " - ")

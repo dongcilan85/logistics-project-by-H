@@ -216,7 +216,40 @@ def confirm_finish_dialog(task, curr_w, place):
 
 @st.fragment(run_every=1)
 def render_active_tasks(place):
-    st.subheader(f"📊 {place} 실시간 현황")
+    st.subheader(f"📊 {place} 실시간 현황 (v2)")
+    
+    # CSS hack: 전역 수준에서 카드 헤더 최적화 적용
+    st.markdown("""
+        <style>
+        /* 작업 카드 헤더 한 줄 고정 */
+        [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] {
+            flex-wrap: nowrap !important;
+            align-items: center !important;
+            gap: 0.5rem !important;
+        }
+        /* 현장명 컬럼 */
+        [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="column"]:first-child {
+            flex: 1 1 auto !important;
+            min-width: 0 !important;
+        }
+        /* 접기 버튼 컬럼 */
+        [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="column"]:last-child {
+            flex: 0 0 auto !important;
+            width: fit-content !important;
+        }
+        /* 접기 버튼 이모지화 (배경/테두리 제거) */
+        [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="column"]:last-child button {
+            background-color: transparent !important;
+            border: none !important;
+            padding: 0 !important;
+            font-size: 1.4rem !important;
+            box-shadow: none !important;
+            min-height: unset !important;
+            line-height: 1 !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
     try:
         res = supabase.table("active_tasks").select("*").ilike("session_name", f"{place}_%").execute()
         tasks = res.data
@@ -224,37 +257,8 @@ def render_active_tasks(place):
             st.info(f"{place} 구역에 진행 중인 작업이 없습니다.")
             return
 
-        cols = st.columns(4)
-        
-        # [Last Update: 2026-04-20 12:05]
-        # CSS hack: 모바일 한 줄 고정 및 접기 버튼 이모지화
-        st.markdown("""
-            <style>
-            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] {
-                flex-wrap: nowrap !important;
-                align-items: center !important;
-                gap: 0.3rem !important;
-            }
-            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(1) {
-                flex: 1 1 auto !important;
-                min-width: 0 !important;
-            }
-            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(2) {
-                flex: 0 0 auto !important;
-                min-width: fit-content !important;
-            }
-            /* 접기 버튼 스타일: 테두리/배경 제거하여 이모지만 노출 */
-            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(2) button {
-                background: transparent !important;
-                border: none !important;
-                padding: 0 !important;
-                box-shadow: none !important;
-                font-size: 1.3rem !important;
-                min-height: unset !important;
-                line-height: 1 !important;
-            }
-            </style>
-        """, unsafe_allow_html=True)
+        # [Last Update: 2026-04-20 12:12]
+        # (CSS는 함수 상단으로 이동됨)
         
         for idx, task in enumerate(tasks):
             with cols[idx % 4]:
