@@ -291,6 +291,9 @@ def render_active_tasks(place):
         for idx, task in enumerate(tasks):
             with cols[idx % 4]:
                 with st.container(border=True):
+                    # 메모 내용 및 히스토리 추출 (미리보기 및 상태 로드용)
+                    history = task.get('work_history', [])
+
                     # 💡 [영속성] 접힘 상태 관리 (DB 연동 세션 복구)
                     fold_key = f"fold_{task['id']}"
                     if fold_key not in st.session_state:
@@ -302,9 +305,6 @@ def render_active_tasks(place):
                                     db_fold_state = item.get('is_folded', False)
                                     break
                         st.session_state[fold_key] = db_fold_state
-                    
-                    # 메모 내용 추출
-                    history = task.get('work_history', [])
                     note_text = ""
                     if isinstance(history, list):
                         for item in history:
