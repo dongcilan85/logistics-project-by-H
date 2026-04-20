@@ -19,6 +19,17 @@ def apply_premium_style():
             background-color: var(--background-color) !important;
             background-image: none !important;
             z-index: 1000001 !important;
+            opacity: 1 !important; /* Force Solid Opacity */
+            backdrop-filter: none !important; /* Block mobile transparency effects */
+            -webkit-backdrop-filter: none !important;
+        }
+
+        /* [Robust Fallback] Ensure sidebar is visible even when theme variables are loading */
+        @media (prefers-color-scheme: light) {
+            section[data-testid="stSidebar"] { background-color: #FFFFFF !important; }
+        }
+        @media (prefers-color-scheme: dark) {
+            section[data-testid="stSidebar"] { background-color: #0E1117 !important; }
         }
         
         [data-testid="stSidebar"] {
