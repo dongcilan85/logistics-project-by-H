@@ -46,7 +46,10 @@ def apply_premium_style():
         }
 
         /* 3. 주요 액션 버튼 예외 처리 (파란색 배경이므로 항상 흰색 텍스트 유지) */
-        [data-testid="stSidebar"] .stButton > button {
+        [data-testid="stSidebar"] .stButton button,
+        [data-testid="stSidebar"] .stButton button p,
+        [data-testid="stSidebar"] .stButton button span,
+        [data-testid="stSidebar"] .stButton button div {
             color: white !important;
         }
 
