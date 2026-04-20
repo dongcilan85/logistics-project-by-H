@@ -258,10 +258,7 @@ def render_active_tasks(place):
                     # 작업명 요약 (접힌 상태에서도 표시)
                     st.write(f"**{task['task_type']}**")
                     
-                    if st.session_state[fold_key]:
-                        # [접힌 상태] 요약 정보만 표시
-                        st.write(f"📦 **목표: {task['quantity']:,}**")
-                    else:
+                    if not st.session_state[fold_key]:
                         # [펼쳐진 상태] 상세 정보 및 제어 버튼 표시
                         # 💡 수량 표시 개선 (목표와 중간 진행 상황 분리)
                         prog = task.get('completed_quantity', 0)

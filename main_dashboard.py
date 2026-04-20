@@ -177,10 +177,7 @@ def show_admin_dashboard():
                             
                             st.write(f"작업: **{row['task_type']}**")
 
-                            if st.session_state[fold_key]:
-                                # [접힌 상태] 요약 정보
-                                st.write(f"🔢 **목표 : {row.get('quantity', 0):,}**")
-                            else:
+                            if not st.session_state[fold_key]:
                                 # [펼쳐진 상태] 상세 정보 및 제어
                                 # 💡 진척도(수량) 표시 형식 수정 및 매핑 교정
                                 target_qty = row.get('quantity', 0)
