@@ -10,90 +10,76 @@ def apply_premium_style():
             transition: background-color 0.4s ease, color 0.4s ease;
         }
 
-        /* --- [Standard Sidebar Styling: Solid Background (No Transparency) - Strong Action] --- */
+        /* --- [Standard Sidebar Styling: Solid Background - Premium Dark/Light] --- */
         [data-testid="stSidebar"], 
         [data-testid="stSidebar"] > div:first-child,
         [data-testid="stSidebarNav"],
         [data-testid="stSidebarUserContent"],
         section[data-testid="stSidebar"] {
-            background-color: #FFFFFF !important; /* Force Solid White for Light Mode */
+            background-color: var(--background-color) !important;
             background-image: none !important;
-            opacity: 1 !important;
-            backdrop-filter: none !important;
-            -webkit-backdrop-filter: none !important;
             z-index: 1000001 !important;
         }
         
-        /* Dark Mode Support via Media Query */
-        @media (prefers-color-scheme: dark) {
-            [data-testid="stSidebar"], 
-            [data-testid="stSidebar"] > div:first-child,
-            [data-testid="stSidebarNav"],
-            [data-testid="stSidebarUserContent"],
-            section[data-testid="stSidebar"] {
-                background-color: #0E1117 !important; /* Force Solid Dark for Dark Mode */
-            }
-        }
-        
         [data-testid="stSidebar"] {
-            border-right: 1px solid rgba(128, 128, 128, 0.2);
+            border-right: 1px solid rgba(128, 128, 128, 0.1);
             box-shadow: none !important;
         }
         
-        /* Sidebar General Text & Elements - Default Contrast */
-        [data-testid="stSidebar"] * {
+        /* Sidebar General Text & Hierarchy */
+        [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+        [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+        [data-testid="stSidebar"] .stRadio label,
+        [data-testid="stSidebar"] label {
             color: var(--text-color) !important;
+            font-weight: 500 !important;
         }
-        
-        /* Sidebar Expander & Metric Box - High Contrast Over Theme */
+
+        /* Sidebar Expander & Metric Box - Lighter than Background */
         [data-testid="stSidebar"] [data-testid="stExpander"], 
         [data-testid="stSidebar"] [data-testid="stExpander"] details {
             background-color: var(--secondary-background-color) !important;
-            border: 1px solid rgba(128, 128, 128, 0.1) !important;
-            border-radius: 10px;
-            margin-bottom: 10px;
+            border: 1px solid rgba(128, 128, 128, 0.15) !important;
+            border-radius: 12px;
+            margin-bottom: 12px;
+            overflow: hidden;
         }
         
-        /* Sidebar Titles & Labels */
-        [data-testid="stSidebar"] [data-testid="stExpander"] summary,
-        [data-testid="stSidebar"] [data-testid="stExpander"] summary *,
-        [data-testid="stSidebar"] [data-testid="stExpander"] label,
-        [data-testid="stSidebar"] [data-testid="stExpander"] div[data-testid="stMarkdownContainer"] p,
-        [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
-        [data-testid="stSidebar"] .stRadio label {
-            color: var(--text-color) !important;
-            font-weight: 600 !important;
-        }
         [data-testid="stSidebar"] [data-testid="stExpander"] summary {
-            font-weight: 900 !important;
-        }
-        
-        /* Expander Input Border - Distinct Contrast */
-        [data-testid="stSidebar"] [data-testid="stExpander"] div[data-testid="stNumberInput"] > div:last-child {
-            border: 1px solid rgba(128, 128, 128, 0.3) !important;
-            border-radius: 4px !important;
-            background-color: var(--background-color) !important;
-            overflow: hidden !important;
-        }
-        [data-testid="stSidebar"] [data-testid="stExpander"] input {
+            background-color: rgba(128, 128, 128, 0.05) !important;
+            padding: 8px 12px !important;
+            font-weight: 700 !important;
             color: var(--text-color) !important;
         }
-        [data-testid="stSidebar"] [data-testid="stExpander"] div[data-baseweb="base-input"],
-        [data-testid="stSidebar"] [data-testid="stExpander"] div[data-baseweb="input"] {
+        
+        /* Sidebar Input/Selectbox Styling for Dark Mode */
+        [data-testid="stSidebar"] div[data-baseweb="select"],
+        [data-testid="stSidebar"] div[data-baseweb="input"],
+        [data-testid="stSidebar"] div[data-baseweb="base-input"] {
+            background-color: rgba(128, 128, 128, 0.08) !important;
+            border: 1px solid rgba(128, 128, 128, 0.2) !important;
+            border-radius: 8px !important;
+            color: var(--text-color) !important;
+        }
+
+        /* Expander Number Input Specifics */
+        [data-testid="stSidebar"] [data-testid="stExpander"] div[data-testid="stNumberInput"] > div:last-child {
             border: none !important;
             background-color: transparent !important;
-            box-shadow: none !important;
         }
-        
+
         /* Number Input Step Buttons - Maintain Premium Blue Gradient */
-        [data-testid="stSidebar"] [data-testid="stExpander"] button[data-testid="stNumberInputStepUp"],
-        [data-testid="stSidebar"] [data-testid="stExpander"] button[data-testid="stNumberInputStepDown"] {
+        [data-testid="stSidebar"] button[data-testid="stNumberInputStepUp"],
+        [data-testid="stSidebar"] button[data-testid="stNumberInputStepDown"] {
             background: linear-gradient(90deg, #00AAFF 0%, #0055FF 100%) !important;
-            border-radius: 2px !important;
+            border-radius: 4px !important;
             border: none !important;
+            width: 25px !important;
+            height: 25px !important;
+            margin: 2px !important;
         }
-        [data-testid="stSidebar"] [data-testid="stExpander"] button[data-testid="stNumberInputStepUp"] svg,
-        [data-testid="stSidebar"] [data-testid="stExpander"] button[data-testid="stNumberInputStepDown"] svg {
+        [data-testid="stSidebar"] button[data-testid="stNumberInputStepUp"] svg,
+        [data-testid="stSidebar"] button[data-testid="stNumberInputStepDown"] svg {
             fill: #ffffff !important;
             color: #ffffff !important;
         }
