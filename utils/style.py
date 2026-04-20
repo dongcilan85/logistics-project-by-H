@@ -138,6 +138,12 @@ def apply_premium_style():
             transform: scale(1.01);
         }
 
+        /* [Folded Card Styling] - 접힌 상태를 명확히 구분 */
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.folded-card-marker) {
+            background-color: rgba(128, 128, 128, 0.08) !important;
+            border: 1px dashed rgba(128, 128, 128, 0.2) !important;
+        }
+
         /* Divider */
         hr {
             border: 0;

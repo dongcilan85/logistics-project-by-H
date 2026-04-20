@@ -231,18 +231,17 @@ def render_active_tasks(place):
             gap: 0.5rem !important;
         }
 
-        /* 왼쪽 영역 (현장명) */
-        div[data-testid="stHorizontalBlock"]:has(.mobile-inline-card):not(:has(div[data-testid="stHorizontalBlock"])) > div:nth-child(1) {
+        /* 자식 영역들 간격 및 가변 폭 설정 */
+        div[data-testid="stHorizontalBlock"]:has(.mobile-inline-card):not(:has(div[data-testid="stHorizontalBlock"])) > div {
             flex: 1 1 auto !important;
             width: auto !important;
             min-width: 0 !important;
         }
 
-        /* 오른쪽 영역 (접기 버튼) */
-        div[data-testid="stHorizontalBlock"]:has(.mobile-inline-card):not(:has(div[data-testid="stHorizontalBlock"])) > div:nth-child(2) {
+        /* 마지막 영역 (접기/펼치기 버튼) 우측 정렬 및 폭 고정 */
+        div[data-testid="stHorizontalBlock"]:has(.mobile-inline-card):not(:has(div[data-testid="stHorizontalBlock"])) > div:last-child {
             flex: 0 0 auto !important;
             width: auto !important;
-            min-width: 0 !important;
             display: flex !important;
             justify-content: flex-end !important;
         }
@@ -290,24 +289,39 @@ def render_active_tasks(place):
                                 note_text = item.get('content', "")
                                 break
                     
-                    # 타이틀과 접기 버튼을 상단에 최대한 콤팩트하게 배치 (비율 조정)
-                    t_col1, t_col2 = st.columns([7.0, 3.0])
-                    with t_col1:
-                        st.markdown("<span class='mobile-inline-card'></span>", unsafe_allow_html=True)
-                        st.write(f"🆔 **{task['session_name']}**")
-                    with t_col2:
-                        fold_label = "접기" if not st.session_state[fold_key] else "펼치기"
-                        if st.button(fold_label, key=f"fold_btn_{task['id']}", help="접기/펼치기", use_container_width=False):
-                            st.session_state[fold_key] = not st.session_state[fold_key]
-                            st.rerun()
+                    # 타이틀과 접기 버튼 레이아웃
+                    if st.session_state[fold_key]:
+                        # [접힌 상태] 현장명 - 작업명 - 펼치기 버튼 순으로 3단 구성
+                        st.markdown("<div class='folded-card-marker'></div>", unsafe_allow_html=True)
+                        f_t1, f_t2, f_t3 = st.columns([3.5, 4.5, 2.0])
+                        with f_t1:
+                            st.markdown("<span class='mobile-inline-card'></span>", unsafe_allow_html=True)
+                            st.write(f"🆔 **{task['session_name']}**")
+                        with f_t2:
+                            st.write(f"**{task['task_type']}**")
+                        with f_t3:
+                            if st.button("펼치기", key=f"fold_btn_{task['id']}", help="접기/펼치기", use_container_width=False):
+                                st.session_state[fold_key] = False
+                                st.rerun()
+                    else:
+                        # [펼쳐진 상태] 기존 2단 구성 (작업명은 아래에 별도 표시)
+                        t_col1, t_col2 = st.columns([7.0, 3.0])
+                        with t_col1:
+                            st.markdown("<span class='mobile-inline-card'></span>", unsafe_allow_html=True)
+                            st.write(f"🆔 **{task['session_name']}**")
+                        with t_col2:
+                            if st.button("접기", key=f"fold_btn_{task['id']}", help="접기/펼치기", use_container_width=False):
+                                st.session_state[fold_key] = True
+                                st.rerun()
                     
                     # 메모 버튼을 아래 줄에 배치 (가로 공간 확보)
                     note_label = f"📝 {note_text[:25]}..." if len(note_text) > 25 else f"📝 {note_text}" if note_text else "📝 메모 추가"
                     if st.button(note_label, key=f"note_btn_{task['id']}", help=note_text if note_text else "메모 작성/보기", use_container_width=True):
                         note_dialog(task)
                     
-                    # 작업명 요약 (접힌 상태에서도 표시)
-                    st.write(f"**{task['task_type']}**")
+                    if not st.session_state[fold_key]:
+                        # 작업명 요약 (펼쳐진 상태에서만 아래에 별도 표시)
+                        st.write(f"**{task['task_type']}**")
                     
                     if not st.session_state[fold_key]:
                         # [펼쳐진 상태] 상세 정보 및 제어 버튼 표시
