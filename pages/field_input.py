@@ -221,32 +221,34 @@ def render_active_tasks(place):
     # CSS hack: 전역 수준에서 카드 헤더 최적화 적용
     st.markdown("""
         <style>
-        /* 1. 모바일에서도 강제로 한 줄 유지 (미디어 쿼리 상속 차단) */
-        [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] {
+        /* 1. 모바일 줄바꿈 차단: 특정 식별자(.mobile-inline-card)가 있는 블록 강제 덮어쓰기 */
+        div[data-testid="stHorizontalBlock"]:has(.mobile-inline-card) {
             display: flex !important;
-            flex-wrap: nowrap !important;
             flex-direction: row !important;
+            flex-wrap: nowrap !important;
             align-items: center !important;
+            width: 100% !important;
             gap: 0.5rem !important;
         }
 
-        @media (max-width: 768px) {
-            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] {
-                flex-direction: row !important;
-                flex-wrap: nowrap !important;
-            }
-            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="column"] {
-                width: auto !important;
-                min-width: auto !important;
-                flex: 0 0 auto !important;
-            }
-            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="column"]:first-child {
-                flex: 1 1 auto !important;
-                overflow: hidden !important;
-            }
+        /* 왼쪽 영역 (현장명) */
+        div[data-testid="stHorizontalBlock"]:has(.mobile-inline-card) > div:nth-child(1) {
+            flex: 1 1 auto !important;
+            width: auto !important;
+            min-width: 0 !important;
         }
 
-        /* 2. 버튼 스타일 완전 초기화 (모든 틀 제거) */
+        /* 오른쪽 영역 (접기 버튼) */
+        div[data-testid="stHorizontalBlock"]:has(.mobile-inline-card) > div:nth-child(2) {
+            flex: 0 0 auto !important;
+            width: auto !important;
+            min-width: 0 !important;
+            display: flex !important;
+            justify-content: flex-end !important;
+        }
+
+        /* 2. 버튼 스타일 완전 초기화 */
+        div[data-testid="stHorizontalBlock"]:has(.mobile-inline-card) .stButton button,
         [data-testid="stVerticalBlockBorderWrapper"] .stButton button {
             background: transparent !important;
             border: none !important;
@@ -291,6 +293,7 @@ def render_active_tasks(place):
                     # 타이틀과 접기 버튼을 상단에 최대한 콤팩트하게 배치 (비율 조정)
                     t_col1, t_col2 = st.columns([7.0, 3.0])
                     with t_col1:
+                        st.markdown("<span class='mobile-inline-card'></span>", unsafe_allow_html=True)
                         st.write(f"🆔 **{task['session_name']}**")
                     with t_col2:
                         fold_label = "접기" if not st.session_state[fold_key] else "펼치기"
