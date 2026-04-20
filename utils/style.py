@@ -45,6 +45,11 @@ def apply_premium_style():
             color: var(--sb-txt) !important;
         }
 
+        /* 3. 주요 액션 버튼 예외 처리 (파란색 배경이므로 항상 흰색 텍스트 유지) */
+        [data-testid="stSidebar"] .stButton > button {
+            color: white !important;
+        }
+
         /* Sidebar Expander & Metric Box - Lighter than Background */
         [data-testid="stSidebar"] [data-testid="stExpander"], 
         [data-testid="stSidebar"] [data-testid="stExpander"] details {
