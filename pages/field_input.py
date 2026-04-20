@@ -230,15 +230,19 @@ def render_active_tasks(place):
             gap: 0.5rem !important;
         }
 
-        @media (max-width: 640px) {
-            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] > div {
-                flex-basis: auto !important;
-                flex-grow: 0 !important;
-                width: auto !important;
+        @media (max-width: 768px) {
+            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] {
+                flex-direction: row !important;
+                flex-wrap: nowrap !important;
             }
-            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] > div:first-child {
-                flex-grow: 1 !important;
-                min-width: 0 !important;
+            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="column"] {
+                width: auto !important;
+                min-width: auto !important;
+                flex: 0 0 auto !important;
+            }
+            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="column"]:first-child {
+                flex: 1 1 auto !important;
+                overflow: hidden !important;
             }
         }
 
