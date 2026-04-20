@@ -238,7 +238,7 @@ def render_active_tasks(place):
             width: fit-content !important;
         }
         /* 접기 버튼 텍스트화 (배경/테두리 제거 및 현장명 스타일 통일) */
-        [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="column"]:last-child button {
+        [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] div[data-testid="stColumn"]:last-child button {
             background-color: transparent !important;
             border: none !important;
             padding: 0 !important;
@@ -248,6 +248,8 @@ def render_active_tasks(place):
             box-shadow: none !important;
             min-height: unset !important;
             line-height: inherit !important;
+            width: 100% !important;
+            text-align: right !important;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -277,8 +279,8 @@ def render_active_tasks(place):
                                 note_text = item.get('content', "")
                                 break
                     
-                    # 타이틀과 접기 버튼을 상단에 최대한 콤팩트하게 배치
-                    t_col1, t_col2 = st.columns([10, 1])
+                    # 타이틀과 접기 버튼을 상단에 최대한 콤팩트하게 배치 (비율 조정)
+                    t_col1, t_col2 = st.columns([8.5, 1.5])
                     with t_col1:
                         st.write(f"🆔 **{task['session_name']}**")
                     with t_col2:
