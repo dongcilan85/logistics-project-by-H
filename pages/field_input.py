@@ -244,24 +244,30 @@ def render_cat_detail():
         else:
             for root in root_tasks:
                 with st.container(border=True):
-                                        elif adj_mode == "차감 (-)": new_acc_sec = max(0, new_acc_sec - adj_mins * 60)
-
-                                        supabase.table("active_tasks").update({
-                                            "quantity": c_target,
-                                            "completed_quantity": c_prog,
-                                            "accumulated_seconds": new_acc_sec
-                                        }).eq("id", task['id']).execute()
-                                        st.success("보정 내용이 반영되었습니다."); time.sleep(0.5); st.rerun()
-                                    except Exception as e:
-                                        st.error(f"보정 중 오류가 발생했습니다: {e}")
-                                        st.stop()
-
-                            if c1.button("▶️ 재개", key=f"r_{task['id']}", use_container_width=True, type="primary"):
-                                supabase.table("active_tasks").update({"status": "running", "last_started_at": datetime.now(KST).isoformat()}).eq("id", task['id']).execute()
-                                st.rerun()
-
-                        if c2.button("🏁 종료", key=f"e_{task['id']}", type="primary", use_container_width=True):
-                            confirm_finish_dialog(task, curr_w, selected_place)
+                    st.write(f"### 🛠️ 작업 그룹 #{root['id']}")
+                    # 부모 현장 표시
+                    render_site_control(root)
+                    
+                    # 자식 현장들 표시
+                    children = [t for t in all_tasks if t.get('parent_id') == root['id']]
+                    for child in children:
+                        render_site_control(child)
+                    
+                    # 현장 추가 버튼 (그룹 하단)
+                    if st.button(f"➕ {root['session_name']}에 현장 추가", key=f"add_site_{root['id']}", use_container_width=True):
+                        add_site_dialog(root)
+        
+        # 하단 고정 푸터 영역
+        st.markdown('<div class="spacer"></div>', unsafe_allow_html=True)
+        st.markdown('<div class="sticky-bottom"></div>', unsafe_allow_html=True)
+        
+        if st.button("🚀 신규 작업 생성 (+)", use_container_width=True, type="primary"):
+            create_task_dialog(cat)
+            
     except Exception as e: st.error(f"데이터 로드 오류: {e}")
 
-render_active_tasks(selected_place)
+# --- 💡 메인 라우터 ---
+if st.session_state.view == "cat_list":
+    render_cat_list()
+else:
+    render_cat_detail()
