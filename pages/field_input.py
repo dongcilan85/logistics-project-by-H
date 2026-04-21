@@ -122,17 +122,24 @@ st.markdown("""
         min-height: 40px; 
     }
 
-    /* 종료 버튼: 강제 오렌지 색상 적용 */
+    /* 종료 버튼: 강제 오렌지 색상 및 정렬 보정 */
+    .orange-button {
+        display: flex;
+        align-items: center;
+        height: 100%;
+    }
+    .orange-button .stButton { width: 100%; }
     .orange-button .stButton > button {
         background-color: #FF8C00 !important;
         color: white !important;
         border: none !important;
         font-weight: bold !important;
+        width: 100% !important;
+        height: 45px !important; /* 높이 고정 */
     }
-    .orange-button .stButton > button:hover {
-        background-color: #E67E00 !important;
-        color: white !important;
-    }
+    
+    /* 일반 버튼 높이 고정 (정렬용) */
+    .stButton > button { height: 45px !important; }
 
     .site-card { border: 1px solid #444; border-radius: 8px; padding: 10px; margin-bottom: 10px; background: rgba(255,255,255,0.05); }
     </style>
@@ -266,14 +273,26 @@ def render_site_control(task):
         r2_c1, r2_c2, r2_c3 = st.columns(3)
         
         with r2_c1:
-            if st.button("수정", key=f"edit_btn_{task['id']}", use_container_width=True):
-                edit_task_dialog(task)
+            with st.expander("정보수정"):
+                cur_h, cur_m = int(total_sec // 3600), int((total_sec % 3600) // 60)
+                n_h = st.number_input("시간", 0, 24, cur_h, key=f"nh_{task['id']}")
+                n_m = st.number_input("분", 0, 59, cur_m, key=f"nm_{task['id']}")
+                n_w = st.number_input("인원", 1, 100, int(task['workers']), key=f"nw_{task['id']}")
+                n_q = st.number_input("목표", 0, 100000, int(task['quantity']), key=f"nq_{task['id']}")
+                if st.button("수정저장", key=f"save_{task['id']}", use_container_width=True):
+                    new_sec = (n_h * 3600) + (n_m * 60)
+                    supabase.table("active_tasks").update({
+                        "workers": n_w, "quantity": n_q, "accumulated_seconds": int(new_sec),
+                        "last_started_at": datetime.now(KST).isoformat() if task['status'] == 'running' else task['last_started_at']
+                    }).eq("id", task['id']).execute(); st.rerun()
         
         with r2_c2:
             if task['status'] == "running":
                 if st.button("정지", key=f"p_{task['id']}", use_container_width=True):
                     now = datetime.now(KST)
-                    new_segs = split_man_seconds_by_date(datetime.fromisoformat(task['last_started_at']), now, task['workers'])
+                    # 정지 로직 재검증
+                    last_start = datetime.fromisoformat(task['last_started_at'])
+                    new_segs = split_man_seconds_by_date(last_start, now, task['workers'])
                     supabase.table("active_tasks").update({
                         "status": "paused", 
                         "accumulated_seconds": int(total_sec), 
