@@ -19,7 +19,7 @@ url = st.secrets["supabase"]["url"]
 key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 st.sidebar.caption(f"🔌 Connected to: {url[:25]}...")
-st.sidebar.caption(f"🚀 Version: 21-14:45")
+st.sidebar.caption(f"🚀 Version: 21-15:20")
 KST = timezone(timedelta(hours=9))
 
 if "role" not in st.session_state:

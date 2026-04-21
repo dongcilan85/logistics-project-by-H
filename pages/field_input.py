@@ -112,14 +112,12 @@ st.markdown("""
         min-height: 40px; 
     }
 
-    /* 메모 미리보기 */
-    .note-preview {
-        background: rgba(255, 165, 0, 0.1);
-        border-left: 3px solid #ffa500;
-        padding: 5px 10px;
-        font-size: 0.85rem;
-        margin-top: 10px;
-        border-radius: 4px;
+    /* 메모 버튼 스타일: 흰색 배경, 검정 글씨 */
+    .white-button div.stButton > button {
+        background-color: white !important;
+        color: black !important;
+        border: 1px solid #ccc !important;
+        font-weight: bold !important;
     }
 
     .site-card { border: 1px solid #444; border-radius: 8px; padding: 10px; margin-bottom: 10px; background: rgba(255,255,255,0.05); }
@@ -214,7 +212,9 @@ def render_site_control(task):
         c_h1, c_h2 = st.columns([7, 3])
         with c_h1: st.write(f"🚩 **{task['session_name']}**")
         with c_h2: 
+            st.markdown('<div class="white-button">', unsafe_allow_html=True)
             if st.button("📝 메모", key=f"note_{task['id']}", use_container_width=True): note_dialog(task)
+            st.markdown('</div>', unsafe_allow_html=True)
         
         # 메모 미리보기
         history = task.get('work_history', [])
@@ -311,8 +311,12 @@ def render_cat_detail():
         if not root_tasks: st.info("진행 중인 작업이 없습니다.")
         else:
             for root in root_tasks:
+                # 메모 미리보기 추출 (헤더 표시용)
+                root_note = next((i['content'] for i in (root.get('work_history', []) or []) if isinstance(i, dict) and i.get('type') == 'note'), "")
+                header_note = f" | 📝 {root_note[:15]}..." if root_note else ""
+                
                 # 작업 그룹명 변경 및 접기/펼치기(expander) 적용
-                with st.expander(f"🛠️ {cat} #{root['id']}", expanded=True):
+                with st.expander(f"🛠️ {cat} #{root['id']}{header_note}", expanded=True):
                     render_site_control(root)
                     children = [t for t in all_tasks if t.get('parent_id') == root['id']]
                     for child in children: render_site_control(child)
