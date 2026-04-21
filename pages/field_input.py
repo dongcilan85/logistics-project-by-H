@@ -41,20 +41,22 @@ def get_config(key, default):
 def get_dynamic_hierarchy():
     try:
         res = supabase.table("task_categories").select("main_category, sub_category").execute()
-        categories = []
+        hierarchy = {}
         for row in res.data:
             main = row['main_category']
             sub = row['sub_category']
-            label = f"{main} ({sub})" if sub else main
-            categories.append(label)
-        return sorted(list(set(categories)))
-    except: return []
+            if main not in hierarchy: hierarchy[main] = []
+            if sub and sub not in hierarchy[main]:
+                hierarchy[main].append(sub)
+        return hierarchy
+    except: return {}
 
 # --- 💡 세션 상태 관리 (내비게이션) ---
 if "view" not in st.session_state: st.session_state.view = "cat_list"
+if "selected_main" not in st.session_state: st.session_state.selected_main = None
 if "selected_category" not in st.session_state: st.session_state.selected_category = None
 
-# CSS: 모바일 상단/하단 고정바 및 레이아웃 최적화
+# CSS: 모바일 및 그리드 최적화
 st.markdown("""
     <style>
     /* 상단 고정 헤더 */
@@ -68,14 +70,45 @@ st.markdown("""
         background: #121212; z-index: 1000; padding: 10px; border-top: 1px solid #333;
     }
     .spacer { height: 60px; }
-    /* 버튼 텍스트 정렬 */
-    div.stButton > button { text-align: left !important; justify-content: flex-start !important; padding-left: 15px !important; }
+    
+    /* 정사각형 그리드 버튼 스타일 */
+    .grid-container {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+        padding: 10px 0;
+    }
+    
+    div.stButton > button {
+        width: 100% !important;
+        height: auto !important;
+        aspect-ratio: 1.1 / 1 !important; /* 약간의 여유를 둔 정사각형 */
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        text-align: center !important;
+        font-size: 1.1rem !important;
+        font-weight: bold !important;
+        border-radius: 12px !important;
+        background: rgba(255, 255, 255, 0.05) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        padding: 10px !important;
+        white-space: normal !important;
+    }
+    
+    div.stButton > button:hover {
+        background: rgba(255, 255, 255, 0.1) !important;
+        border-color: #00d4ff !important;
+        color: #00d4ff !important;
+    }
+
     /* 작업 카드 내부 간격 */
     .site-card { border: 1px solid #444; border-radius: 8px; padding: 10px; margin-bottom: 10px; background: rgba(255,255,255,0.05); }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 💡 다이얼로그 (메모/종료) ---
+# --- 💡 다이얼로그 (메모/종료/생성) ---
 @st.dialog("📝 작업 노트")
 def note_dialog(task):
     history = task.get('work_history', [])
@@ -90,18 +123,18 @@ def note_dialog(task):
     new_note = st.text_area("특이사항", value=current_note, height=150)
     
     c1, c2 = st.columns(2)
-    if c1.button("💾 저장", use_container_width=True, type="primary"):
+    if c1.button("💾 저장", key="save_note_btn", use_container_width=True, type="primary"):
         new_history = [item for item in (history or []) if not (isinstance(item, dict) and item.get('type') == 'note')]
         if new_note.strip(): new_history.append({"type": "note", "content": new_note.strip()})
         supabase.table("active_tasks").update({"work_history": new_history}).eq("id", task['id']).execute()
         st.rerun()
-    if c2.button("❌ 닫기", use_container_width=True): st.rerun()
+    if c2.button("❌ 닫기", key="close_note_btn", use_container_width=True): st.rerun()
 
 @st.dialog("🏁 작업 종료 확인")
 def confirm_finish_dialog(task, curr_w):
     st.write("⚠️ 이 현장의 작업을 종료하시겠습니까?")
     c1, c2 = st.columns(2)
-    if c1.button("✅ 예", use_container_width=True, type="primary"):
+    if c1.button("✅ 예", key=f"conf_y_{task['id']}", use_container_width=True, type="primary"):
         try:
             now = datetime.now(KST)
             history = task.get('work_history', []) or []
@@ -114,19 +147,20 @@ def confirm_finish_dialog(task, curr_w):
                 final_h = update_history_map(final_h, new_segs)
             
             total_man_sec = sum(i['man_seconds'] for i in final_h)
-            for entry in final_h:
-                weight = entry['man_seconds'] / total_man_sec if total_man_sec > 0 else 0
-                supabase.table("work_logs").insert({
-                    "work_date": entry['date'], "task": task['task_type'],
-                    "workers": task['workers'], "quantity": round(task['quantity'] * weight),
-                    "duration": round(entry['man_seconds'] / 3600, 2), "plan_id": task.get('plan_id'),
-                    "applied_wage": get_config("hourly_wage", 10000), "memo": f"현장: {task['session_name']} / {note_content}"
-                }).execute()
+            if total_man_sec > 0:
+                for entry in final_h:
+                    weight = entry['man_seconds'] / total_man_sec
+                    supabase.table("work_logs").insert({
+                        "work_date": entry['date'], "task": task['task_type'],
+                        "workers": task['workers'], "quantity": round(task['quantity'] * weight),
+                        "duration": round(entry['man_seconds'] / 3600, 2), "plan_id": task.get('plan_id'),
+                        "applied_wage": get_config("hourly_wage", 10000), "memo": f"현장: {task['session_name']} / {note_content}"
+                    }).execute()
             
             supabase.table("active_tasks").delete().eq("id", task['id']).execute()
             st.rerun()
         except Exception as e: st.error(f"오류: {e}")
-    if c2.button("❌ 아니오", use_container_width=True): st.rerun()
+    if c2.button("❌ 아니오", key=f"conf_n_{task['id']}", use_container_width=True): st.rerun()
 
 @st.dialog("➕ 신규 작업 생성")
 def create_task_dialog(cat):
@@ -135,7 +169,7 @@ def create_task_dialog(cat):
     workers = st.number_input("투입 인원", min_value=1, value=1)
     qty = st.number_input("목표 물량", min_value=0, value=0)
     
-    if st.button("🚀 기록 시작", use_container_width=True, type="primary"):
+    if st.button("🚀 기록 시작", key="start_new_task_btn", use_container_width=True, type="primary"):
         if not place: st.error("현장명을 입력해 주세요.")
         else:
             supabase.table("active_tasks").insert({
@@ -151,7 +185,7 @@ def add_site_dialog(parent_task):
     workers = st.number_input("현장 투입 인원", min_value=1, value=1)
     qty = st.number_input("해당 현장 물량", min_value=0, value=0)
     
-    if st.button("➕ 현장 추가 확정", use_container_width=True, type="primary"):
+    if st.button("➕ 현장 추가 확정", key=f"confirm_add_site_{parent_task['id']}", use_container_width=True, type="primary"):
         if not place: st.error("현장명을 입력해 주세요.")
         else:
             supabase.table("active_tasks").insert({
@@ -197,43 +231,82 @@ def render_site_control(task):
         
         if b2.button("🏁", key=f"e_{task['id']}", use_container_width=True): confirm_finish_dialog(task, task['workers'])
         
-        # 접기/펼치기 대용: 상세 설정 (인원/수량 수정)
+        # 상세 설정 수정
         with st.expander("⚙️ 수정"):
             n_w = st.number_input("인원", 1, 100, int(task['workers']), key=f"nw_{task['id']}")
             n_q = st.number_input("물량", 0, 100000, int(task['quantity']), key=f"nq_{task['id']}")
-            if st.button("확인", key=f"save_{task['id']}", use_container_width=True):
+            if st.button("확정", key=f"save_{task['id']}", use_container_width=True):
                 supabase.table("active_tasks").update({"workers": n_w, "quantity": n_q}).eq("id", task['id']).execute(); st.rerun()
 
 def render_cat_list():
-    st.write("### 📂 작업 카테고리 선택")
-    cats = get_dynamic_hierarchy()
-    if not cats: st.info("등록된 카테고리가 없습니다.")
-    for cat in cats:
-        if st.button(f"📁 {cat}", key=f"cat_{cat}", use_container_width=True):
-            st.session_state.view = "cat_detail"
-            st.session_state.selected_category = cat
-            st.rerun()
+    st.write("### 📂 대분류 선택")
+    hierarchy = get_dynamic_hierarchy()
+    if not hierarchy: 
+        st.info("등록된 카테고리가 없습니다.")
+        return
+        
+    main_cats = sorted(list(hierarchy.keys()))
+    
+    # 2열 그리드 레이아웃
+    for i in range(0, len(main_cats), 2):
+        row = main_cats[i:i+2]
+        cols = st.columns(2)
+        for idx, cat in enumerate(row):
+            if cols[idx].button(f"📁 {cat}", key=f"main_{cat}", use_container_width=True):
+                st.session_state.selected_main = cat
+                # 소분류가 없으면 즉시 선택 완료, 있으면 소분류 리스트로
+                subs = hierarchy[cat]
+                if not subs:
+                    st.session_state.selected_category = cat
+                    st.session_state.view = "cat_detail"
+                else:
+                    st.session_state.view = "sub_list"
+                st.rerun()
+
+def render_sub_list():
+    main = st.session_state.selected_main
+    st.write(f"### 📂 {main} > 소분류 선택")
+    
+    # 상단 뒤로가기 (소분류 전용)
+    if st.button("⬅️ 대분류로", key="back_to_main", use_container_width=True):
+        st.session_state.view = "cat_list"
+        st.rerun()
+    st.divider()
+
+    hierarchy = get_dynamic_hierarchy()
+    subs = sorted(hierarchy.get(main, []))
+    
+    # 2열 그리드 레이아웃
+    for i in range(0, len(subs), 2):
+        row = subs[i:i+2]
+        cols = st.columns(2)
+        for idx, sub in enumerate(row):
+            if cols[idx].button(f"└ {sub}", key=f"sub_{main}_{sub}", use_container_width=True):
+                st.session_state.selected_category = f"{main} ({sub})"
+                st.session_state.view = "cat_detail"
+                st.rerun()
 
 @st.fragment(run_every=1)
 def render_cat_detail():
     cat = st.session_state.selected_category
     
-    # 상단 고정 헤더 영역
-    st.markdown('<div class="spacer"></div>', unsafe_allow_html=True)
+    # 상단 고정 헤더
     st.markdown(f"""
         <div class="sticky-top">
-            <h4 style="margin:0; float:left;">📌 {cat}</h4>
+            <h4 style="margin:0;">📌 {cat}</h4>
         </div>
+        <div class="spacer"></div>
     """, unsafe_allow_html=True)
     
-    # 상단 버튼들은 Sticky 바 안에서 작동이 어려우므로 바 바로 아래에 배치
-    if st.button("⬅️ 카테고리 목록으로", use_container_width=True):
+    if st.button("⬅️ 처음으로", key="back_to_start", use_container_width=True):
         st.session_state.view = "cat_list"
+        st.session_state.selected_main = None
+        st.session_state.selected_category = None
         st.rerun()
     
     st.divider()
     
-    # 작업 그룹 조회 (parent_id가 없는 것이 그룹의 시작)
+    # 작업 그룹 조회
     try:
         res = supabase.table("active_tasks").select("*").eq("task_type", cat).execute()
         all_tasks = res.data
@@ -245,29 +318,27 @@ def render_cat_detail():
             for root in root_tasks:
                 with st.container(border=True):
                     st.write(f"### 🛠️ 작업 그룹 #{root['id']}")
-                    # 부모 현장 표시
                     render_site_control(root)
                     
-                    # 자식 현장들 표시
                     children = [t for t in all_tasks if t.get('parent_id') == root['id']]
                     for child in children:
                         render_site_control(child)
                     
-                    # 현장 추가 버튼 (그룹 하단)
-                    if st.button(f"➕ {root['session_name']}에 현장 추가", key=f"add_site_{root['id']}", use_container_width=True):
+                    if st.button(f"➕ 현장 추가", key=f"add_site_{root['id']}", use_container_width=True):
                         add_site_dialog(root)
-        
-        # 하단 고정 푸터 영역
-        st.markdown('<div class="spacer"></div>', unsafe_allow_html=True)
-        st.markdown('<div class="sticky-bottom"></div>', unsafe_allow_html=True)
-        
-        if st.button("🚀 신규 작업 생성 (+)", use_container_width=True, type="primary"):
-            create_task_dialog(cat)
-            
     except Exception as e: st.error(f"데이터 로드 오류: {e}")
+
+    # 하단 고정 푸터 영역 (여백 확보)
+    st.markdown('<div class="spacer"></div><div class="sticky-bottom">', unsafe_allow_html=True)
+    # 실제 버튼 렌더링
+    if st.button("🚀 신규 작업 생성 (+)", key="footer_create_btn", use_container_width=True, type="primary"):
+        create_task_dialog(cat)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # --- 💡 메인 라우터 ---
 if st.session_state.view == "cat_list":
     render_cat_list()
+elif st.session_state.view == "sub_list":
+    render_sub_list()
 else:
     render_cat_detail()
