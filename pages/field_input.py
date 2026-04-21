@@ -56,7 +56,7 @@ if "view" not in st.session_state: st.session_state.view = "cat_list"
 if "selected_main" not in st.session_state: st.session_state.selected_main = None
 if "selected_category" not in st.session_state: st.session_state.selected_category = None
 
-# CSS: 정밀 그리드 스타일 및 환경 격리
+# CSS: 정밀 그리드 및 반응형 레이아웃
 st.markdown("""
     <style>
     .sticky-top {
@@ -69,20 +69,37 @@ st.markdown("""
     }
     .spacer { height: 60px; }
     
-    /* 4열 정사각형 그리드 버튼 (격리된 클래스 사용) */
+    /* 4열/2열 반응형 정사각형 그리드 (격리된 클래스 사용) */
     .square-grid div.stButton > button {
         aspect-ratio: 1 / 1 !important;
         width: 100% !important;
         padding: 5px !important;
-        font-size: 0.85rem !important;
+        font-size: 0.9rem !important;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
         text-align: center !important;
         white-space: normal !important;
-        border-radius: 8px !important;
+        border-radius: 12px !important;
         background: rgba(255, 255, 255, 0.05) !important;
-        margin-bottom: 0px !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        margin-bottom: 5px !important;
+    }
+
+    /* 모바일 반응형: 2열로 강제 조정 */
+    @media (max-width: 768px) {
+        .square-grid [data-testid="stHorizontalBlock"] {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            gap: 10px !important;
+        }
+        .square-grid [data-testid="stHorizontalBlock"] > div {
+            flex: 1 0 45% !important; /* 약 2열 배치 */
+            min-width: 0 !important;
+        }
+        .square-grid div.stButton > button {
+            font-size: 1rem !important; /* 모바일에서 텍스트 약간 크게 */
+        }
     }
     
     /* 일반 버튼 스타일 보존 */
