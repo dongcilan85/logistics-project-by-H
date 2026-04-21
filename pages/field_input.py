@@ -27,10 +27,20 @@ def split_man_seconds_by_date(start_dt, end_dt, workers):
     return history_map
 
 def update_history_map(current_history, new_segments):
-    h_dict = {item['date']: item['man_seconds'] for item in current_history} if current_history else {}
+    # 'date' 키가 있는 작업 기록만 필터링하여 처리
+    h_dict = {}
+    if current_history:
+        for item in current_history:
+            if isinstance(item, dict) and 'date' in item and 'man_seconds' in item:
+                h_dict[item['date']] = h_dict.get(item['date'], 0) + item['man_seconds']
+    
     for d, s in new_segments.items():
         h_dict[d] = h_dict.get(d, 0) + s
-    return [{"date": d, "man_seconds": s} for d, s in h_dict.items()]
+    
+    # 시간 기록 외의 다른 항목(메모 등) 유지
+    other_items = [item for item in (current_history or []) if not (isinstance(item, dict) and 'date' in item)]
+    new_history = [{"date": d, "man_seconds": s} for d, s in h_dict.items()]
+    return new_history + other_items
 
 def get_config(key, default):
     try:
