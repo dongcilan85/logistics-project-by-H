@@ -65,18 +65,25 @@ if "selected_category" not in st.session_state: st.session_state.selected_catego
 # CSS: 정밀 그리드 및 반응형 레이아웃
 st.markdown("""
     <style>
-    /* 상단/하단 고정 컨테이너 고도화 (Streamlit div 타겟팅) */
-    .header-anchor + div {
-        position: fixed; top: 0; left: 0; right: 0; 
-        background: #121212; z-index: 1000; padding: 10px 20px; border-bottom: 1px solid #333;
+    /* 강제 고정 레이아웃 (반응형 최적화) */
+    @media (min-width: 0px) {
+        /* 상단 고정: 첫 번째 주요 블록 타겟팅 */
+        header + div[data-testid="stVerticalBlock"] > div:nth-child(2) {
+            position: fixed !important; top: 0; left: 0; right: 0; 
+            z-index: 10000; background: #121212 !important; padding: 10px 20px;
+            border-bottom: 1px solid #333;
+        }
+        /* 하단 고정: 마지막 주요 블록 타겟턴 */
+        header + div[data-testid="stVerticalBlock"] > div:last-child {
+            position: fixed !important; bottom: 0; left: 0; right: 0;
+            z-index: 10000; background: #121212 !important; padding: 10px 20px;
+            border-top: 1px solid #333;
+        }
     }
-    .footer-anchor + div {
-        position: fixed; bottom: 0; left: 0; right: 0;
-        background: #121212; z-index: 1000; padding: 10px 20px; border-top: 1px solid #333;
-    }
+    
     /* 스크롤 영역 여백 확보 */
-    .scroll-spacer-top { height: 110px; }
-    .scroll-spacer-bottom { height: 80px; }
+    .scroll-spacer-top { height: 120px; }
+    .scroll-spacer-bottom { height: 90px; }
     
     /* 4열/2열 반응형 정사각형 그리드 */
     .square-grid div[data-testid="stHorizontalBlock"] {
