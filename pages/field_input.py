@@ -69,7 +69,11 @@ st.markdown("""
     }
     .spacer { height: 60px; }
     
-    /* 4열/2열 반응형 정사각형 그리드 (격리된 클래스 사용) */
+    /* 4열/2열 반응형 정사각형 그리드 */
+    .square-grid div[data-testid="stHorizontalBlock"] {
+        gap: 10px !important;
+    }
+    
     .square-grid div.stButton > button {
         aspect-ratio: 1 / 1 !important;
         width: 100% !important;
@@ -83,26 +87,21 @@ st.markdown("""
         border-radius: 12px !important;
         background: rgba(255, 255, 255, 0.05) !important;
         border: 1px solid rgba(255, 255, 255, 0.1) !important;
-        margin-bottom: 5px !important;
     }
 
-    /* 모바일 반응형: 2열로 강제 조정 */
+    /* 모바일 반응형: 컬럼 너비 강제 조정 (2열) */
     @media (max-width: 768px) {
-        .square-grid [data-testid="stHorizontalBlock"] {
-            display: flex !important;
-            flex-wrap: wrap !important;
-            gap: 10px !important;
-        }
-        .square-grid [data-testid="stHorizontalBlock"] > div {
-            flex: 1 0 45% !important; /* 약 2열 배치 */
+        div[data-testid="stColumn"] {
+            flex: 1 0 45% !important; /* 2열 배치 핵심 */
             min-width: 0 !important;
         }
         .square-grid div.stButton > button {
-            font-size: 1rem !important; /* 모바일에서 텍스트 약간 크게 */
+            font-size: 1rem !important;
+            padding: 2px !important;
         }
     }
     
-    /* 일반 버튼 스타일 보존 */
+    /* 일반 버튼 스타일 보존 (카드가 아닌 곳의 버튼들) */
     div.stButton > button { 
         min-height: 40px; 
     }
@@ -211,33 +210,23 @@ def render_site_control(task):
                 supabase.table("active_tasks").update({"workers": n_w, "quantity": n_q}).eq("id", task['id']).execute(); st.rerun()
 
 def render_cat_selector():
-    st.write("### 📂 카테고리 선택")
+    st.write("### 카테고리 선택")
     hierarchy = get_dynamic_hierarchy()
     if not hierarchy: st.info("등록된 카테고리가 없습니다."); return
     
-    # 1단계: 대분류 그리드
-    main_cats = sorted(list(hierarchy.keys()))
-    st.write("**[대분류]**")
-    st.markdown('<div class="square-grid">', unsafe_allow_html=True)
-    for i in range(0, len(main_cats), 4):
-        row = main_cats[i:i+4]
-        cols = st.columns(4)
-        for idx, cat in enumerate(row):
-            if cols[idx].button(cat, key=f"main_{cat}", use_container_width=True):
-                st.session_state.selected_main = cat
-                # 소분류가 없으면 즉시 선택
-                if not hierarchy[cat]:
-                    st.session_state.selected_category = cat
-                    st.session_state.view = "cat_detail"; st.rerun()
-                st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    # 2단계: 소분류 그리드 (대분류 선택 시 하단에 표시)
+    # 세션 상태에 따른 조건부 렌더링 (동선 최적화)
     if st.session_state.selected_main:
         main = st.session_state.selected_main
+        st.write(f"**[{main}] 항목 선택**")
+        
+        # 목록으로 돌아가기 버튼 (상단 배치)
+        if st.button("⬅️ 대분류 다시 선택", key="reset_main_selection", use_container_width=True):
+            st.session_state.selected_main = None; st.rerun()
+            
         st.divider()
-        st.write(f"**[{main}] 하위 선택**")
         subs = sorted(hierarchy.get(main, []))
+        
+        # 소분류 그리드
         st.markdown('<div class="square-grid">', unsafe_allow_html=True)
         for i in range(0, len(subs), 4):
             row = subs[i:i+4]
@@ -246,6 +235,23 @@ def render_cat_selector():
                 if cols[idx].button(sub, key=f"sub_{main}_{sub}", use_container_width=True):
                     st.session_state.selected_category = f"{main} ({sub})"
                     st.session_state.view = "cat_detail"; st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+    else:
+        # 대분류 그리드
+        main_cats = sorted(list(hierarchy.keys()))
+        st.write("**[대분류 선택]**")
+        st.markdown('<div class="square-grid">', unsafe_allow_html=True)
+        for i in range(0, len(main_cats), 4):
+            row = main_cats[i:i+4]
+            cols = st.columns(4)
+            for idx, cat in enumerate(row):
+                if cols[idx].button(cat, key=f"main_{cat}", use_container_width=True):
+                    st.session_state.selected_main = cat
+                    if not hierarchy[cat]:
+                        st.session_state.selected_category = cat
+                        st.session_state.view = "cat_detail"; st.rerun()
+                    st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
 @st.fragment(run_every=1)
