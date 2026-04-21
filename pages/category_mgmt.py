@@ -9,53 +9,69 @@ key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 
 apply_premium_style()
-st.markdown('<p class="main-header">📁 작업 카테고리 관리</p>', unsafe_allow_html=True)
+st.markdown('<p class="main-header">⚙️ 시스템 정보 관리</p>', unsafe_allow_html=True)
 
-# 2. 데이터 통합 로드
-res = supabase.table("task_categories").select("*").execute()
-df = pd.DataFrame(res.data)
+# 탭 구성: 카테고리 관리 | 현장명 관리
+tab1, tab2 = st.tabs(["📁 카테고리 관리", "🚩 현장명 관리"])
 
-# 💡 데이터가 비어 있을 경우 컬럼 구조 강제 생성 (오류 방지)
-if df.empty:
-    df = pd.DataFrame(columns=['main_category', 'sub_category'])
-
-# 💡 에디터 표시
-st.info("💡 카테고리를 편집하거나 추가(행 추가 버튼)할 수 있습니다.")
-
-# 컬럼 설정 (ID 등 불필요한 정보 숨김)
-column_config = {
-    "main_category": st.column_config.TextColumn("대분류"),
-    "sub_category": st.column_config.TextColumn("소분류")
-}
-for col in df.columns:
-    if col not in ["main_category", "sub_category"]:
-        column_config[col] = None
-
-edited_df = st.data_editor(
-    df, 
-    num_rows="dynamic", 
-    use_container_width=True, 
-    column_config=column_config
-)
-
-if st.button("💾 변경사항 서버 반영", use_container_width=True, type="primary"):
+with tab1:
+    st.info("💡 각 대분류에 속할 소분류를 편집하거나 추가할 수 있습니다.")
     try:
-        # 삭제 및 재삽입 로직 (심플하게 롤백)
-        supabase.table("task_categories").delete().neq("id", -1).execute()
+        res_cat = supabase.table("task_categories").select("*").execute()
+        df_cat = pd.DataFrame(res_cat.data) if res_cat.data else pd.DataFrame(columns=['main_category', 'sub_category'])
         
-        save_data = []
-        for _, row in edited_df.iterrows():
-            main_val = str(row.get('main_category', '')).strip()
-            if main_val and main_val != 'None':
-                save_data.append({
-                    "main_category": main_val,
-                    "sub_category": str(row.get('sub_category', '')).strip() if pd.notna(row.get('sub_category')) else ""
-                })
+        col_cfg_cat = {
+            "main_category": st.column_config.TextColumn("대분류"),
+            "sub_category": st.column_config.TextColumn("소분류")
+        }
+        for col in df_cat.columns:
+            if col not in ["main_category", "sub_category"]: col_cfg_cat[col] = None
+
+        edited_cat = st.data_editor(df_cat, num_rows="dynamic", use_container_width=True, column_config=col_cfg_cat, key="cat_editor")
+    except Exception as e:
+        st.error(f"카테고리 로드 오류: {e}")
+        edited_cat = None
+
+with tab2:
+    st.info("💡 현장 기록 시 선택할 수 있는 공식 현장명 리스트를 관리합니다.")
+    try:
+        res_site = supabase.table("site_names").select("*").execute()
+        df_site = pd.DataFrame(res_site.data) if res_site.data else pd.DataFrame(columns=['name'])
         
-        if save_data:
-            supabase.table("task_categories").insert(save_data).execute()
-            
-        st.success("🎉 카테고리 정보가 업데이트되었습니다.")
+        col_cfg_site = {"name": st.column_config.TextColumn("현장명")}
+        for col in df_site.columns:
+            if col not in ["name"]: col_cfg_site[col] = None
+
+        edited_site = st.data_editor(df_site, num_rows="dynamic", use_container_width=True, column_config=col_cfg_site, key="site_editor")
+    except Exception as e:
+        st.warning("⚠️ 'site_names' 테이블이 없거나 접근할 수 없습니다. DB 설정을 확인해주세요.")
+        edited_site = None
+
+# 저장 로직
+st.divider()
+if st.button("💾 모든 변경사항 일괄 저장", use_container_width=True, type="primary"):
+    try:
+        # 1. 카테고리 저장
+        if edited_cat is not None:
+            supabase.table("task_categories").delete().neq("id", -1).execute()
+            data_cat = []
+            for _, row in edited_cat.iterrows():
+                m = str(row.get('main_category', '')).strip()
+                if m and m != 'None':
+                    data_cat.append({"main_category": m, "sub_category": str(row.get('sub_category', '')).strip() if pd.notna(row.get('sub_category')) else ""})
+            if data_cat: supabase.table("task_categories").insert(data_cat).execute()
+
+        # 2. 현장명 저장
+        if edited_site is not None:
+            supabase.table("site_names").delete().neq("id", -1).execute()
+            data_site = []
+            for _, row in edited_site.iterrows():
+                n = str(row.get('name', '')).strip()
+                if n and n != 'None':
+                    data_site.append({"name": n})
+            if data_site: supabase.table("site_names").insert(data_site).execute()
+
+        st.success("🎉 모든 설정 정보가 성공적으로 업데이트되었습니다.")
         st.rerun()
     except Exception as e:
         st.error(f"저장 중 오류 발생: {e}")

@@ -51,6 +51,12 @@ def get_dynamic_hierarchy():
         return hierarchy
     except: return {}
 
+def get_site_names():
+    try:
+        res = supabase.table("site_names").select("name").execute()
+        return [row['name'] for row in res.data] if res.data else []
+    except: return []
+
 # --- 💡 세션 상태 관리 (내비게이션) ---
 if "view" not in st.session_state: st.session_state.view = "cat_list"
 if "selected_main" not in st.session_state: st.session_state.selected_main = None
@@ -106,6 +112,16 @@ st.markdown("""
         min-height: 40px; 
     }
 
+    /* 메모 미리보기 */
+    .note-preview {
+        background: rgba(255, 165, 0, 0.1);
+        border-left: 3px solid #ffa500;
+        padding: 5px 10px;
+        font-size: 0.85rem;
+        margin-top: 10px;
+        border-radius: 4px;
+    }
+
     .site-card { border: 1px solid #444; border-radius: 8px; padding: 10px; margin-bottom: 10px; background: rgba(255,255,255,0.05); }
     </style>
 """, unsafe_allow_html=True)
@@ -155,11 +171,17 @@ def confirm_finish_dialog(task, curr_w):
 @st.dialog("🚀 작업 생성")
 def create_task_dialog(cat):
     st.write(f"### '{cat}' 작업 시작")
-    place = st.text_input("현장명", placeholder="현장명을 입력하세요")
+    sites = get_site_names()
+    if sites:
+        place = st.selectbox("현장명", options=sites)
+    else:
+        st.warning("⚠️ 등록된 현장이 없습니다. [카테고리 관리]에서 현장을 먼저 등록해주세요.")
+        place = st.text_input("현장명 (직접 입력)", placeholder="현장명을 입력하세요")
+    
     workers = st.number_input("인원", min_value=1, value=1)
-    qty = st.number_input("물량", min_value=0, value=0)
+    qty = st.number_input("목표수량", min_value=0, value=0)
     if st.button("🚀 시작", key="start_new_task_btn", use_container_width=True, type="primary"):
-        if not place: st.error("현장명을 입력해 주세요.")
+        if not place: st.error("현장명을 선택/입력해 주세요.")
         else:
             supabase.table("active_tasks").insert({
                 "session_name": place, "task_type": cat, "workers": workers, "quantity": qty,
@@ -169,14 +191,19 @@ def create_task_dialog(cat):
 @st.dialog("🏢 현장 추가")
 def add_site_dialog(parent_task):
     st.write(f"### '{parent_task['task_type']}' 현장 추가")
-    place = st.text_input("현장명", placeholder="현장명을 입력하세요")
+    sites = get_site_names()
+    if sites:
+        place = st.selectbox("추가 현장명", options=sites)
+    else:
+        place = st.text_input("현장명 (직접 입력)", placeholder="현장명을 입력하세요")
+    
     workers = st.number_input("인원", min_value=1, value=1)
-    qty = st.number_input("물량", min_value=0, value=0)
+    # 현장 추가 시 물량(목표수량) 입력 제외
     if st.button("➕ 추가", key=f"confirm_add_site_{parent_task['id']}", use_container_width=True, type="primary"):
-        if not place: st.error("현장명을 입력해 주세요.")
+        if not place: st.error("현장명을 선택해 주세요.")
         else:
             supabase.table("active_tasks").insert({
-                "session_name": place, "task_type": parent_task['task_type'], "workers": workers, "quantity": qty,
+                "session_name": place, "task_type": parent_task['task_type'], "workers": workers, "quantity": 0,
                 "status": "running", "last_started_at": datetime.now(KST).isoformat(), "accumulated_seconds": 0,
                 "parent_id": parent_task['id']
             }).execute(); st.rerun()
@@ -187,26 +214,42 @@ def render_site_control(task):
         c_h1, c_h2 = st.columns([7, 3])
         with c_h1: st.write(f"🚩 **{task['session_name']}**")
         with c_h2: 
-            if st.button("📝", key=f"note_{task['id']}", use_container_width=True): note_dialog(task)
+            if st.button("📝 메모", key=f"note_{task['id']}", use_container_width=True): note_dialog(task)
+        
+        # 메모 미리보기
+        history = task.get('work_history', [])
+        note_content = next((i['content'] for i in (history or []) if isinstance(i, dict) and i.get('type') == 'note'), None)
+        if note_content:
+            st.markdown(f'<div class="note-preview">📝 {note_content}</div>', unsafe_allow_html=True)
+            
         total_sec = task['accumulated_seconds']
         if task['status'] == 'running' and task['last_started_at']:
             total_sec += (datetime.now(KST) - datetime.fromisoformat(task['last_started_at'])).total_seconds()
         h, m, s = int(total_sec // 3600), int((total_sec % 3600) // 60), int(total_sec % 60)
         st.markdown(f"#### {'⏱️' if task['status'] == 'running' else '⏸️'} {h:02d}:{m:02d}:{s:02d}")
-        st.write(f"👥 {task['workers']}명 | 📦 {task['quantity']:,}EA")
-        b1, b2, b3 = st.columns(3)
+        st.write(f"👥 {task['workers']}명 | 📦 목표: {task['quantity']:,}EA")
+        
+        b1, b2 = st.columns(2)
         if task['status'] == "running":
-            if b1.button("⏸️", key=f"p_{task['id']}", use_container_width=True):
-                now = datetime.now(KST); new_segs = split_man_seconds_by_date(datetime.fromisoformat(task['last_started_at']), now, task['workers'])
-                supabase.table("active_tasks").update({"status": "paused", "accumulated_seconds": total_sec, "work_history": update_history_map(task.get('work_history', []), new_segs)}).eq("id", task['id']).execute(); st.rerun()
+            if b1.button("정지", key=f"p_{task['id']}", use_container_width=True):
+                now = datetime.now(KST)
+                new_segs = split_man_seconds_by_date(datetime.fromisoformat(task['last_started_at']), now, task['workers'])
+                # data 오류 수정: accumulated_seconds를 int로 캐스팅
+                supabase.table("active_tasks").update({
+                    "status": "paused", 
+                    "accumulated_seconds": int(total_sec), 
+                    "work_history": update_history_map(task.get('work_history', []), new_segs)
+                }).eq("id", task['id']).execute(); st.rerun()
         else:
-            if b1.button("▶️", key=f"r_{task['id']}", use_container_width=True):
+            if b1.button("시작", key=f"r_{task['id']}", use_container_width=True, type="primary"):
                 supabase.table("active_tasks").update({"status": "running", "last_started_at": datetime.now(KST).isoformat()}).eq("id", task['id']).execute(); st.rerun()
-        if b2.button("🏁", key=f"e_{task['id']}", use_container_width=True): confirm_finish_dialog(task, task['workers'])
-        with st.expander("⚙️"):
+        
+        if b2.button("종료", key=f"e_{task['id']}", use_container_width=True): confirm_finish_dialog(task, task['workers'])
+        
+        with st.expander("⚙️ 정보 수정"):
             n_w = st.number_input("인원", 1, 100, int(task['workers']), key=f"nw_{task['id']}")
-            n_q = st.number_input("물량", 0, 100000, int(task['quantity']), key=f"nq_{task['id']}")
-            if st.button("확정", key=f"save_{task['id']}", use_container_width=True):
+            n_q = st.number_input("목표수량", 0, 100000, int(task['quantity']), key=f"nq_{task['id']}")
+            if st.button("저장", key=f"save_{task['id']}", use_container_width=True):
                 supabase.table("active_tasks").update({"workers": n_w, "quantity": n_q}).eq("id", task['id']).execute(); st.rerun()
 
 def render_cat_selector():
@@ -268,8 +311,9 @@ def render_cat_detail():
         if not root_tasks: st.info("진행 중인 작업이 없습니다.")
         else:
             for root in root_tasks:
-                with st.container(border=True):
-                    st.write(f"### 🛠️ 작업 그룹 #{root['id']}"); render_site_control(root)
+                # 작업 그룹명 변경 및 접기/펼치기(expander) 적용
+                with st.expander(f"🛠️ {cat} #{root['id']}", expanded=True):
+                    render_site_control(root)
                     children = [t for t in all_tasks if t.get('parent_id') == root['id']]
                     for child in children: render_site_control(child)
                     if st.button("➕ 현장 추가", key=f"add_site_{root['id']}", use_container_width=True): add_site_dialog(root)
