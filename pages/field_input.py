@@ -218,49 +218,46 @@ def add_site_dialog(parent_task):
 
 # --- 💡 기능 렌더러 ---
 def render_site_control(task):
-    with st.container(border=True):
-        c_h1, c_h2 = st.columns([7, 3])
-        with c_h1: st.write(f"🚩 **{task['session_name']}**")
-        with c_h2: 
-            st.markdown('<div class="white-button">', unsafe_allow_html=True)
-            if st.button("📝 메모", key=f"note_{task['id']}", use_container_width=True): note_dialog(task)
-            st.markdown('</div>', unsafe_allow_html=True)
+    with st.container():
+        # 행 1: 현장명 | 인원 N명 | 타이머
+        r1_c1, r1_c2, r1_c3 = st.columns([3, 3, 4])
+        with r1_c1: st.write(f"🚩 **{task['session_name']}**")
+        with r1_c2: st.write(f"👥 인원 {task['workers']}명")
         
-        # 메모 미리보기
-        history = task.get('work_history', [])
-        note_content = next((i['content'] for i in (history or []) if isinstance(i, dict) and i.get('type') == 'note'), None)
-        if note_content:
-            st.markdown(f'<div class="note-preview">📝 {note_content}</div>', unsafe_allow_html=True)
-            
         total_sec = task['accumulated_seconds']
         if task['status'] == 'running' and task['last_started_at']:
             total_sec += (datetime.now(KST) - datetime.fromisoformat(task['last_started_at'])).total_seconds()
         h, m, s = int(total_sec // 3600), int((total_sec % 3600) // 60), int(total_sec % 60)
-        st.markdown(f"#### {'⏱️' if task['status'] == 'running' else '⏸️'} {h:02d}:{m:02d}:{s:02d}")
-        st.write(f"👥 {task['workers']}명 | 📦 목표: {task['quantity']:,}EA")
+        with r1_c3: st.write(f"{'⏱️' if task['status'] == 'running' else '⏸️'} {h:02d}:{m:02d}:{s:02d}")
         
-        b1, b2 = st.columns(2)
-        if task['status'] == "running":
-            if b1.button("정지", key=f"p_{task['id']}", use_container_width=True):
-                now = datetime.now(KST)
-                new_segs = split_man_seconds_by_date(datetime.fromisoformat(task['last_started_at']), now, task['workers'])
-                # data 오류 수정: accumulated_seconds를 int로 캐스팅
-                supabase.table("active_tasks").update({
-                    "status": "paused", 
-                    "accumulated_seconds": int(total_sec), 
-                    "work_history": update_history_map(task.get('work_history', []), new_segs)
-                }).eq("id", task['id']).execute(); st.rerun()
-        else:
-            if b1.button("시작", key=f"r_{task['id']}", use_container_width=True, type="primary"):
-                supabase.table("active_tasks").update({"status": "running", "last_started_at": datetime.now(KST).isoformat()}).eq("id", task['id']).execute(); st.rerun()
+        # 행 2: 정보수정 | 정지/시작 | 종료
+        r2_c1, r2_c2, r2_c3 = st.columns([3, 4, 3])
         
-        if b2.button("종료", key=f"e_{task['id']}", use_container_width=True): confirm_finish_dialog(task, task['workers'])
+        with r2_c1:
+            with st.expander("📝 수정"):
+                n_w = st.number_input("인원", 1, 100, int(task['workers']), key=f"nw_{task['id']}")
+                n_q = st.number_input("목표", 0, 100000, int(task['quantity']), key=f"nq_{task['id']}")
+                if st.button("수정저장", key=f"save_{task['id']}", use_container_width=True):
+                    supabase.table("active_tasks").update({"workers": n_w, "quantity": n_q}).eq("id", task['id']).execute(); st.rerun()
         
-        with st.expander("⚙️ 정보 수정"):
-            n_w = st.number_input("인원", 1, 100, int(task['workers']), key=f"nw_{task['id']}")
-            n_q = st.number_input("목표수량", 0, 100000, int(task['quantity']), key=f"nq_{task['id']}")
-            if st.button("저장", key=f"save_{task['id']}", use_container_width=True):
-                supabase.table("active_tasks").update({"workers": n_w, "quantity": n_q}).eq("id", task['id']).execute(); st.rerun()
+        with r2_c2:
+            if task['status'] == "running":
+                if st.button("정지", key=f"p_{task['id']}", use_container_width=True):
+                    now = datetime.now(KST)
+                    new_segs = split_man_seconds_by_date(datetime.fromisoformat(task['last_started_at']), now, task['workers'])
+                    supabase.table("active_tasks").update({
+                        "status": "paused", 
+                        "accumulated_seconds": int(total_sec), 
+                        "work_history": update_history_map(task.get('work_history', []), new_segs)
+                    }).eq("id", task['id']).execute(); st.rerun()
+            else:
+                if st.button("시작", key=f"r_{task['id']}", use_container_width=True, type="primary"):
+                    supabase.table("active_tasks").update({"status": "running", "last_started_at": datetime.now(KST).isoformat()}).eq("id", task['id']).execute(); st.rerun()
+        
+        with r2_c3:
+            if st.button("종료", key=f"e_{task['id']}", use_container_width=True): confirm_finish_dialog(task, task['workers'])
+        
+        st.divider()
 
 def render_cat_selector():
     st.write("### 카테고리 선택")
@@ -335,6 +332,17 @@ def render_cat_detail():
                 
                 # 작업 그룹명 변경 및 접기/펼치기(expander) 적용
                 with st.expander(f"🛠️ {cat} #{root['id']}{header_note}", expanded=True):
+                    # 통합 요약행: 목표수량 | N건 | 메모입력
+                    s_c1, s_c2, s_c3 = st.columns([2, 5, 3])
+                    with s_c1: st.write("**목표수량**")
+                    with s_c2: st.write(f"**{root['quantity']:,}** 건/EA")
+                    with s_c3:
+                        st.markdown('<div class="white-button">', unsafe_allow_html=True)
+                        if st.button("메모입력", key=f"note_root_{root['id']}", use_container_width=True):
+                            note_dialog(root)
+                        st.markdown('</div>', unsafe_allow_html=True)
+                    st.divider()
+                    
                     render_site_control(root)
                     children = [t for t in all_tasks if t.get('parent_id') == root['id']]
                     for child in children: render_site_control(child)
