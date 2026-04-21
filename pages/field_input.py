@@ -56,7 +56,7 @@ if "view" not in st.session_state: st.session_state.view = "cat_list"
 if "selected_main" not in st.session_state: st.session_state.selected_main = None
 if "selected_category" not in st.session_state: st.session_state.selected_category = None
 
-# CSS: 모바일 및 그리드 최적화
+# CSS: 모바일 및 레이아웃 최적화
 st.markdown("""
     <style>
     /* 상단 고정 헤더 */
@@ -71,36 +71,12 @@ st.markdown("""
     }
     .spacer { height: 60px; }
     
-    /* 정사각형 그리드 버튼 스타일 */
-    .grid-container {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 15px;
-        padding: 10px 0;
-    }
-    
-    div.stButton > button {
-        width: 100% !important;
-        height: auto !important;
-        aspect-ratio: 1.1 / 1 !important; /* 약간의 여유를 둔 정사각형 */
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: center !important;
-        justify-content: center !important;
-        text-align: center !important;
-        font-size: 1.1rem !important;
-        font-weight: bold !important;
-        border-radius: 12px !important;
-        background: rgba(255, 255, 255, 0.05) !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
-        padding: 10px !important;
-        white-space: normal !important;
-    }
-    
-    div.stButton > button:hover {
-        background: rgba(255, 255, 255, 0.1) !important;
-        border-color: #00d4ff !important;
-        color: #00d4ff !important;
+    /* 기존 버튼 스타일 유지 (좌측 정렬) */
+    div.stButton > button { 
+        text-align: left !important; 
+        justify-content: flex-start !important; 
+        padding-left: 15px !important; 
+        min-height: 45px !important;
     }
 
     /* 작업 카드 내부 간격 */
