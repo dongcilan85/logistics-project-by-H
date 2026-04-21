@@ -65,15 +65,18 @@ if "selected_category" not in st.session_state: st.session_state.selected_catego
 # CSS: 정밀 그리드 및 반응형 레이아웃
 st.markdown("""
     <style>
-    .sticky-top {
+    /* 상단/하단 고정 컨테이너 고도화 (Streamlit div 타겟팅) */
+    .header-anchor + div {
         position: fixed; top: 0; left: 0; right: 0; 
-        background: #121212; z-index: 1000; padding: 10px; border-bottom: 1px solid #333;
+        background: #121212; z-index: 1000; padding: 10px 20px; border-bottom: 1px solid #333;
     }
-    .sticky-bottom {
+    .footer-anchor + div {
         position: fixed; bottom: 0; left: 0; right: 0;
-        background: #121212; z-index: 1000; padding: 10px; border-top: 1px solid #333;
+        background: #121212; z-index: 1000; padding: 10px 20px; border-top: 1px solid #333;
     }
-    .spacer { height: 60px; }
+    /* 스크롤 영역 여백 확보 */
+    .scroll-spacer-top { height: 110px; }
+    .scroll-spacer-bottom { height: 80px; }
     
     /* 4열/2열 반응형 정사각형 그리드 */
     .square-grid div[data-testid="stHorizontalBlock"] {
@@ -300,9 +303,17 @@ def render_cat_selector():
 @st.fragment(run_every=1)
 def render_cat_detail():
     cat = st.session_state.selected_category
-    st.markdown(f'<div class="sticky-top"><h4 style="margin:0;">📌 {cat}</h4></div><div class="spacer"></div>', unsafe_allow_html=True)
-    if st.button("⬅️ 목록으로", key="back_to_start", use_container_width=True):
-        st.session_state.view = "cat_list"; st.session_state.selected_main = None; st.session_state.selected_category = None; st.rerun()
+    
+    # 1. 상단 고정 영역
+    st.markdown('<div class="header-anchor"></div>', unsafe_allow_html=True)
+    with st.container():
+        st.markdown(f'<h4 style="margin:0; padding-bottom:5px;">📌 {cat}</h4>', unsafe_allow_html=True)
+        if st.button("⬅️ 목록으로", key="back_to_start", use_container_width=True):
+            st.session_state.view = "cat_list"; st.session_state.selected_main = None; st.session_state.selected_category = None; st.rerun()
+
+    # 2. 스크롤 영역 시작 여백
+    st.markdown('<div class="scroll-spacer-top"></div>', unsafe_allow_html=True)
+    
     st.divider()
     try:
         res = supabase.table("active_tasks").select("*").eq("task_type", cat).execute()
@@ -322,9 +333,13 @@ def render_cat_detail():
                     for child in children: render_site_control(child)
                     if st.button("➕ 현장 추가", key=f"add_site_{root['id']}", use_container_width=True): add_site_dialog(root)
     except Exception as e: st.error(f"데이터 로드 오류: {e}")
-    st.markdown('<div class="spacer"></div><div class="sticky-bottom">', unsafe_allow_html=True)
-    if st.button("🚀 신규 작업 생성 (+)", key="footer_create_btn", use_container_width=True, type="primary"): create_task_dialog(cat)
-    st.markdown('</div>', unsafe_allow_html=True)
+
+    # 3. 하단 여백 및 고정 영역
+    st.markdown('<div class="scroll-spacer-bottom"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="footer-anchor"></div>', unsafe_allow_html=True)
+    with st.container():
+        if st.button("🚀 신규 작업 생성 (+)", key="footer_create_btn", use_container_width=True, type="primary"): 
+            create_task_dialog(cat)
 
 # --- 💡 라우팅 ---
 if st.session_state.view == "cat_list": render_cat_selector()
