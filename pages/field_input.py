@@ -77,16 +77,16 @@ st.markdown("""
     <style>
     /* 완전 독립 3-Frame 고정 레이아웃 (화이트 테마 - 최종 안정 버전) */
     @media (min-width: 0px) {
-        /* 상단 헤더 고정 (Streamlit 헤더바 고려 60px 패딩) */
+        /* 상단 헤더 고정 (Streamlit 헤더바 고려 45px 패딩) */
         [data-testid="stVerticalBlock"] > div:has(#top-anchor) + div {
             position: fixed !important; top: 0; left: 0; right: 0;
             z-index: 99999; background: white !important;
-            padding: 60px 20px 0px !important; /* 하단 패딩 0으로 가동범위 최대화 */
+            padding: 45px 20px 10px !important;
             border-bottom: 2px solid #ddd;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
         [data-testid="stVerticalBlock"] > div:has(#top-anchor) + div * {
-            color: black !important; /* 헤더 내 모든 글자 검정색 */
+            color: black !important;
         }
         /* 하단 푸터 고정 */
         [data-testid="stVerticalBlock"] > div:has(#bottom-anchor) + div {
@@ -99,7 +99,7 @@ st.markdown("""
     }
     
     /* 스크롤 영역 여백 확보 */
-    .scroll-spacer-top { height: 140px; }
+    .scroll-spacer-top { height: 160px; }
     .scroll-spacer-bottom { height: 85px; }
     
     /* 4열/2열 반응형 정사각형 그리드 */
@@ -141,9 +141,9 @@ st.markdown("""
 
     /* 종료 버튼: 강제 오렌지 색상 및 정렬 보정 */
     .orange-button {
-        display: flex;
-        align-items: center;
         height: 100%;
+        display: flex;
+        align-items: flex-start; /* 상단 정렬로 다른 버튼과 맞춤 */
     }
     .orange-button .stButton { width: 100%; }
     .orange-button .stButton > button {
@@ -152,11 +152,18 @@ st.markdown("""
         border: none !important;
         font-weight: bold !important;
         width: 100% !important;
-        height: 45px !important; /* 높이 고정 */
+        height: 45px !important;
     }
     
     /* 일반 버튼 높이 고정 (정렬용) */
     .stButton > button { height: 45px !important; }
+
+    /* 목표수량 텍스트 강조 (4pt 확대) */
+    .quantity-val {
+        font-size: 1.25rem !important; /* 기존 약 1rem에서 확대 */
+        font-weight: bold;
+        color: #333;
+    }
 
     .site-card { border: 1px solid #444; border-radius: 8px; padding: 10px; margin-bottom: 10px; background: rgba(255,255,255,0.05); }
     </style>
@@ -403,10 +410,10 @@ def render_cat_detail():
                 
                 # 작업 그룹명 변경 및 접기/펼치기(expander) 적용
                 with st.expander(f"🛠️ {cat} #{root['id']}{header_note}", expanded=True):
-                    # 통합 요약행: 목표수량 | N건 | 메모입력
+                    # 통합 요약행: 목표수량 | [N]건 | 메모입력
                     s_c1, s_c2, s_c3 = st.columns([2, 5, 3])
                     with s_c1: st.write("**목표수량**")
-                    with s_c2: st.write(f"**{root['quantity']:,}** 건/EA")
+                    with s_c2: st.markdown(f'<span class="quantity-val">[{root["quantity"]:,}]건</span>', unsafe_allow_html=True)
                     with s_c3:
                         st.markdown('<div class="white-button">', unsafe_allow_html=True)
                         if st.button("메모입력", key=f"note_root_{root['id']}", use_container_width=True):
