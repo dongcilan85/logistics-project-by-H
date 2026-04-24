@@ -254,6 +254,11 @@ def confirm_finish_dialog(task, curr_w):
                 task_ids = [t['id'] for t in group_tasks]
                 supabase.table("active_tasks").delete().in_("id", task_ids).execute()
                 
+                # 강제 뷰 전환: Expander DOM이 파괴되며 발생하는 Streamlit 화이트아웃(React 충돌) 방지
+                st.session_state.view = "cat_list"
+                st.session_state.selected_main = None
+                st.session_state.selected_category = None
+                
             st.rerun()
         except Exception as e: st.error(f"오류: {e}")
     if c2.button("❌ 아니오", key=f"conf_n_{task['id']}", use_container_width=True): st.rerun()
