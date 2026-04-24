@@ -141,11 +141,14 @@ st.markdown("""
 
     /* 종료 버튼: 강제 오렌지 색상 및 정렬 보정 */
     .orange-button {
-        height: 100%;
+        height: 45px !important;
         display: flex;
-        align-items: flex-start; /* 상단 정렬로 다른 버튼과 맞춤 */
+        align-items: center;
+        width: 100%;
+        margin: 0 !important;
+        padding: 0 !important;
     }
-    .orange-button .stButton { width: 100%; }
+    .orange-button .stButton { width: 100%; height: 45px !important; }
     .orange-button .stButton > button {
         background-color: #FF8C00 !important;
         color: white !important;
@@ -153,14 +156,28 @@ st.markdown("""
         font-weight: bold !important;
         width: 100% !important;
         height: 45px !important;
+        margin: 0 !important;
     }
     
-    /* 일반 버튼 높이 고정 (정렬용) */
-    .stButton > button { height: 45px !important; }
+    /* 모든 버튼 및 익스팬더 헤더 높이 통일 (정렬 핵심) */
+    .stButton > button, 
+    .stExpander details summary { 
+        height: 45px !important; 
+        min-height: 45px !important;
+        margin: 0 !important;
+        display: flex !important;
+        align-items: center !important;
+    }
+    
+    /* 익스팬더 내부 여백 제거로 버튼과 높이 맞춤 */
+    .stExpander details summary {
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+    }
 
     /* 목표수량 텍스트 강조 (4pt 확대) */
     .quantity-val {
-        font-size: 1.25rem !important; /* 기존 약 1rem에서 확대 */
+        font-size: 1.25rem !important;
         font-weight: bold;
         color: #333;
     }
