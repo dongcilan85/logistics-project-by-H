@@ -154,6 +154,13 @@ st.markdown("""
         font-weight: bold !important;
     }
 
+    /* 목표수량 텍스트 강조 (약 6pt 확대) */
+    .qty-text {
+        font-size: 1.5rem !important;
+        font-weight: bold;
+        color: #333;
+    }
+
     .site-card { border: 1px solid #444; border-radius: 8px; padding: 10px; margin-bottom: 10px; background: rgba(255,255,255,0.05); }
     </style>
 """, unsafe_allow_html=True)
@@ -374,10 +381,13 @@ def render_cat_selector():
             st.divider()
             st.write("**🏃 진행 중인 작업 바로가기**")
             cols = st.columns(2)
+            
+            def set_ongoing(cat_name):
+                st.session_state.selected_category = cat_name
+                st.session_state.view = "cat_detail"
+
             for idx, ocat in enumerate(active_cats):
-                if cols[idx % 2].button(ocat, key=f"ongoing_{ocat}", use_container_width=True):
-                    st.session_state.selected_category = ocat
-                    st.session_state.view = "cat_detail"; st.rerun()
+                cols[idx % 2].button(ocat, key=f"ongoing_{ocat}", use_container_width=True, on_click=set_ongoing, args=(ocat,))
     except: pass
 
 @st.fragment(run_every=1)
@@ -408,10 +418,10 @@ def render_cat_detail():
                 
                 # 작업 그룹명 변경 및 접기/펼치기(expander) 적용
                 with st.expander(f"🛠️ {cat} #{root['id']}{header_note}", expanded=True):
-                    # 통합 요약행: 목표수량 | N건 | 메모입력
+                    # 통합 요약행: 목표수량 | [N]건 | 메모입력
                     s_c1, s_c2, s_c3 = st.columns([2, 5, 3])
                     with s_c1: st.write("**목표수량**")
-                    with s_c2: st.write(f"**{root['quantity']:,}** 건/EA")
+                    with s_c2: st.markdown(f'<span class="qty-text">[{root["quantity"]:,}]건</span>', unsafe_allow_html=True)
                     with s_c3:
                         st.markdown('<div class="white-button">', unsafe_allow_html=True)
                         if st.button("메모입력", key=f"note_root_{root['id']}", use_container_width=True):
