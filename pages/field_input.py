@@ -29,11 +29,17 @@ def split_man_seconds_by_date(start_dt, end_dt, workers):
     return history_map
 
 def update_history_map(current_history, new_segments):
-    """기존 공수 히스토리에 새로운 세그먼트 통합"""
-    h_dict = {item['date']: item['man_seconds'] for item in current_history} if current_history else {}
+    """기존 공수 히스토리에 새로운 세그먼트 통합 (메모 항목 등 보존)"""
+    # 'date' 키가 있는 시간 기록만 추출하여 맵 생성
+    h_dict = {item['date']: item['man_seconds'] for item in (current_history or []) if isinstance(item, dict) and 'date' in item}
     for d, s in new_segments.items():
         h_dict[d] = h_dict.get(d, 0) + s
-    return [{"date": d, "man_seconds": s} for d, s in h_dict.items()]
+    
+    # 'date' 키가 없는 항목(메모 등) 별도 보관
+    other_items = [item for item in (current_history or []) if not (isinstance(item, dict) and 'date' in item)]
+    
+    new_history = [{"date": d, "man_seconds": s} for d, s in h_dict.items()]
+    return new_history + other_items
 
 def get_config(key, default):
     try:
@@ -366,12 +372,9 @@ def render_active_tasks(place):
                         st.write(f"👥 인원: {task['workers']}명")
                         
                         if task['status'] == "running":
-                            total_sec = task['accumulated_seconds'] + (datetime.now(KST) - datetime.fromisoformat(row['last_started_at'])).total_seconds() if 'row' in locals() else task['accumulated_seconds'] 
-                            # 위에서 row가 정의되지 않았을 수 있으므로 task 사용
-                            if task['status'] == 'running' and task['last_started_at']:
-                                total_sec = task['accumulated_seconds'] + (datetime.now(KST) - datetime.fromisoformat(task['last_started_at'])).total_seconds()
-                            else:
-                                total_sec = task['accumulated_seconds']
+                            now = datetime.now(KST)
+                            last_started = datetime.fromisoformat(task['last_started_at'])
+                            total_sec = task['accumulated_seconds'] + (now - last_started).total_seconds()
                                 
                             h, m, s = int(total_sec // 3600), int((total_sec % 3600) // 60), int(total_sec % 60)
                             st.subheader(f"⏱️ {h:02d}:{m:02d}:{s:02d}")
@@ -390,7 +393,7 @@ def render_active_tasks(place):
                                     updated_history = update_history_map(task.get('work_history', []), new_segs)
                                     supabase.table("active_tasks").update({
                                         "workers": new_w, "work_history": updated_history, 
-                                        "accumulated_seconds": task['accumulated_seconds'] + (now - datetime.fromisoformat(task['last_started_at'])).total_seconds(),
+                                        "accumulated_seconds": int(task['accumulated_seconds'] + (now - datetime.fromisoformat(task['last_started_at'])).total_seconds()),
                                         "last_started_at": now.isoformat()
                                     }).eq("id", task['id']).execute()
                                 else:
