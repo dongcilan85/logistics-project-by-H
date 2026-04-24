@@ -103,7 +103,7 @@ st.markdown("""
     }
     
     /* 스크롤 영역 여백 확보 */
-    .scroll-spacer-top { height: 65px; }
+    .scroll-spacer-top { height: 25px; }
     .scroll-spacer-bottom { height: 75px; }
     
     /* 4열/2열 반응형 정사각형 그리드 */
