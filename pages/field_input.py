@@ -192,57 +192,69 @@ def note_dialog(task):
 
 @st.dialog("🏁 작업 종료 확인")
 def confirm_finish_dialog(task, curr_w):
-# ... (내용 생략 - 기존과 동일) ...
-    pass # 실제로는 아래 기존 코드 유지
-
-@st.dialog("⚙️ 정보 수정")
-def edit_task_dialog(task):
-    st.write(f"**{task['session_name']}** - {task['task_type']} 정보 수정")
-    
-    total_sec = task['accumulated_seconds']
-    if task['status'] == 'running' and task['last_started_at']:
-        total_sec += (datetime.now(KST) - datetime.fromisoformat(task['last_started_at'])).total_seconds()
-    
-    cur_h, cur_m = int(total_sec // 3600), int((total_sec % 3600) // 60)
-    
-    c1, c2 = st.columns(2)
-    n_h = c1.number_input("시간", 0, 24, cur_h)
-    n_m = c2.number_input("분", 0, 59, cur_m)
-    n_w = st.number_input("인원", 1, 100, int(task['workers']))
-    n_q = st.number_input("목표수량", 0, 100000, int(task['quantity']))
-    
-    st.divider()
-    b1, b2 = st.columns(2)
-    if b1.button("💾 수정 저장", use_container_width=True, type="primary"):
-        new_sec = (n_h * 3600) + (n_m * 60)
-        supabase.table("active_tasks").update({
-            "workers": n_w, "quantity": n_q, "accumulated_seconds": int(new_sec),
-            "last_started_at": datetime.now(KST).isoformat() if task['status'] == 'running' else task['last_started_at']
-        }).eq("id", task['id']).execute(); st.rerun()
-    if b2.button("❌ 취소", use_container_width=True): st.rerun()
-    st.write("⚠️ 이 현장의 작업을 종료하시겠습니까?")
+    st.write("작업이 종료되고 데이터가 이전됩니다. 정말 종료 하시겠습니까?")
     c1, c2 = st.columns(2)
     if c1.button("✅ 예", key=f"conf_y_{task['id']}", use_container_width=True, type="primary"):
         try:
             now = datetime.now(KST)
             history = task.get('work_history', []) or []
-            note_content = next((i['content'] for i in history if isinstance(i, dict) and i.get('type') == 'note'), "")
-            actual_history = [i for i in history if isinstance(i, dict) and 'man_seconds' in i]
-            final_h = actual_history
+            final_h = [i for i in history if isinstance(i, dict) and 'man_seconds' in i]
+            
+            # 1. 닫히는 현장의 최종 공수 누적 및 상태 변경 (대기 상태로 돌입)
+            total_sec = task['accumulated_seconds']
             if task['status'] == "running":
+                total_sec += (now - datetime.fromisoformat(task['last_started_at'])).total_seconds()
                 new_segs = split_man_seconds_by_date(datetime.fromisoformat(task['last_started_at']), now, curr_w)
                 final_h = update_history_map(final_h, new_segs)
-            total_man_sec = sum(i['man_seconds'] for i in final_h)
-            if total_man_sec > 0:
-                for entry in final_h:
-                    weight = entry['man_seconds'] / total_man_sec
-                    supabase.table("work_logs").insert({
-                        "work_date": entry['date'], "task": task['task_type'],
-                        "workers": task['workers'], "quantity": round(task['quantity'] * weight),
-                        "duration": round(entry['man_seconds'] / 3600, 2), "plan_id": task.get('plan_id'),
-                        "applied_wage": get_config("hourly_wage", 10000), "memo": f"현장: {task['session_name']} / {note_content}"
-                    }).execute()
-            supabase.table("active_tasks").delete().eq("id", task['id']).execute(); st.rerun()
+                
+            supabase.table("active_tasks").update({
+                "status": "finished",
+                "work_history": final_h,
+                "accumulated_seconds": int(total_sec)
+            }).eq("id", task['id']).execute()
+            
+            # 2. 그룹 생존 여부 스캔
+            root_id = task.get('parent_id') if task.get('parent_id') else task['id']
+            res = supabase.table("active_tasks").select("*").or_(f"id.eq.{root_id},parent_id.eq.{root_id}").execute()
+            group_tasks = res.data
+            
+            unfinished = [t for t in group_tasks if t['status'] != 'finished']
+            
+            if len(unfinished) == 0:
+                # 3. 그룹 내 모든 현장 종료됨 -> 최종 쪼개기(안분) 및 정산 실행
+                total_qty = sum(t['quantity'] for t in group_tasks)
+                total_workers = sum(t['workers'] for t in group_tasks)
+                
+                all_man_seconds_by_date = {}
+                combined_notes = []
+                for t in group_tasks:
+                    t_hist = [i for i in (t.get('work_history') or []) if isinstance(i, dict) and 'man_seconds' in i]
+                    for entry in t_hist:
+                        d = entry['date']
+                        all_man_seconds_by_date[d] = all_man_seconds_by_date.get(d, 0) + entry['man_seconds']
+                    
+                    t_note = next((i['content'] for i in (t.get('work_history', []) or []) if isinstance(i, dict) and i.get('type') == 'note'), "")
+                    if t_note: combined_notes.append(f"[{t['session_name']}] {t_note}")
+                
+                total_group_man_seconds = sum(all_man_seconds_by_date.values())
+                
+                if total_group_man_seconds > 0:
+                    memo_str = " / ".join(combined_notes) if combined_notes else f"그룹 전체 통합 정산"
+                    for d, ms in all_man_seconds_by_date.items():
+                        weight = ms / total_group_man_seconds
+                        supabase.table("work_logs").insert({
+                            "work_date": d, "task": group_tasks[0]['task_type'],
+                            "workers": total_workers, 
+                            "quantity": round(total_qty * weight),
+                            "duration": round(ms / 3600, 2), "plan_id": group_tasks[0].get('plan_id'),
+                            "applied_wage": get_config("hourly_wage", 10000), "memo": memo_str
+                        }).execute()
+                
+                # 최종 일괄 삭제 (정산 완료)
+                task_ids = [t['id'] for t in group_tasks]
+                supabase.table("active_tasks").delete().in_("id", task_ids).execute()
+                
+            st.rerun()
         except Exception as e: st.error(f"오류: {e}")
     if c2.button("❌ 아니오", key=f"conf_n_{task['id']}", use_container_width=True): st.rerun()
 
@@ -288,6 +300,10 @@ def add_site_dialog(parent_task):
 
 # --- 💡 기능 렌더러 ---
 def render_site_control(task):
+    if task['status'] == 'finished':
+        st.info(f"✅ **{task['session_name']}** - 현장이 종료되어 다른 동급 현장 작업의 마무리를 대기 중입니다.")
+        st.divider()
+        return
     with st.container():
         # 행 1: 현장명 | 인원 N명 | 타이머
         r1_c1, r1_c2, r1_c3 = st.columns([3, 3, 4])
@@ -312,10 +328,18 @@ def render_site_control(task):
                 n_q = st.number_input("목표", 0, 100000, int(task['quantity']), key=f"nq_{task['id']}")
                 if st.button("수정저장", key=f"save_{task['id']}", use_container_width=True):
                     new_sec = (n_h * 3600) + (n_m * 60)
-                    supabase.table("active_tasks").update({
-                        "workers": n_w, "quantity": n_q, "accumulated_seconds": int(new_sec),
-                        "last_started_at": datetime.now(KST).isoformat() if task['status'] == 'running' else task['last_started_at']
-                    }).eq("id", task['id']).execute(); st.rerun()
+                    update_data = {
+                        "workers": n_w, "quantity": n_q, "accumulated_seconds": int(new_sec)
+                    }
+                    if task['status'] == 'running':
+                        now = datetime.now(KST)
+                        last_start = datetime.fromisoformat(task['last_started_at'])
+                        new_segs = split_man_seconds_by_date(last_start, now, task['workers'])
+                        update_data["work_history"] = update_history_map(task.get('work_history', []), new_segs)
+                        update_data["last_started_at"] = now.isoformat()
+                    else:
+                        update_data["last_started_at"] = task['last_started_at']
+                    supabase.table("active_tasks").update(update_data).eq("id", task['id']).execute(); st.rerun()
         
         with r2_c2:
             if task['status'] == "running":
