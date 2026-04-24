@@ -81,22 +81,30 @@ st.markdown("""
         [data-testid="stVerticalBlock"] > div:has(.header-anchor) + div {
             position: fixed !important; top: 0; left: 0; right: 0; 
             z-index: 99999; background: white !important; 
-            padding: 45px 20px 0px 20px !important;
+            height: 135px !important; /* 고정 높이 */
+            padding: 55px 20px 0px 20px !important; /* 텍스트가 Streamlit 헤더 바 아래로 내려오게 함 */
+            border-bottom: 2px solid #ddd !important; /* 자체 구분선 */
             box-shadow: 0 4px 6px -4px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        /* 상단 프레임 내부 간격 최적화 */
+        [data-testid="stVerticalBlock"] > div:has(.header-anchor) + div > div > div[data-testid="stVerticalBlock"] {
+            gap: 0.25rem !important; /* 버튼을 아래 구분선 쪽으로 밀착 */
         }
         
         /* 하단 고정: footer-anchor의 다음 요소(st.container)를 절대적 타겟팅 */
         [data-testid="stVerticalBlock"] > div:has(.footer-anchor) + div {
             position: fixed !important; bottom: 0; left: 0; right: 0;
             z-index: 99999; background: white !important; 
-            padding: 0px 20px 25px 20px !important;
+            padding: 5px 20px 10px 20px !important; /* 위쪽 5px 후 바로 버튼, 아래 10px만 주어 프레임 높이 최소화 */
+            border-top: 2px solid #ddd !important; /* 자체 상단 구분선 */
             box-shadow: 0 -4px 6px -4px rgba(0,0,0,0.1);
         }
     }
     
     /* 스크롤 영역 여백 확보 */
-    .scroll-spacer-top { height: 120px; }
-    .scroll-spacer-bottom { height: 90px; }
+    .scroll-spacer-top { height: 140px; }
+    .scroll-spacer-bottom { height: 75px; }
     
     /* 4열/2열 반응형 정사각형 그리드 */
     .square-grid div[data-testid="stHorizontalBlock"] {
@@ -400,10 +408,9 @@ def render_cat_detail():
     # 1. 상단 고정 영역
     st.markdown('<div class="header-anchor"></div>', unsafe_allow_html=True)
     with st.container():
-        st.markdown(f'<h4 style="margin:0; padding-bottom:5px; color: black !important;">📌 {cat}</h4>', unsafe_allow_html=True)
+        st.markdown(f'<h4 style="margin:0; padding-top:2px; padding-bottom:2px; color: black !important; text-align: center;">📌 {cat}</h4>', unsafe_allow_html=True)
         if st.button("⬅️ 목록으로", key="back_to_start", use_container_width=True):
             st.session_state.view = "cat_list"; st.session_state.selected_main = None; st.session_state.selected_category = None; st.rerun()
-        st.markdown("<hr style='margin: 5px 0 0 0 !important; border: none !important; border-bottom: 2px solid #ddd !important;'/>", unsafe_allow_html=True)
 
     # 2. 스크롤 영역 시작 여백
     st.markdown('<div class="scroll-spacer-top"></div>', unsafe_allow_html=True)
@@ -442,7 +449,6 @@ def render_cat_detail():
     st.markdown('<div class="scroll-spacer-bottom"></div>', unsafe_allow_html=True)
     st.markdown('<div class="footer-anchor"></div>', unsafe_allow_html=True)
     with st.container():
-        st.markdown("<hr style='margin: 0 0 5px 0 !important; border: none !important; border-bottom: 2px solid #ddd !important;'/>", unsafe_allow_html=True)
         if st.button("🚀 신규 작업 생성 (+)", key="footer_create_btn", use_container_width=True, type="primary"): 
             create_task_dialog(cat)
 
