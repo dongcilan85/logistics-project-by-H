@@ -226,7 +226,7 @@ def confirm_finish_dialog(task, curr_w):
             
             # 2. 그룹 생존 여부 스캔
             root_id = task.get('parent_id') if task.get('parent_id') else task['id']
-            res = supabase.table("active_tasks").select("*").or_(f"id.eq.{root_id},parent_id.eq.{root_id}").execute()
+            res = supabase.table("active_tasks").select("*").or_(f"id.eq.{root_id},parent_id.eq.{root_id}").order("id").execute()
             group_tasks = res.data
             
             unfinished = [t for t in group_tasks if t['status'] != 'finished']
@@ -456,7 +456,7 @@ def render_cat_detail():
     st.markdown('<div class="scroll-spacer-top"></div>', unsafe_allow_html=True)
     
     try:
-        res = supabase.table("active_tasks").select("*").eq("task_type", cat).execute()
+        res = supabase.table("active_tasks").select("*").eq("task_type", cat).order("id").execute()
         all_tasks = res.data
         root_tasks = [t for t in all_tasks if t.get('parent_id') is None]
         if not root_tasks: st.info("진행 중인 작업이 없습니다.")
