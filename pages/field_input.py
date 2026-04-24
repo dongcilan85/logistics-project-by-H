@@ -75,19 +75,22 @@ if "selected_category" not in st.session_state: st.session_state.selected_catego
 # CSS: 정밀 그리드 및 반응형 레이아웃
 st.markdown("""
     <style>
-    /* 강제 고정 레이아웃 (반응형 최적화) */
+    /* 강제 고정 3-Frame 레이아웃 (스크롤 구분 완벽 지원) */
     @media (min-width: 0px) {
-        /* 상단 고정: 첫 번째 주요 블록 타겟팅 */
-        header + div[data-testid="stVerticalBlock"] > div:nth-child(2) {
+        /* 상단 고정: header-anchor의 다음 요소(st.container)를 절대적 타겟팅 */
+        [data-testid="stVerticalBlock"] > div:has(.header-anchor) + div {
             position: fixed !important; top: 0; left: 0; right: 0; 
-            z-index: 10000; background: #121212 !important; padding: 10px 20px;
-            border-bottom: 1px solid #333;
+            z-index: 99999; background: white !important; 
+            padding: 45px 20px 0px 20px !important;
+            box-shadow: 0 4px 6px -4px rgba(0,0,0,0.1);
         }
-        /* 하단 고정: 마지막 주요 블록 타겟턴 */
-        header + div[data-testid="stVerticalBlock"] > div:last-child {
+        
+        /* 하단 고정: footer-anchor의 다음 요소(st.container)를 절대적 타겟팅 */
+        [data-testid="stVerticalBlock"] > div:has(.footer-anchor) + div {
             position: fixed !important; bottom: 0; left: 0; right: 0;
-            z-index: 10000; background: #121212 !important; padding: 10px 20px;
-            border-top: 1px solid #333;
+            z-index: 99999; background: white !important; 
+            padding: 0px 20px 25px 20px !important;
+            box-shadow: 0 -4px 6px -4px rgba(0,0,0,0.1);
         }
     }
     
@@ -397,14 +400,14 @@ def render_cat_detail():
     # 1. 상단 고정 영역
     st.markdown('<div class="header-anchor"></div>', unsafe_allow_html=True)
     with st.container():
-        st.markdown(f'<h4 style="margin:0; padding-bottom:5px;">📌 {cat}</h4>', unsafe_allow_html=True)
+        st.markdown(f'<h4 style="margin:0; padding-bottom:5px; color: black !important;">📌 {cat}</h4>', unsafe_allow_html=True)
         if st.button("⬅️ 목록으로", key="back_to_start", use_container_width=True):
             st.session_state.view = "cat_list"; st.session_state.selected_main = None; st.session_state.selected_category = None; st.rerun()
+        st.markdown("<hr style='margin: 5px 0 0 0 !important; border: none !important; border-bottom: 2px solid #ddd !important;'/>", unsafe_allow_html=True)
 
     # 2. 스크롤 영역 시작 여백
     st.markdown('<div class="scroll-spacer-top"></div>', unsafe_allow_html=True)
     
-    st.divider()
     try:
         res = supabase.table("active_tasks").select("*").eq("task_type", cat).execute()
         all_tasks = res.data
@@ -439,6 +442,7 @@ def render_cat_detail():
     st.markdown('<div class="scroll-spacer-bottom"></div>', unsafe_allow_html=True)
     st.markdown('<div class="footer-anchor"></div>', unsafe_allow_html=True)
     with st.container():
+        st.markdown("<hr style='margin: 0 0 5px 0 !important; border: none !important; border-bottom: 2px solid #ddd !important;'/>", unsafe_allow_html=True)
         if st.button("🚀 신규 작업 생성 (+)", key="footer_create_btn", use_container_width=True, type="primary"): 
             create_task_dialog(cat)
 
