@@ -192,9 +192,20 @@ def note_dialog(task):
 
 @st.dialog("🏁 작업 종료 확인")
 def confirm_finish_dialog(task, curr_w):
-    st.write("작업이 종료되고 데이터가 이전됩니다. 정말 종료 하시겠습니까?")
+    root_id = task.get('parent_id') if task.get('parent_id') else task['id']
+    try:
+        res = supabase.table("active_tasks").select("id").or_(f"id.eq.{root_id},parent_id.eq.{root_id}").neq("status", "finished").execute()
+        active_cnt = len(res.data)
+    except:
+        active_cnt = 1
+        
+    if active_cnt <= 1:
+        st.write("작업이 최종 종료되어 데이터가 이전됩니다. 최종 종료 하시겠습니까?")
+    else:
+        st.write("현재 작업이 종료되어 정산대기 상태로 전환됩니다.")
+        
     c1, c2 = st.columns(2)
-    if c1.button("✅ 예", key=f"conf_y_{task['id']}", use_container_width=True, type="primary"):
+    if c1.button("✅ 확인", key=f"conf_y_{task['id']}", use_container_width=True, type="primary"):
         try:
             now = datetime.now(KST)
             history = task.get('work_history', []) or []
@@ -261,7 +272,7 @@ def confirm_finish_dialog(task, curr_w):
                 
             st.rerun()
         except Exception as e: st.error(f"오류: {e}")
-    if c2.button("❌ 아니오", key=f"conf_n_{task['id']}", use_container_width=True): st.rerun()
+    if c2.button("❌ 취소", key=f"conf_n_{task['id']}", use_container_width=True): st.rerun()
 
 @st.dialog("🚀 작업 생성")
 def create_task_dialog(cat):
