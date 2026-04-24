@@ -75,29 +75,32 @@ if "selected_category" not in st.session_state: st.session_state.selected_catego
 # CSS: 정밀 그리드 및 반응형 레이아웃
 st.markdown("""
     <style>
-    /* 3-Frame 고정 레이아웃 (강력한 :has 선택자 활용) */
+    /* 완전 독립 3-Frame 고정 레이아웃 (화이트 테마 - 최종 안정 버전) */
     @media (min-width: 0px) {
-        /* 상단 고정: header-anchor를 포함한 상위 컨테이너 */
-        div[data-testid="stVerticalBlock"] > div:has(#header-anchor) {
-            position: fixed !important; top: 0; left: 0; right: 0; width: 100% !important;
-            z-index: 10000; background: #121212 !important; 
-            padding: 50px 10% 10px !important; /* 상단 여백 보정 */
-            border-bottom: 2px solid #333;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.8);
+        /* 상단 헤더 고정 (Streamlit 헤더바 고려 60px 패딩) */
+        [data-testid="stVerticalBlock"] > div:has(#top-anchor) + div {
+            position: fixed !important; top: 0; left: 0; right: 0;
+            z-index: 99999; background: white !important;
+            padding: 60px 20px 0px !important; /* 하단 패딩 0으로 가동범위 최대화 */
+            border-bottom: 2px solid #ddd;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
-        /* 하단 고정: footer-anchor를 포함한 상위 컨테이너 */
-        div[data-testid="stVerticalBlock"] > div:has(#footer-anchor) {
-            position: fixed !important; bottom: 0; left: 0; right: 0; width: 100% !important;
-            z-index: 10000; background: #121212 !important; 
-            padding: 15px 10% 30px !important; /* 하단 여백 보정 */
-            border-top: 2px solid #333;
-            box-shadow: 0 -4px 15px rgba(0,0,0,0.8);
+        [data-testid="stVerticalBlock"] > div:has(#top-anchor) + div * {
+            color: black !important; /* 헤더 내 모든 글자 검정색 */
+        }
+        /* 하단 푸터 고정 */
+        [data-testid="stVerticalBlock"] > div:has(#bottom-anchor) + div {
+            position: fixed !important; bottom: 0; left: 0; right: 0;
+            z-index: 99999; background: white !important;
+            padding: 10px 20px 25px !important;
+            border-top: 2px solid #ddd;
+            box-shadow: 0 -2px 8px rgba(0,0,0,0.1);
         }
     }
     
-    /* 스크롤 영역 여백 확보 (고정된 바의 높이만큼) */
-    .scroll-spacer-top { height: 160px !important; }
-    .scroll-spacer-bottom { height: 120px !important; }
+    /* 스크롤 영역 여백 확보 */
+    .scroll-spacer-top { height: 140px; }
+    .scroll-spacer-bottom { height: 85px; }
     
     /* 4열/2열 반응형 정사각형 그리드 */
     .square-grid div[data-testid="stHorizontalBlock"] {
@@ -175,49 +178,28 @@ def note_dialog(task):
 
 @st.dialog("🏁 작업 종료 확인")
 def confirm_finish_dialog(task, curr_w):
-# ... (내용 생략 - 기존과 동일) ...
-    pass # 실제로는 아래 기존 코드 유지
-
-@st.dialog("⚙️ 정보 수정")
-def edit_task_dialog(task):
-    st.write(f"**{task['session_name']}** - {task['task_type']} 정보 수정")
-    
-    total_sec = task['accumulated_seconds']
-    if task['status'] == 'running' and task['last_started_at']:
-        total_sec += (datetime.now(KST) - datetime.fromisoformat(task['last_started_at'])).total_seconds()
-    
-    cur_h, cur_m = int(total_sec // 3600), int((total_sec % 3600) // 60)
-    
-    c1, c2 = st.columns(2)
-    n_h = c1.number_input("시간", 0, 24, cur_h)
-    n_m = c2.number_input("분", 0, 59, cur_m)
-    n_w = st.number_input("인원", 1, 100, int(task['workers']))
-    n_q = st.number_input("목표수량", 0, 100000, int(task['quantity']))
-    
+    st.write("⚠️ **작업이 종료되어 기록이 업로드 됩니다.**")
+    st.write(f"현장: **{task['session_name']}** | 작업: **{task['task_type']}**")
     st.divider()
-    b1, b2 = st.columns(2)
-    if b1.button("💾 수정 저장", use_container_width=True, type="primary"):
-        new_sec = (n_h * 3600) + (n_m * 60)
-        supabase.table("active_tasks").update({
-            "workers": n_w, "quantity": n_q, "accumulated_seconds": int(new_sec),
-            "last_started_at": datetime.now(KST).isoformat() if task['status'] == 'running' else task['last_started_at']
-        }).eq("id", task['id']).execute(); st.rerun()
-    if b2.button("❌ 취소", use_container_width=True): st.rerun()
-    st.write("⚠️ 이 현장의 작업을 종료하시겠습니까?")
     c1, c2 = st.columns(2)
-    if c1.button("✅ 예", key=f"conf_y_{task['id']}", use_container_width=True, type="primary"):
+    if c1.button("✅ 예 (종료)", key=f"conf_y_{task['id']}", use_container_width=True, type="primary"):
         try:
             now = datetime.now(KST)
             history = task.get('work_history', []) or []
             note_content = next((i['content'] for i in history if isinstance(i, dict) and i.get('type') == 'note'), "")
+            # 실제 시간 기록(date 키가 있는 항목)만 추출
             actual_history = [i for i in history if isinstance(i, dict) and 'man_seconds' in i]
             final_h = actual_history
+            
+            # 현재 진행 중인 시간 가산
             if task['status'] == "running":
                 new_segs = split_man_seconds_by_date(datetime.fromisoformat(task['last_started_at']), now, curr_w)
                 final_h = update_history_map(final_h, new_segs)
+            
             total_man_sec = sum(i['man_seconds'] for i in final_h)
             if total_man_sec > 0:
                 for entry in final_h:
+                    # 물량 안분 (공수 비중에 따라 나누기)
                     weight = entry['man_seconds'] / total_man_sec
                     supabase.table("work_logs").insert({
                         "work_date": entry['date'], "task": task['task_type'],
@@ -225,9 +207,15 @@ def edit_task_dialog(task):
                         "duration": round(entry['man_seconds'] / 3600, 2), "plan_id": task.get('plan_id'),
                         "applied_wage": get_config("hourly_wage", 10000), "memo": f"현장: {task['session_name']} / {note_content}"
                     }).execute()
+            
+            # 1. 자식 작업(sub-sites) 먼저 삭제하여 FK 제약 조건 위반 방지
+            supabase.table("active_tasks").delete().eq("parent_id", task['id']).execute()
+            
+            # 2. 부모 작업 삭제
             supabase.table("active_tasks").delete().eq("id", task['id']).execute(); st.rerun()
         except Exception as e: st.error(f"오류: {e}")
     if c2.button("❌ 아니오", key=f"conf_n_{task['id']}", use_container_width=True): st.rerun()
+
 
 @st.dialog("🚀 작업 생성")
 def create_task_dialog(cat):
@@ -283,8 +271,8 @@ def render_site_control(task):
         h, m, s = int(total_sec // 3600), int((total_sec % 3600) // 60), int(total_sec % 60)
         with r1_c3: st.write(f"{'⏱️' if task['status'] == 'running' else '⏸️'} {h:02d}:{m:02d}:{s:02d}")
         
-        # 행 2: 수정 | 정지/재개 | 종료 (균등 배치)
-        r2_c1, r2_c2, r2_c3 = st.columns(3)
+        # 행 2: 수정 | 정지/재개 | 종료 (비율 조정: 3:3:2)
+        r2_c1, r2_c2, r2_c3 = st.columns([3, 3, 2])
         
         with r2_c1:
             with st.expander("정보수정"):
@@ -388,8 +376,13 @@ def render_cat_detail():
     
     # 1. 상단 고정 영역 (앵커 포함)
     with st.container():
-        st.markdown('<div id="header-anchor"></div>', unsafe_allow_html=True)
-        st.markdown(f'<h4 style="margin:0; padding-bottom:5px;">📌 {cat}</h4>', unsafe_allow_html=True)
+        st.markdown('<div id="top-anchor"></div>', unsafe_allow_html=True)
+        # 카테고리명을 최상단으로 (색상 및 폰트 사이즈 명시)
+        st.markdown(f'''
+            <div style="text-align: center; width: 100%; margin-bottom: 10px;">
+                <h2 style="color: black !important; margin: 0; font-size: 1.4rem; font-weight: bold;">📌 {cat}</h2>
+            </div>
+        ''', unsafe_allow_html=True)
         if st.button("⬅️ 목록으로", key="back_to_start", use_container_width=True):
             st.session_state.view = "cat_list"; st.session_state.selected_main = None; st.session_state.selected_category = None; st.rerun()
 
@@ -431,7 +424,7 @@ def render_cat_detail():
 
     # 3. 하단 고정 영역 (앵커 포함)
     with st.container():
-        st.markdown('<div id="footer-anchor"></div>', unsafe_allow_html=True)
+        st.markdown('<div id="bottom-anchor"></div>', unsafe_allow_html=True)
         if st.button("🚀 신규 작업 생성 (+)", key="footer_create_btn", use_container_width=True, type="primary"): 
             create_task_dialog(cat)
 
