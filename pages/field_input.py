@@ -75,19 +75,21 @@ if "selected_category" not in st.session_state: st.session_state.selected_catego
 # CSS: 정밀 그리드 및 반응형 레이아웃
 st.markdown("""
     <style>
-    /* 강제 고정 레이아웃 (반응형 최적화) */
+    /* 3-Frame 고정 레이아웃 (강력한 :has 선택자 활용) */
     @media (min-width: 0px) {
-        /* 상단 고정: 첫 번째 주요 블록 타겟팅 */
-        header + div[data-testid="stVerticalBlock"] > div:nth-child(2) {
+        /* 상단 고정: header-anchor를 포함한 컨테이너 */
+        div[data-testid="stVerticalBlock"] > div:has(#header-anchor) {
             position: fixed !important; top: 0; left: 0; right: 0; 
-            z-index: 10000; background: #121212 !important; padding: 10px 20px;
+            z-index: 10000; background: #121212 !important; padding: 10px 20px 0px;
             border-bottom: 1px solid #333;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.5);
         }
-        /* 하단 고정: 마지막 주요 블록 타겟턴 */
-        header + div[data-testid="stVerticalBlock"] > div:last-child {
+        /* 하단 고정: footer-anchor를 포함한 컨테이너 */
+        div[data-testid="stVerticalBlock"] > div:has(#footer-anchor) {
             position: fixed !important; bottom: 0; left: 0; right: 0;
-            z-index: 10000; background: #121212 !important; padding: 10px 20px;
+            z-index: 10000; background: #121212 !important; padding: 10px 20px 25px;
             border-top: 1px solid #333;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.5);
         }
     }
     
@@ -382,9 +384,9 @@ def render_cat_selector():
 def render_cat_detail():
     cat = st.session_state.selected_category
     
-    # 1. 상단 고정 영역
-    st.markdown('<div class="header-anchor"></div>', unsafe_allow_html=True)
+    # 1. 상단 고정 영역 (앵커 포함)
     with st.container():
+        st.markdown('<div id="header-anchor"></div>', unsafe_allow_html=True)
         st.markdown(f'<h4 style="margin:0; padding-bottom:5px;">📌 {cat}</h4>', unsafe_allow_html=True)
         if st.button("⬅️ 목록으로", key="back_to_start", use_container_width=True):
             st.session_state.view = "cat_list"; st.session_state.selected_main = None; st.session_state.selected_category = None; st.rerun()
@@ -422,11 +424,12 @@ def render_cat_detail():
                     for child in children: render_site_control(child)
                     if st.button("➕ 현장 추가", key=f"add_site_{root['id']}", use_container_width=True): add_site_dialog(root)
     except Exception as e: st.error(f"데이터 로드 오류: {e}")
-
-    # 3. 하단 여백 및 고정 영역
+    
     st.markdown('<div class="scroll-spacer-bottom"></div>', unsafe_allow_html=True)
-    st.markdown('<div class="footer-anchor"></div>', unsafe_allow_html=True)
+
+    # 3. 하단 고정 영역 (앵커 포함)
     with st.container():
+        st.markdown('<div id="footer-anchor"></div>', unsafe_allow_html=True)
         if st.button("🚀 신규 작업 생성 (+)", key="footer_create_btn", use_container_width=True, type="primary"): 
             create_task_dialog(cat)
 
