@@ -127,29 +127,32 @@ st.markdown("""
         }
     }
     
-    /* 일반 버튼 스타일 보존 (카드가 아닌 곳의 버튼들) */
-    div.stButton > button { 
-        min-height: 40px; 
+    /* 모든 버튼 및 익스팬더 헤더 높이 통일 (정렬 핵심) - 사이즈 약간 축소 */
+    .stButton > button, 
+    .stExpander details summary { 
+        height: 42px !important; 
+        min-height: 42px !important;
+        margin: 0 !important;
+        display: flex !important;
+        align-items: center !important;
+        font-size: 0.95rem !important;
+    }
+    .stExpander details summary p {
+        font-size: 0.95rem !important;
+        margin: 0 !important;
+    }
+    .stExpander details summary {
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
     }
 
-    /* 종료 버튼: 강제 오렌지 색상 및 정렬 보정 */
-    .orange-button {
-        display: flex;
-        align-items: center;
-        height: 100%;
-    }
-    .orange-button .stButton { width: 100%; }
-    .orange-button .stButton > button {
+    /* 종료 버튼: Streamlit의 :last-child 등을 활용하여 스타일 지정 (래퍼 요소 제거) */
+    div[data-testid="stColumn"]:nth-child(3) .stButton > button {
         background-color: #FF8C00 !important;
         color: white !important;
         border: none !important;
         font-weight: bold !important;
-        width: 100% !important;
-        height: 45px !important; /* 높이 고정 */
     }
-    
-    /* 일반 버튼 높이 고정 (정렬용) */
-    .stButton > button { height: 45px !important; }
 
     .site-card { border: 1px solid #444; border-radius: 8px; padding: 10px; margin-bottom: 10px; background: rgba(255,255,255,0.05); }
     </style>
@@ -313,9 +316,8 @@ def render_site_control(task):
                     supabase.table("active_tasks").update({"status": "running", "last_started_at": datetime.now(KST).isoformat()}).eq("id", task['id']).execute(); st.rerun()
         
         with r2_c3:
-            st.markdown('<div class="orange-button">', unsafe_allow_html=True)
+            # 래퍼 제거 및 일반 버튼 사용 (CSS에서 위치로 색상 지정)
             if st.button("종료", key=f"e_{task['id']}", use_container_width=True): confirm_finish_dialog(task, task['workers'])
-            st.markdown('</div>', unsafe_allow_html=True)
         
         st.divider()
 
