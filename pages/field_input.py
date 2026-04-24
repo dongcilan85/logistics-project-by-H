@@ -81,8 +81,8 @@ st.markdown("""
         [data-testid="stVerticalBlock"] > div:has(.header-anchor) + div {
             position: fixed !important; top: 0; left: 0; right: 0; 
             z-index: 99999; background: white !important; 
-            height: 135px !important; /* 고정 높이 */
-            padding: 55px 20px 0px 20px !important; /* 텍스트가 Streamlit 헤더 바 아래로 내려오게 함 */
+            height: 136.5px !important; /* 상단부 높이 미세 조정 (+1.5px) */
+            padding: 56.5px 20px 0px 20px !important; /* 텍스트 짤림 방지를 위한 동반 패딩 증가 */
             border-bottom: 2px solid #ddd !important; /* 자체 구분선 */
             box-shadow: 0 4px 6px -4px rgba(0,0,0,0.1);
             overflow: hidden;
@@ -103,7 +103,7 @@ st.markdown("""
     }
     
     /* 스크롤 영역 여백 확보 */
-    .scroll-spacer-top { height: 140px; }
+    .scroll-spacer-top { height: 65px; }
     .scroll-spacer-bottom { height: 75px; }
     
     /* 4열/2열 반응형 정사각형 그리드 */
