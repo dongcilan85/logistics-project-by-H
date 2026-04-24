@@ -77,25 +77,27 @@ st.markdown("""
     <style>
     /* 3-Frame 고정 레이아웃 (강력한 :has 선택자 활용) */
     @media (min-width: 0px) {
-        /* 상단 고정: header-anchor를 포함한 컨테이너 */
+        /* 상단 고정: header-anchor를 포함한 상위 컨테이너 */
         div[data-testid="stVerticalBlock"] > div:has(#header-anchor) {
-            position: fixed !important; top: 0; left: 0; right: 0; 
-            z-index: 10000; background: #121212 !important; padding: 10px 20px 0px;
-            border-bottom: 1px solid #333;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+            position: fixed !important; top: 0; left: 0; right: 0; width: 100% !important;
+            z-index: 10000; background: #121212 !important; 
+            padding: 50px 10% 10px !important; /* 상단 여백 보정 */
+            border-bottom: 2px solid #333;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.8);
         }
-        /* 하단 고정: footer-anchor를 포함한 컨테이너 */
+        /* 하단 고정: footer-anchor를 포함한 상위 컨테이너 */
         div[data-testid="stVerticalBlock"] > div:has(#footer-anchor) {
-            position: fixed !important; bottom: 0; left: 0; right: 0;
-            z-index: 10000; background: #121212 !important; padding: 10px 20px 25px;
-            border-top: 1px solid #333;
-            box-shadow: 0 -2px 10px rgba(0,0,0,0.5);
+            position: fixed !important; bottom: 0; left: 0; right: 0; width: 100% !important;
+            z-index: 10000; background: #121212 !important; 
+            padding: 15px 10% 30px !important; /* 하단 여백 보정 */
+            border-top: 2px solid #333;
+            box-shadow: 0 -4px 15px rgba(0,0,0,0.8);
         }
     }
     
-    /* 스크롤 영역 여백 확보 */
-    .scroll-spacer-top { height: 120px; }
-    .scroll-spacer-bottom { height: 90px; }
+    /* 스크롤 영역 여백 확보 (고정된 바의 높이만큼) */
+    .scroll-spacer-top { height: 160px !important; }
+    .scroll-spacer-bottom { height: 120px !important; }
     
     /* 4열/2열 반응형 정사각형 그리드 */
     .square-grid div[data-testid="stHorizontalBlock"] {
