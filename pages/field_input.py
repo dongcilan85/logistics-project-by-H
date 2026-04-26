@@ -338,7 +338,7 @@ def render_site_control(task):
         with r2_c1:
             with st.expander("정보수정"):
                 cur_h, cur_m = int(total_sec // 3600), int((total_sec % 3600) // 60)
-                n_h = st.number_input("시간", 0, 24, cur_h, key=f"nh_{task['id']}")
+                n_h = st.number_input("시간", 0, 9999, cur_h, key=f"nh_{task['id']}")
                 n_m = st.number_input("분", 0, 59, cur_m, key=f"nm_{task['id']}")
                 n_w = st.number_input("인원", 1, 100, int(task['workers']), key=f"nw_{task['id']}")
                 n_q = st.number_input("목표", 0, 100000, int(task['quantity']), key=f"nq_{task['id']}")
