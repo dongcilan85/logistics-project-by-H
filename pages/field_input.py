@@ -373,7 +373,8 @@ def render_site_control(task):
                             other_items = [i for i in history if not (isinstance(i, dict) and 'man_seconds' in i)]
                             
                             if diff_man_sec > 0:
-                                adj_segs = [{"date": now.strftime("%Y-%m-%d"), "man_seconds": diff_man_sec}]
+                                # 💡 증가는 무조건 오늘 날짜(now)의 history에 가산
+                                adj_segs = {now.strftime("%Y-%m-%d"): diff_man_sec}
                                 history = update_history_map(actual_history, adj_segs) + other_items
                             else:
                                 total_hist_ms = sum(i['man_seconds'] for i in actual_history)
