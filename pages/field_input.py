@@ -82,7 +82,8 @@ st.markdown("""
     @media (min-width: 0px) {
         /* 상단 고정: header-anchor의 다음 요소(st.container)를 절대적 타겟팅 */
         [data-testid="stVerticalBlock"] > div:has(.header-anchor) + div {
-            position: fixed !important; top: 0; left: 0; right: 0; 
+            position: fixed !important; top: 0; left: auto !important; right: auto !important; 
+            width: inherit !important;
             z-index: 99999; background: white !important; 
             height: 144px !important; /* 상단부 높이 여유 확장 (버튼 짤림 방지용) */
             padding: 56.5px 20px 0px 20px !important; /* 텍스트 짤림 방지를 위한 동반 패딩 증가 */
@@ -97,7 +98,8 @@ st.markdown("""
         
         /* 하단 고정: footer-anchor의 다음 요소(st.container)를 절대적 타겟팅 */
         [data-testid="stVerticalBlock"] > div:has(.footer-anchor) + div {
-            position: fixed !important; bottom: 0; left: 0; right: 0;
+            position: fixed !important; bottom: 0; left: auto !important; right: auto !important;
+            width: inherit !important;
             z-index: 99999; background: white !important; 
             padding: 5px 20px 10px 20px !important; /* 위쪽 5px 후 바로 버튼, 아래 10px만 주어 프레임 높이 최소화 */
             border-top: 2px solid #ddd !important; /* 자체 상단 구분선 */
