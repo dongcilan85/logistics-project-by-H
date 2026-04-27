@@ -343,52 +343,54 @@ def render_site_control(task):
                 n_w = st.number_input("인원", 1, 100, int(task['workers']), key=f"nw_{task['id']}")
                 n_q = st.number_input("목표", 0, 100000, int(task['quantity']), key=f"nq_{task['id']}")
                 if st.button("수정저장", key=f"save_{task['id']}", use_container_width=True):
-                    # 초 단위 손실 방지 로직: 시간, 분이 그대로라면 실제 흐르고 있는 원본 시간(total_sec) 보존
-                    if n_h == cur_h and n_m == cur_m:
-                        new_sec = total_sec
-                        diff_sec = 0
-                    else:
-                        new_sec = (n_h * 3600) + (n_m * 60)
-                        diff_sec = new_sec - total_sec
-                    
-                    update_data = {
-                        "workers": n_w, "quantity": n_q, "accumulated_seconds": int(new_sec)
-                    }
-                    
-                    now = datetime.now(KST)
-                    history = task.get('work_history', [])
-                    
-                    if task['status'] == 'running':
-                        last_start = datetime.fromisoformat(task['last_started_at'])
-                        new_segs = split_man_seconds_by_date(last_start, now, task['workers'])
-                        history = update_history_map(history, new_segs)
-                        update_data["last_started_at"] = now.isoformat()
-                    else:
-                        update_data["last_started_at"] = task.get('last_started_at')
-                        
-                    if diff_sec != 0:
-                        diff_man_sec = diff_sec * n_w
-                        actual_history = [i for i in history if isinstance(i, dict) and 'man_seconds' in i]
-                        other_items = [i for i in history if not (isinstance(i, dict) and 'man_seconds' in i)]
-                        
-                        if diff_man_sec > 0:
-                            # 💡 증가는 무조건 오늘 날짜(now)의 history에 가산
-                            adj_segs = [{"date": now.strftime("%Y-%m-%d"), "man_seconds": diff_man_sec}]
-                            history = update_history_map(actual_history, adj_segs) + other_items
+                    try:
+                        if n_h == cur_h and n_m == cur_m:
+                            new_sec = total_sec
+                            diff_sec = 0
                         else:
-                            # 💡 차감은 기존 날짜(과거)들의 공수 비율(weight)에 따라 안전하게 분배 차감하여 음수 방지
-                            total_hist_ms = sum(i['man_seconds'] for i in actual_history)
-                            if total_hist_ms > 0:
-                                new_actual = []
-                                for entry in actual_history:
-                                    proportion = entry['man_seconds'] / total_hist_ms
-                                    deduction = diff_man_sec * proportion # diff_man_sec is negative
-                                    new_ms = max(0, entry['man_seconds'] + deduction)
-                                    new_actual.append({"date": entry['date'], "man_seconds": new_ms})
-                                history = new_actual + other_items
-                                
-                    update_data["work_history"] = history
-                    supabase.table("active_tasks").update(update_data).eq("id", task['id']).execute(); st.rerun()
+                            new_sec = (n_h * 3600) + (n_m * 60)
+                            diff_sec = new_sec - total_sec
+                        
+                        update_data = {
+                            "workers": n_w, "quantity": n_q, "accumulated_seconds": int(new_sec)
+                        }
+                        
+                        now = datetime.now(KST)
+                        # 💡 Supabase의 NULL 반환(None)에 대한 강제 빈 배열 병합 처리
+                        history = task.get('work_history') or []
+                        
+                        if task['status'] == 'running':
+                            last_start = datetime.fromisoformat(task['last_started_at'])
+                            new_segs = split_man_seconds_by_date(last_start, now, task['workers'])
+                            history = update_history_map(history, new_segs)
+                            update_data["last_started_at"] = now.isoformat()
+                        else:
+                            update_data["last_started_at"] = task.get('last_started_at')
+                            
+                        if diff_sec != 0:
+                            diff_man_sec = diff_sec * n_w
+                            actual_history = [i for i in history if isinstance(i, dict) and 'man_seconds' in i]
+                            other_items = [i for i in history if not (isinstance(i, dict) and 'man_seconds' in i)]
+                            
+                            if diff_man_sec > 0:
+                                adj_segs = [{"date": now.strftime("%Y-%m-%d"), "man_seconds": diff_man_sec}]
+                                history = update_history_map(actual_history, adj_segs) + other_items
+                            else:
+                                total_hist_ms = sum(i['man_seconds'] for i in actual_history)
+                                if total_hist_ms > 0:
+                                    new_actual = []
+                                    for entry in actual_history:
+                                        proportion = entry['man_seconds'] / total_hist_ms
+                                        deduction = diff_man_sec * proportion
+                                        new_ms = max(0, entry['man_seconds'] + deduction)
+                                        new_actual.append({"date": entry['date'], "man_seconds": new_ms})
+                                    history = new_actual + other_items
+                                    
+                        update_data["work_history"] = history
+                        supabase.table("active_tasks").update(update_data).eq("id", task['id']).execute()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"저장 중 오류가 발생했습니다: {str(e)}")
         
         with r2_c2:
             if task['status'] == "running":
