@@ -343,8 +343,13 @@ def render_site_control(task):
                 n_w = st.number_input("인원", 1, 100, int(task['workers']), key=f"nw_{task['id']}")
                 n_q = st.number_input("목표", 0, 100000, int(task['quantity']), key=f"nq_{task['id']}")
                 if st.button("수정저장", key=f"save_{task['id']}", use_container_width=True):
-                    new_sec = (n_h * 3600) + (n_m * 60)
-                    diff_sec = new_sec - total_sec
+                    # 초 단위 손실 방지 로직: 시간, 분이 그대로라면 실제 흐르고 있는 원본 시간(total_sec) 보존
+                    if n_h == cur_h and n_m == cur_m:
+                        new_sec = total_sec
+                        diff_sec = 0
+                    else:
+                        new_sec = (n_h * 3600) + (n_m * 60)
+                        diff_sec = new_sec - total_sec
                     
                     update_data = {
                         "workers": n_w, "quantity": n_q, "accumulated_seconds": int(new_sec)
