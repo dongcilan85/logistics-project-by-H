@@ -534,7 +534,7 @@ def render_cat_detail():
     # 1. 상단 고정 영역
     st.markdown('<div class="header-anchor"></div>', unsafe_allow_html=True)
     with st.container():
-        st.markdown(f'<h4 style="margin:0; padding-top:2px; padding-bottom:2px; color: black !important; text-align: center;">📌 {cat}</h4>', unsafe_allow_html=True)
+        st.markdown(f'<div style="display:flex; justify-content:center; width:100%;"><h4 style="margin:0; padding-top:2px; padding-bottom:2px; color: black !important; text-align: center;">📌 {cat}</h4></div>', unsafe_allow_html=True)
         bc1, bc2 = st.columns([3, 7])
         with bc1:
             if st.button("⬅️ 뒤로", key="back_to_sub", use_container_width=True):
