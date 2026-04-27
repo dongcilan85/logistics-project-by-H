@@ -177,6 +177,40 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 💡 다이얼로그 구역 ---
+@st.dialog("🚀 오더 수락 및 작업 현장 등록")
+def accept_order_dialog(plan):
+    st.write(f"**[{plan['task_type']}] 본부 지침 오더**")
+    st.write(f"목표 수량: **{plan['target_quantity']:,}건** | 배정 인원: **{plan['planned_workers']}명**")
+    
+    sites = get_site_names()
+    if sites:
+        place = st.selectbox("오더를 처리할 현장명", options=sites, key=f"acpt_sel_{plan['id']}")
+    else:
+        place = st.text_input("현장명 (직접 입력)", placeholder="현장명을 입력하세요", key=f"acpt_txt_{plan['id']}")
+        
+    workers = st.number_input("실제 초기 투입 인원", min_value=1, value=int(plan['planned_workers']), key=f"acpt_w_{plan['id']}")
+    
+    if st.button("✅ 확정 및 작업 시작", use_container_width=True, type="primary"):
+        if not place:
+            st.error("현장명을 입력해 주세요.")
+            return
+            
+        supabase.table("active_tasks").insert({
+            "session_name": place, 
+            "task_type": plan['task_type'], 
+            "workers": workers, 
+            "quantity": plan['target_quantity'],
+            "status": "running", 
+            "last_started_at": datetime.now(KST).isoformat(), 
+            "accumulated_seconds": 0,
+            "plan_id": plan['id']
+        }).execute()
+        
+        supabase.table("production_plans").update({"status": "active"}).eq("id", plan['id']).execute()
+        st.success("오더를 수락하여 타이머를 가동합니다!")
+        time.sleep(0.5)
+        st.rerun()
+
 @st.dialog("📝 작업 노트")
 def note_dialog(task):
     history = task.get('work_history', [])
@@ -491,6 +525,27 @@ def render_cat_detail():
     # 2. 스크롤 영역 시작 여백
     st.markdown('<div class="scroll-spacer-top"></div>', unsafe_allow_html=True)
     
+    # 🔔 본부 신규 오더 수신함 렌더링
+    try:
+        pending_res = supabase.table("production_plans").select("*").eq("task_type", cat).eq("status", "pending").execute()
+        if pending_res.data:
+            st.markdown("<h6 style='margin-bottom: 5px; color:#00AAFF;'>🔔 본부 신규 오더 (수락 대기 중)</h6>", unsafe_allow_html=True)
+            for plan in pending_res.data:
+                with st.container(border=True):
+                    pc1, pc2 = st.columns([7, 3])
+                    with pc1:
+                        st.markdown(f"**목표: {plan['target_quantity']:,}건** | 배정인원: {plan['planned_workers']}명", unsafe_allow_html=True)
+                        if plan.get('created_at'):
+                            # Safely convert implicitly to Seoul Time
+                            dt_obj = datetime.fromisoformat(plan['created_at'].replace('Z', '+00:00')).astimezone(KST)
+                            st.caption(f"발송 일시: {dt_obj.strftime('%m-%d %H:%M')}")
+                    with pc2:
+                        if st.button("🚀 수락", key=f"btn_acpt_{plan['id']}", use_container_width=True, type="primary"):
+                            accept_order_dialog(plan)
+            st.divider()
+    except Exception as e:
+        st.error(f"오더 수신 에러: {e}")
+
     try:
         res = supabase.table("active_tasks").select("*").eq("task_type", cat).order("id").execute()
         all_tasks = res.data
