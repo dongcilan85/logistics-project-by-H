@@ -68,10 +68,10 @@ def note_dialog(task):
                 break
     
     st.write(f"**{task['session_name']}** - {task['task_type']}")
-    new_note = st.text_area("현장 메모 (수정 가능)", value=current_note, height=200)
+    new_note = st.text_area("현장 메모 (수정 가능)", value=current_note, height=200, key=f"d_ta_{task['id']}")
     
     col1, col2 = st.columns(2)
-    if col1.button("💾 저장", use_container_width=True, type="primary"):
+    if col1.button("💾 저장", use_container_width=True, type="primary", key=f"d_sv_{task['id']}"):
         new_history = [item for item in history if not (isinstance(item, dict) and item.get('type') == 'note')]
         if new_note.strip():
             new_history.append({"type": "note", "content": new_note.strip()})
@@ -79,7 +79,7 @@ def note_dialog(task):
             supabase.table("active_tasks").update({"work_history": new_history}).eq("id", task['id']).execute()
             st.success("저장되었습니다."); time.sleep(0.5); st.rerun()
         except: st.error("저장 실패")
-    if col2.button("❌ 닫기", use_container_width=True): st.rerun()
+    if col2.button("❌ 닫기", use_container_width=True, key=f"d_cl_{task['id']}"): st.rerun()
 
 @st.dialog("🏁 작업 종료 확인")
 def confirm_dashboard_finish_dialog(row, total_sec):

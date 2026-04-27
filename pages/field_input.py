@@ -182,13 +182,13 @@ def note_dialog(task):
     history = task.get('work_history', [])
     current_note = next((i['content'] for i in (history or []) if isinstance(i, dict) and i.get('type') == 'note'), "")
     st.write(f"**{task.get('session_name', '현장미지정')}** - {task['task_type']}")
-    new_note = st.text_area("특이사항", value=current_note, height=150)
+    new_note = st.text_area("특이사항", value=current_note, height=150, key=f"note_ta_{task['id']}")
     c1, c2 = st.columns(2)
-    if c1.button("💾 저장", key="save_note_btn", use_container_width=True, type="primary"):
+    if c1.button("💾 저장", key=f"note_sv_{task['id']}", use_container_width=True, type="primary"):
         new_history = [item for item in (history or []) if not (isinstance(item, dict) and item.get('type') == 'note')]
         if new_note.strip(): new_history.append({"type": "note", "content": new_note.strip()})
         supabase.table("active_tasks").update({"work_history": new_history}).eq("id", task['id']).execute(); st.rerun()
-    if c2.button("❌ 닫기", key="close_note_btn", use_container_width=True): st.rerun()
+    if c2.button("❌ 닫기", key=f"note_cl_{task['id']}", use_container_width=True): st.rerun()
 
 @st.dialog("🏁 작업 종료 확인")
 def confirm_finish_dialog(task, curr_w):
