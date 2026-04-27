@@ -84,7 +84,7 @@ st.markdown("""
         [data-testid="stVerticalBlock"] > div:has(.header-anchor) + div {
             position: fixed !important; top: 0; left: 0; right: 0; 
             z-index: 99999; background: white !important; 
-            height: 136.5px !important; /* 상단부 높이 미세 조정 (+1.5px) */
+            height: 144px !important; /* 상단부 높이 여유 확장 (버튼 짤림 방지용) */
             padding: 56.5px 20px 0px 20px !important; /* 텍스트 짤림 방지를 위한 동반 패딩 증가 */
             border-bottom: 2px solid #ddd !important; /* 자체 구분선 */
             box-shadow: 0 4px 6px -4px rgba(0,0,0,0.1);
@@ -162,7 +162,7 @@ st.markdown("""
 
     /* 상단 프레임 전용 버튼 짤림 방지 (st.columns 로 인한 높이 초과 상쇄) */
     [data-testid="stVerticalBlock"] > div:has(.header-anchor) + div div[data-testid="stHorizontalBlock"] {
-        margin-top: -8px !important;
+        margin-top: 1px !important;
         gap: 0.25rem !important;
     }
     [data-testid="stVerticalBlock"] > div:has(.header-anchor) + div .stButton > button {
@@ -533,7 +533,7 @@ def render_cat_detail():
     st.markdown('<div class="header-anchor"></div>', unsafe_allow_html=True)
     with st.container():
         st.markdown(f'<h4 style="margin:0; padding-top:2px; padding-bottom:2px; color: black !important; text-align: center;">📌 {cat}</h4>', unsafe_allow_html=True)
-        bc1, bc2 = st.columns(2)
+        bc1, bc2 = st.columns([3, 7])
         with bc1:
             if st.button("⬅️ 뒤로", key="back_to_sub", use_container_width=True):
                 st.session_state.view = "cat_list"; st.session_state.selected_category = None; st.rerun()
