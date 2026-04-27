@@ -18,6 +18,8 @@ apply_premium_style()
 url = st.secrets["supabase"]["url"]
 key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
+st.sidebar.caption(f"🔌 Connected to: {url[:25]}...")
+st.sidebar.caption(f"🚀 Version: 21-17:55")
 KST = timezone(timedelta(hours=9))
 
 if "role" not in st.session_state:
@@ -66,10 +68,10 @@ def note_dialog(task):
                 break
     
     st.write(f"**{task['session_name']}** - {task['task_type']}")
-    new_note = st.text_area("현장 메모 (수정 가능)", value=current_note, height=200)
+    new_note = st.text_area("현장 메모 (수정 가능)", value=current_note, height=200, key=f"d_ta_{task['id']}")
     
     col1, col2 = st.columns(2)
-    if col1.button("💾 저장", use_container_width=True, type="primary"):
+    if col1.button("💾 저장", use_container_width=True, type="primary", key=f"d_sv_{task['id']}"):
         new_history = [item for item in history if not (isinstance(item, dict) and item.get('type') == 'note')]
         if new_note.strip():
             new_history.append({"type": "note", "content": new_note.strip()})
@@ -77,7 +79,7 @@ def note_dialog(task):
             supabase.table("active_tasks").update({"work_history": new_history}).eq("id", task['id']).execute()
             st.success("저장되었습니다."); time.sleep(0.5); st.rerun()
         except: st.error("저장 실패")
-    if col2.button("❌ 닫기", use_container_width=True): st.rerun()
+    if col2.button("❌ 닫기", use_container_width=True, key=f"d_cl_{task['id']}"): st.rerun()
 
 @st.dialog("🏁 작업 종료 확인")
 def confirm_dashboard_finish_dialog(row, total_sec):
@@ -159,170 +161,63 @@ def show_admin_dashboard():
     def show_active_tasks():
         st.subheader("🚀 실시간 현황 (v2)")
         
-        # CSS hack: 전역 수준에서 카드 헤더 최적화 적용
-        st.markdown("""
-            <style>
-            /* 1. 모바일 줄바꿈 차단: 중첩 방지 조건 추가 - 안쪽의 개별 카드 헤더(현장명-버튼) 블록만 정확히 타겟팅 */
-            div[data-testid="stHorizontalBlock"]:has(.mobile-inline-card):not(:has(div[data-testid="stHorizontalBlock"])) {
-                display: flex !important;
-                flex-direction: row !important;
-                flex-wrap: nowrap !important;
-                align-items: center !important;
-                width: 100% !important;
-                gap: 0.5rem !important;
-            }
-
-            /* 자식 영역들 간격 및 가변 폭 설정 */
-            div[data-testid="stHorizontalBlock"]:has(.mobile-inline-card):not(:has(div[data-testid="stHorizontalBlock"])) > div {
-                flex: 1 1 auto !important;
-                width: auto !important;
-                min-width: 0 !important;
-            }
-
-            /* 마지막 영역 (접기/펼치기 버튼) 우측 정렬 및 폭 고정 */
-            div[data-testid="stHorizontalBlock"]:has(.mobile-inline-card):not(:has(div[data-testid="stHorizontalBlock"])) > div:last-child {
-                flex: 0 0 auto !important;
-                width: auto !important;
-                display: flex !important;
-                justify-content: flex-end !important;
-            }
-
-            /* 2. 버튼 스타일 완전 초기화 */
-            div[data-testid="stHorizontalBlock"]:has(.mobile-inline-card):not(:has(div[data-testid="stHorizontalBlock"])) .stButton button,
-            [data-testid="stVerticalBlockBorderWrapper"] .stButton button {
-                background: transparent !important;
-                border: none !important;
-                padding: 0 !important;
-                margin: 0 !important;
-                box-shadow: none !important;
-                font-weight: bold !important;
-                font-size: 1rem !important;
-                color: inherit !important;
-                min-height: unset !important;
-                width: auto !important;
-                white-space: nowrap !important;
-            }
-            </style>
-        """, unsafe_allow_html=True)
-        
         try:
             # 💡 [개선] 계획 정보를 함께 가져와서 목표수량 파악
-            active_res = supabase.table("active_tasks").select("*, production_plans(target_quantity)").execute()
+            active_res = supabase.table("active_tasks").select("*, production_plans(target_quantity)").order("id").execute()
             
             if active_res.data:
-                # [Last Update: 2026-04-20 12:12]
+                all_tasks = active_res.data
+                root_tasks = [t for t in all_tasks if t.get('parent_id') is None]
+
                 cols = st.columns(4)
-                for i, row in enumerate(active_res.data):
-                    display_name = row['session_name'].replace("_", " - ")
+                for i, root in enumerate(root_tasks):
                     with cols[i % 4]:
-                        with st.container(border=True):
-                            # 메모 내용 및 히스토리 추출 (미리보기 및 상태 로드용)
-                            history = row.get('work_history', [])
-
-                            # 💡 [영속성] 접힘 상태 관리 (DB 연동 세션 복구)
-                            fold_key = f"fold_admin_{row['id']}"
-                            if fold_key not in st.session_state:
-                                # 이전 세션에서 저장된 접힘 상태가 있는지 확인 (기본값: False - 펼침)
-                                db_fold_state = False
-                                if isinstance(history, list):
-                                    for item in history:
-                                        if isinstance(item, dict) and item.get('type') == 'ui_state':
-                                            db_fold_state = item.get('is_folded', False)
-                                            break
-                                st.session_state[fold_key] = db_fold_state
-                            note_text = ""
-                            if isinstance(history, list):
-                                for item in history:
-                                    if isinstance(item, dict) and item.get('type') == 'note':
-                                        note_text = item.get('content', "")
-                                        break
-
-                            # 타이틀과 접기 버튼 레이아웃
-                            if st.session_state[fold_key]:
-                                # [접힌 상태] 현장명 - 작업명 - 펼치기 버튼 순으로 3단 구성
-                                st.markdown("<div class='folded-card-active-marker' style='display:none;'></div>", unsafe_allow_html=True)
-                                h_cols = st.columns([3.5, 4.5, 2.0])
-                                with h_cols[0]:
-                                    st.markdown("<span class='mobile-inline-card'></span>", unsafe_allow_html=True)
-                                    st.write(f"📍 **{display_name}**")
-                                with h_cols[1]:
-                                    st.write(f"**{row['task_type']}**")
-                                with h_cols[2]:
-                                    if st.button("펼치기", key=f"fold_admin_btn_{row['id']}", use_container_width=False):
-                                        st.session_state[fold_key] = False
-                                        # 💡 DB에 접힘 상태 저장 (영속성 확보)
-                                        new_h = [item for item in history if not (isinstance(item, dict) and item.get('type') == 'ui_state')]
-                                        new_h.append({"type": "ui_state", "is_folded": False})
-                                        try:
-                                            supabase.table("active_tasks").update({"work_history": new_h}).eq("id", row['id']).execute()
-                                        except: pass
-                                        st.rerun()
-                            else:
-                                # [펼쳐진 상태] 기존 2단 구성 (작업명은 아래에 별도 표시)
-                                t_col1, t_col2 = st.columns([7.0, 3.0])
-                                with t_col1:
-                                    st.markdown("<span class='mobile-inline-card'></span>", unsafe_allow_html=True)
-                                    st.write(f"📍 **{display_name}**")
-                                with t_col2:
-                                    if st.button("접기", key=f"fold_admin_btn_{row['id']}", use_container_width=False):
-                                        st.session_state[fold_key] = True
-                                        # 💡 DB에 접힘 상태 저장 (영속성 확보)
-                                        new_h = [item for item in history if not (isinstance(item, dict) and item.get('type') == 'ui_state')]
-                                        new_h.append({"type": "ui_state", "is_folded": True})
-                                        try:
-                                            supabase.table("active_tasks").update({"work_history": new_h}).eq("id", row['id']).execute()
-                                        except: pass
-                                        st.rerun()
+                        with st.container(border=True): # 미니어처 그룹 컨테이너
+                            st.markdown(f"<h6 style='margin:0;'>📌 {root['task_type']}</h6>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='font-size:0.85rem; color:gray; margin-bottom:15px;'>목표: [{root['quantity']:,}]건</div>", unsafe_allow_html=True)
                             
-                            # 메모 버튼 아래 줄 배치 (가로 공간 확보)
-                            note_label = f"📝 {note_text[:25]}..." if len(note_text) > 25 else f"📝 {note_text}" if note_text else "📝 메모 추가"
-                            if st.button(note_label, key=f"note_admin_{row['id']}", help=note_text if note_text else "메모 확인/수정", use_container_width=True):
-                                note_dialog(row)
+                            group_tasks = [root] + [t for t in all_tasks if t.get('parent_id') == root['id']]
                             
-                            st.write(f"작업: **{row['task_type']}**")
-
-                            if not st.session_state[fold_key]:
-                                # [펼쳐진 상태] 상세 정보 및 제어
-                                # 💡 진척도(수량) 표시 형식 수정 및 매핑 교정
-                                target_qty = row.get('quantity', 0)
-                                current_qty = row.get('completed_quantity', 0)
-                                
-                                if target_qty > 0:
-                                    st.write(f"🔢 **목표 : {target_qty:,}, 진행 : {current_qty:,}**")
-                                    progress_pct = (current_qty / target_qty * 100)
-                                    st.progress(min(progress_pct / 100, 1.0))
+                            for site in group_tasks:
+                                display_name = site['session_name'].replace("_", " - ")
+                                if site['status'] == 'finished':
+                                    st.info(f"✅ {display_name} (정산 대기)")
                                 else:
-                                    st.write(f"🔢 **목표 : -, 진행 : {current_qty:,}**")
-
-                                # 💡 실시간 진행 시간 계산 및 표시
-                                total_sec = row['accumulated_seconds']
-                                if row['status'] == 'running' and row['last_started_at']:
-                                    total_sec += (datetime.now(KST) - datetime.fromisoformat(row['last_started_at'])).total_seconds()
-                                
-                                h, m, s = int(total_sec // 3600), int((total_sec % 3600) // 60), int(total_sec % 60)
-                                st.write(f"⏱️ **진행 시간 : {h:02d}:{m:02d}:{s:02d}**")
-                                
-                                btn_c1, btn_c2 = st.columns(2)
-                                if btn_c1.button(f"🏁 종료", key=f"stop_{row['id']}", use_container_width=True, type="primary"):
-                                    confirm_dashboard_finish_dialog(row, total_sec)
-                                
-                                if btn_c2.button(f"🚫 취소", key=f"cancel_{row['id']}", use_container_width=True):
-                                    # 💡 취소 로직: 로그는 남기되 실적(quantity)은 0으로 저장
-                                    now = datetime.now(KST)
-                                    current_wage = int(get_config("hourly_wage", 10000))
-                                    supabase.table("work_logs").insert({
-                                        "work_date": now.strftime("%Y-%m-%d"), "task": row['task_type'],
-                                        "workers": row['workers'], "quantity": 0,
-                                        "duration": round(total_sec / 3600, 2), "memo": f"현장에서 취소됨(관리자) / {display_name}",
-                                        "applied_wage": current_wage,
-                                        "plan_id": None # 계획에서 분리
-                                    }).execute()
-                                    # 💡 계획이 있는 경우 다시 대기 상태로 복구
-                                    if row.get('plan_id'):
-                                        supabase.table("production_plans").update({"status": "pending"}).eq("id", row['plan_id']).execute()
-                                    
-                                    supabase.table("active_tasks").delete().eq("id", row['id']).execute()
-                                    st.warning("작업이 취소되었습니다."); time.sleep(0.5); st.rerun()
+                                    with st.container(border=True):
+                                        st.markdown(f"**{display_name}** <span style='font-size:0.75rem; color:gray;'>({site['workers']}명)</span>", unsafe_allow_html=True)
+                                        
+                                        total_sec = site['accumulated_seconds']
+                                        if site['status'] == 'running' and site['last_started_at']:
+                                            total_sec += (datetime.now(KST) - datetime.fromisoformat(site['last_started_at'])).total_seconds()
+                                        h, m, s = int(total_sec // 3600), int((total_sec % 3600) // 60), int(total_sec % 60)
+                                        
+                                        icon = "▶️" if site['status'] == 'running' else "⏸️"
+                                        st.markdown(f"<div style='font-size:0.85rem; margin-bottom:10px;'>{icon} {h:02d}:{m:02d}:{s:02d}</div>", unsafe_allow_html=True)
+                                        
+                                        b1, b2, b3 = st.columns(3)
+                                        
+                                        history = site.get('work_history', [])
+                                        note_text = next((item.get('content', "") for item in history if isinstance(item, dict) and item.get('type') == 'note'), "")
+                                        
+                                        if b1.button("📝메모", help=note_text if note_text else "메모 없음", key=f"d_memo_{site['id']}", use_container_width=True):
+                                            note_dialog(site)
+                                        if b2.button("종료", key=f"d_stop_{site['id']}", use_container_width=True, type="primary"):
+                                            confirm_dashboard_finish_dialog(site, total_sec)
+                                        if b3.button("취소", key=f"d_canc_{site['id']}", use_container_width=True):
+                                            now = datetime.now(KST)
+                                            current_wage = int(get_config("hourly_wage", 10000))
+                                            supabase.table("work_logs").insert({
+                                                "work_date": now.strftime("%Y-%m-%d"), "task": site['task_type'],
+                                                "workers": site['workers'], "quantity": 0,
+                                                "duration": round(total_sec / 3600, 2), "memo": f"현장에서 취소됨(관리자) / {display_name}",
+                                                "applied_wage": current_wage,
+                                                "plan_id": None
+                                            }).execute()
+                                            if site.get('plan_id'):
+                                                supabase.table("production_plans").update({"status": "pending"}).eq("id", site['plan_id']).execute()
+                                            
+                                            supabase.table("active_tasks").delete().eq("id", site['id']).execute()
+                                            st.warning("작업이 취소되었습니다."); time.sleep(0.5); st.rerun()
             else: st.info("현재 가동 중인 세션이 없습니다.")
         except Exception as e: st.error(f"실시간 로드 실패: {e}")
 
