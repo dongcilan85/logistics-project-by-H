@@ -522,8 +522,13 @@ def render_cat_detail():
     st.markdown('<div class="header-anchor"></div>', unsafe_allow_html=True)
     with st.container():
         st.markdown(f'<h4 style="margin:0; padding-top:2px; padding-bottom:2px; color: black !important; text-align: center;">📌 {cat}</h4>', unsafe_allow_html=True)
-        if st.button("⬅️ 목록으로", key="back_to_start", use_container_width=True):
-            st.session_state.view = "cat_list"; st.session_state.selected_main = None; st.session_state.selected_category = None; st.rerun()
+        bc1, bc2 = st.columns(2)
+        with bc1:
+            if st.button("⬅️ 뒤로", key="back_to_sub", use_container_width=True):
+                st.session_state.view = "cat_list"; st.session_state.selected_category = None; st.rerun()
+        with bc2:
+            if st.button("🏠 목록으로", key="back_to_main", use_container_width=True):
+                st.session_state.view = "cat_list"; st.session_state.selected_main = None; st.session_state.selected_category = None; st.rerun()
 
     # 2. 스크롤 영역 시작 여백
     st.markdown('<div class="scroll-spacer-top"></div>', unsafe_allow_html=True)
