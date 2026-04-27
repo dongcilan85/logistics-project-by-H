@@ -82,13 +82,12 @@ st.markdown("""
     @media (min-width: 0px) {
         /* 상단 고정: header-anchor의 다음 요소(st.container)를 절대적 타겟팅 */
         [data-testid="stVerticalBlock"] > div:has(.header-anchor) + div {
-            position: fixed !important; top: 0; left: 0; right: 0; 
+            position: sticky !important; top: 3.5rem !important; /* Streamlit 기본 헤더 높이만큼 띄워서 고정 */
             z-index: 99999; background: white !important; 
-            height: 144px !important; /* 상단부 높이 여유 확장 (버튼 짤림 방지용) */
-            padding: 56.5px 20px 0px 20px !important; /* 텍스트 짤림 방지를 위한 동반 패딩 증가 */
+            padding: 10px 20px 10px 20px !important; /* 내부 상단 여백만 확보 */
+            margin: 0 -1rem !important; /* 모바일/PC 좌우 컨테이너 끝에 맞추기 위해 확장 */
             border-bottom: 2px solid #ddd !important; /* 자체 구분선 */
             box-shadow: 0 4px 6px -4px rgba(0,0,0,0.1);
-            overflow: hidden;
         }
         /* 상단 프레임 내부 간격 최적화 */
         [data-testid="stVerticalBlock"] > div:has(.header-anchor) + div > div > div[data-testid="stVerticalBlock"] {
@@ -97,17 +96,18 @@ st.markdown("""
         
         /* 하단 고정: footer-anchor의 다음 요소(st.container)를 절대적 타겟팅 */
         [data-testid="stVerticalBlock"] > div:has(.footer-anchor) + div {
-            position: fixed !important; bottom: 0; left: 0; right: 0;
+            position: sticky !important; bottom: 0 !important;
             z-index: 99999; background: white !important; 
-            padding: 5px 20px 10px 20px !important; /* 위쪽 5px 후 바로 버튼, 아래 10px만 주어 프레임 높이 최소화 */
+            padding: 10px 20px 10px 20px !important; /* 위쪽 여백 조절 */
+            margin: 0 -1rem !important;
             border-top: 2px solid #ddd !important; /* 자체 상단 구분선 */
             box-shadow: 0 -4px 6px -4px rgba(0,0,0,0.1);
         }
     }
     
-    /* 스크롤 영역 여백 확보 */
-    .scroll-spacer-top { height: 25px; }
-    .scroll-spacer-bottom { height: 75px; }
+    /* Sticky 요소는 본연의 DOM 공간을 차지하므로 더 이상 scroll-spacer가 불필요함 */
+    .scroll-spacer-top { display: none; }
+    .scroll-spacer-bottom { display: none; }
     
     /* 4열/2열 반응형 정사각형 그리드 */
     .square-grid div[data-testid="stHorizontalBlock"] {
@@ -169,13 +169,6 @@ st.markdown("""
         height: 35px !important;
         min-height: 35px !important;
         font-size: 0.85rem !important;
-    }
-
-    /* PC 환경 전용: 사이드바 토글 열림/닫힘 UI 간섭 방지를 위한 45px 안전 구역 확보 */
-    @media (min-width: 769px) {
-        [data-testid="stVerticalBlock"] > div:has(.header-anchor) + div div[data-testid="stHorizontalBlock"] {
-            padding-left: 45px !important;
-        }
     }
 
     /* 종료 버튼: Streamlit의 :last-child 등을 활용하여 스타일 지정 (래퍼 요소 제거) */
@@ -539,7 +532,7 @@ def render_cat_detail():
     # 1. 상단 고정 영역
     st.markdown('<div class="header-anchor"></div>', unsafe_allow_html=True)
     with st.container():
-        st.markdown(f'<h4 style="margin:0; padding-top:2px; padding-bottom:2px; color: black !important; text-align: center;">📌 {cat}</h4>', unsafe_allow_html=True)
+        st.markdown(f'<div style="display:flex; justify-content:center; width:100%;"><h4 style="margin:0; padding-top:2px; padding-bottom:2px; color: black !important; text-align: center;">📌 {cat}</h4></div>', unsafe_allow_html=True)
         bc1, bc2 = st.columns([3, 7])
         with bc1:
             if st.button("⬅️ 뒤로", key="back_to_sub", use_container_width=True):
