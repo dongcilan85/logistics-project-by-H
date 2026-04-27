@@ -17,17 +17,20 @@ tab1, tab2 = st.tabs(["📁 카테고리 관리", "🚩 현장명 관리"])
 with tab1:
     st.info("💡 각 대분류에 속할 소분류를 편집하거나 추가할 수 있습니다.")
     try:
-        res_cat = supabase.table("task_categories").select("*").execute()
-        df_cat = pd.DataFrame(res_cat.data) if res_cat.data else pd.DataFrame(columns=['main_category', 'sub_category'])
+        res_cat = supabase.table("task_categories").select("*").order("display_order").execute()
+        df_cat = pd.DataFrame(res_cat.data) if res_cat.data else pd.DataFrame(columns=['display_order', 'main_category', 'sub_category'])
         
         col_cfg_cat = {
+            "display_order": st.column_config.NumberColumn("순번", default=999, step=1, help="숫자가 작을수록 먼저 노출됩니다."),
             "main_category": st.column_config.TextColumn("대분류"),
             "sub_category": st.column_config.TextColumn("소분류")
         }
         for col in df_cat.columns:
-            if col not in ["main_category", "sub_category"]: col_cfg_cat[col] = None
+            if col not in ["display_order", "main_category", "sub_category"]: col_cfg_cat[col] = None
 
-        edited_cat = st.data_editor(df_cat, num_rows="dynamic", use_container_width=True, column_config=col_cfg_cat, key="cat_editor")
+        # 화면에 보일 컬럼 순서 지정 (순번이 맨 앞에 오도록)
+        view_cols = ["display_order", "main_category", "sub_category"] if "display_order" in df_cat.columns else None
+        edited_cat = st.data_editor(df_cat, num_rows="dynamic", use_container_width=True, column_config=col_cfg_cat, column_order=view_cols, key="cat_editor")
     except Exception as e:
         st.error(f"카테고리 로드 오류: {e}")
         edited_cat = None
@@ -58,7 +61,15 @@ if st.button("💾 모든 변경사항 일괄 저장", use_container_width=True,
             for _, row in edited_cat.iterrows():
                 m = str(row.get('main_category', '')).strip()
                 if m and m != 'None':
-                    data_cat.append({"main_category": m, "sub_category": str(row.get('sub_category', '')).strip() if pd.notna(row.get('sub_category')) else ""})
+                    d_ord = 999
+                    if 'display_order' in row and pd.notna(row['display_order']):
+                        try: d_ord = int(row['display_order'])
+                        except: pass
+                    data_cat.append({
+                        "display_order": d_ord,
+                        "main_category": m, 
+                        "sub_category": str(row.get('sub_category', '')).strip() if pd.notna(row.get('sub_category')) else ""
+                    })
             if data_cat: supabase.table("task_categories").insert(data_cat).execute()
 
         # 2. 현장명 저장

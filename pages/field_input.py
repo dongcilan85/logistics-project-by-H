@@ -50,14 +50,17 @@ def get_config(key, default):
 
 def get_dynamic_hierarchy():
     try:
-        res = supabase.table("task_categories").select("main_category, sub_category").execute()
+        # DB의 순번(display_order) 기준으로 정렬 후 로드 (파이썬 3.7+ 에서는 dict 삽입 순서가 전역 유지됨)
+        res = supabase.table("task_categories").select("main_category, sub_category").order("display_order").execute()
         hierarchy = {}
-        for row in res.data:
-            main = row['main_category']
-            sub = row['sub_category']
-            if main not in hierarchy: hierarchy[main] = []
-            if sub and sub not in hierarchy[main]:
-                hierarchy[main].append(sub)
+        if res.data:
+            for row in res.data:
+                main = row['main_category']
+                sub = row.get('sub_category')
+                if main not in hierarchy:
+                    hierarchy[main] = []
+                if sub and sub not in hierarchy[main]:
+                    hierarchy[main].append(sub)
         return hierarchy
     except: return {}
 
@@ -464,7 +467,7 @@ def render_cat_selector():
             st.session_state.selected_main = None; st.rerun()
             
         st.divider()
-        subs = sorted(hierarchy.get(main, []))
+        subs = hierarchy.get(main, [])
         
         # 소분류 그리드
         st.markdown('<div class="square-grid">', unsafe_allow_html=True)
@@ -479,7 +482,7 @@ def render_cat_selector():
         
     else:
         # 대분류 그리드
-        main_cats = sorted(list(hierarchy.keys()))
+        main_cats = list(hierarchy.keys())
         st.write("**[대분류 선택]**")
         st.markdown('<div class="square-grid">', unsafe_allow_html=True)
         for i in range(0, len(main_cats), 4):
