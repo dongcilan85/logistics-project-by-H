@@ -173,13 +173,6 @@ st.markdown("""
         font-size: 0.85rem !important;
     }
 
-    /* PC 환경 전용: 사이드바 토글 열림/닫힘 UI 간섭 방지를 위한 45px 안전 구역 확보 */
-    @media (min-width: 769px) {
-        [data-testid="stVerticalBlock"] > div:has(.header-anchor) + div div[data-testid="stHorizontalBlock"] {
-            padding-left: 45px !important;
-        }
-    }
-
     /* 종료 버튼: Streamlit의 :last-child 등을 활용하여 스타일 지정 (래퍼 요소 제거) */
     div[data-testid="stColumn"]:nth-child(3) .stButton > button {
         background-color: #FF8C00 !important;
