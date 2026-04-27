@@ -160,6 +160,17 @@ st.markdown("""
         padding-bottom: 0 !important;
     }
 
+    /* 상단 프레임 전용 버튼 짤림 방지 (st.columns 로 인한 높이 초과 상쇄) */
+    [data-testid="stVerticalBlock"] > div:has(.header-anchor) + div div[data-testid="stHorizontalBlock"] {
+        margin-top: -8px !important;
+        gap: 0.25rem !important;
+    }
+    [data-testid="stVerticalBlock"] > div:has(.header-anchor) + div .stButton > button {
+        height: 35px !important;
+        min-height: 35px !important;
+        font-size: 0.85rem !important;
+    }
+
     /* 종료 버튼: Streamlit의 :last-child 등을 활용하여 스타일 지정 (래퍼 요소 제거) */
     div[data-testid="stColumn"]:nth-child(3) .stButton > button {
         background-color: #FF8C00 !important;
