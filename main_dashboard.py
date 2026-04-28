@@ -738,6 +738,7 @@ else:
     plan_mgmt_page = st.Page("pages/planning_mgmt.py", title="생산 계획 관리", icon="📅") 
     cat_page = st.Page("pages/category_mgmt.py", title="카테고리 관리", icon="📁")
     site_page = st.Page("pages/field_input.py", title="현장 기록", icon="📝")
+    warehouse_page = st.Page("pages/warehouse_mgmt.py", title="창고 관리", icon="📦")
     
     st.sidebar.divider()
     sc1, sc2 = st.sidebar.columns(2)
@@ -747,8 +748,9 @@ else:
     if st.session_state.role == "Admin":
         pg = st.navigation({
             "관리실": [admin_main, plan_mgmt_page, cat_page],
-            "현장": [site_page]
+            "현장": [site_page],
+            "창고": [warehouse_page]
         })
     else:
-        pg = st.navigation({"현장": [site_page]})
+        pg = st.navigation({"현장": [site_page], "창고": [warehouse_page]})
     pg.run()
