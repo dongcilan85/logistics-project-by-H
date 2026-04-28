@@ -596,38 +596,38 @@ def render_cat_detail():
                     if st.button("➕ 현장 추가", key=f"add_site_{root['id']}", use_container_width=True): add_site_dialog(root)
     except Exception as e: st.error(f"데이터 로드 오류: {e}")
 
-    # --- 💡 순정 Expander 상태 영구 보존용 투명 스크립트 주입 ---
+    # --- 💡 순정 Expander 상태 영구 보존용 안전한 스크립트 주입 ---
+    # Streamlit(React)의 가상 DOM 충돌(White-out)을 방지하기 위해 강제 속성 변경이 아닌 클릭 이벤트 시뮬레이션을 사용합니다.
     js_code = """
     <script>
     setTimeout(function() {
         const parentDoc = window.parent.document;
-        // Streamlit의 st.expander는 항상 <details> 형태임
         const detailsElements = parentDoc.querySelectorAll('details');
         detailsElements.forEach(d => {
             const summary = d.querySelector('summary');
             if(!summary) return;
-            // 고유 식별을 위해 summary의 텍스트 콘텐츠(작업 그룹명) 이용
             const title = summary.innerText.trim();
-            if(!title.includes("🛠️")) return; // 작업 카드만 타겟팅
+            if(!title.includes("🛠️")) return;
             
-            // 1. 상태 복원
             const savedState = window.parent.sessionStorage.getItem("fold_state_" + title);
-            if(savedState === "closed") {
-                d.removeAttribute('open');
-            } else if(savedState === "open") {
-                d.setAttribute('open', '');
+            const isOpen = d.hasAttribute('open');
+            
+            // React 상태 충돌을 막기 위해 DOM 속성을 직접 변경하지 않고 클릭 이벤트를 트리거합니다.
+            if(savedState === "closed" && isOpen) {
+                summary.click();
+            } else if(savedState === "open" && !isOpen) {
+                summary.click();
             }
             
-            // 2. 이벤트 리스너 부착 (중복 부착 방지용 속성 체크)
             if(!d.hasAttribute('data-fold-listener')) {
                 d.setAttribute('data-fold-listener', 'true');
                 d.addEventListener('toggle', (e) => {
-                    const isOpen = d.hasAttribute('open');
-                    window.parent.sessionStorage.setItem("fold_state_" + title, isOpen ? "open" : "closed");
+                    const currentState = d.hasAttribute('open') ? "open" : "closed";
+                    window.parent.sessionStorage.setItem("fold_state_" + title, currentState);
                 });
             }
         });
-    }, 150); // DOM 렌더링 후 실행 대기
+    }, 150);
     </script>
     """
     components.html(js_code, height=0, width=0)
