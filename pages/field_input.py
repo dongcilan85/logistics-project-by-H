@@ -2,6 +2,7 @@ import streamlit as st
 from supabase import create_client, Client
 from datetime import datetime, timezone, timedelta, time as dt_time
 import time
+import streamlit.components.v1 as components
 from utils.style import apply_premium_style
 
 # 1. 시스템 설정
@@ -585,7 +586,8 @@ def render_cat_detail():
                     with s_c3:
                         st.markdown('<div class="white-button">', unsafe_allow_html=True)
                         if st.button("메모입력", key=f"note_root_{root['id']}", use_container_width=True):
-                            note_dialog(root)
+                            st.session_state.trigger_note_dialog = root
+                            st.rerun()
                         st.markdown('</div>', unsafe_allow_html=True)
                     st.divider()
                     
@@ -595,12 +597,54 @@ def render_cat_detail():
                     if st.button("➕ 현장 추가", key=f"add_site_{root['id']}", use_container_width=True): add_site_dialog(root)
     except Exception as e: st.error(f"데이터 로드 오류: {e}")
 
+    # --- 💡 순정 Expander 상태 영구 보존용 안전한 스크립트 주입 ---
+    # Streamlit(React)의 가상 DOM 충돌(White-out)을 방지하기 위해 강제 속성 변경이 아닌 클릭 이벤트 시뮬레이션을 사용합니다.
+    js_code = """
+    <script>
+    setTimeout(function() {
+        const parentDoc = window.parent.document;
+        const detailsElements = parentDoc.querySelectorAll('details');
+        detailsElements.forEach(d => {
+            const summary = d.querySelector('summary');
+            if(!summary) return;
+            const title = summary.innerText.trim();
+            if(!title.includes("🛠️")) return;
+            
+            const savedState = window.parent.sessionStorage.getItem("fold_state_" + title);
+            const isOpen = d.hasAttribute('open');
+            
+            // React 상태 충돌을 막기 위해 DOM 속성을 직접 변경하지 않고 클릭 이벤트를 트리거합니다.
+            if(savedState === "closed" && isOpen) {
+                summary.click();
+            } else if(savedState === "open" && !isOpen) {
+                summary.click();
+            }
+            
+            if(!d.hasAttribute('data-fold-listener')) {
+                d.setAttribute('data-fold-listener', 'true');
+                d.addEventListener('toggle', (e) => {
+                    const currentState = d.hasAttribute('open') ? "open" : "closed";
+                    window.parent.sessionStorage.setItem("fold_state_" + title, currentState);
+                });
+            }
+        });
+    }, 150);
+    </script>
+    """
+    components.html(js_code, height=0, width=0)
+
     # 3. 하단 여백 및 고정 영역
     st.markdown('<div class="scroll-spacer-bottom"></div>', unsafe_allow_html=True)
     st.markdown('<div class="footer-anchor"></div>', unsafe_allow_html=True)
     with st.container():
         if st.button("🚀 신규 작업 생성 (+)", key="footer_create_btn", use_container_width=True, type="primary"): 
             create_task_dialog(cat)
+
+# --- 💡 전역 다이얼로그 호출 (DOM 백화현상 방지) ---
+if getattr(st.session_state, 'trigger_note_dialog', None):
+    root_to_note = st.session_state.trigger_note_dialog
+    st.session_state.trigger_note_dialog = None
+    note_dialog(root_to_note)
 
 # --- 💡 라우팅 ---
 if st.session_state.view == "cat_list": render_cat_selector()
