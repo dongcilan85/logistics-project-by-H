@@ -171,8 +171,12 @@ def show_admin_dashboard():
                 for i, root in enumerate(root_tasks):
                     with cols[i % 4]:
                         with st.container(border=True): # 미니어처 그룹 컨테이너
+                            history = root.get('work_history', [])
+                            note_text = next((item.get('content', "") for item in history if isinstance(item, dict) and item.get('type') == 'note'), "")
+                            display_note = note_text if note_text else "메모 없음"
+                            
                             st.markdown(f"<h6 style='margin:0;'>📌 {root['task_type']}</h6>", unsafe_allow_html=True)
-                            st.markdown(f"<div style='font-size:0.85rem; color:gray; margin-bottom:15px;'>목표: [{root['quantity']:,}]건</div>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='font-size:0.85rem; color:gray; margin-bottom:15px;'>목표: [{root['quantity']:,}]건 | 📝 {display_note}</div>", unsafe_allow_html=True)
                             
                             group_tasks = [root] + [t for t in all_tasks if t.get('parent_id') == root['id']]
                             
@@ -192,16 +196,11 @@ def show_admin_dashboard():
                                         icon = "▶️" if site['status'] == 'running' else "⏸️"
                                         st.markdown(f"<div style='font-size:0.85rem; margin-bottom:10px;'>{icon} {h:02d}:{m:02d}:{s:02d}</div>", unsafe_allow_html=True)
                                         
-                                        b1, b2, b3 = st.columns(3)
+                                        b1, b2 = st.columns(2)
                                         
-                                        history = site.get('work_history', [])
-                                        note_text = next((item.get('content', "") for item in history if isinstance(item, dict) and item.get('type') == 'note'), "")
-                                        
-                                        if b1.button("📝메모", help=note_text if note_text else "메모 없음", key=f"d_memo_{site['id']}", use_container_width=True):
-                                            note_dialog(site)
-                                        if b2.button("종료", key=f"d_stop_{site['id']}", use_container_width=True, type="primary"):
+                                        if b1.button("종료", key=f"d_stop_{site['id']}", use_container_width=True, type="primary"):
                                             confirm_dashboard_finish_dialog(site, total_sec)
-                                        if b3.button("취소", key=f"d_canc_{site['id']}", use_container_width=True):
+                                        if b2.button("취소", key=f"d_canc_{site['id']}", use_container_width=True):
                                             now = datetime.now(KST)
                                             current_wage = int(get_config("hourly_wage", 10000))
                                             supabase.table("work_logs").insert({
