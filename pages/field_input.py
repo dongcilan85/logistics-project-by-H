@@ -610,7 +610,7 @@ def render_cat_detail():
             const title = summary.innerText.trim();
             if(!title.includes("🛠️")) return;
             
-            const savedState = window.parent.sessionStorage.getItem("fold_state_" + title);
+            const savedState = window.parent.localStorage.getItem("fold_state_" + title);
             const isOpen = d.hasAttribute('open');
             
             // React 상태 충돌을 막기 위해 DOM 속성을 직접 변경하지 않고 클릭 이벤트를 트리거합니다.
@@ -624,7 +624,7 @@ def render_cat_detail():
                 d.setAttribute('data-fold-listener', 'true');
                 d.addEventListener('toggle', (e) => {
                     const currentState = d.hasAttribute('open') ? "open" : "closed";
-                    window.parent.sessionStorage.setItem("fold_state_" + title, currentState);
+                    window.parent.localStorage.setItem("fold_state_" + title, currentState);
                 });
             }
         });
