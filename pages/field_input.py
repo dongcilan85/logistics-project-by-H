@@ -586,7 +586,8 @@ def render_cat_detail():
                     with s_c3:
                         st.markdown('<div class="white-button">', unsafe_allow_html=True)
                         if st.button("메모입력", key=f"note_root_{root['id']}", use_container_width=True):
-                            note_dialog(root)
+                            st.session_state.trigger_note_dialog = root
+                            st.rerun()
                         st.markdown('</div>', unsafe_allow_html=True)
                     st.divider()
                     
@@ -638,6 +639,12 @@ def render_cat_detail():
     with st.container():
         if st.button("🚀 신규 작업 생성 (+)", key="footer_create_btn", use_container_width=True, type="primary"): 
             create_task_dialog(cat)
+
+# --- 💡 전역 다이얼로그 호출 (DOM 백화현상 방지) ---
+if getattr(st.session_state, 'trigger_note_dialog', None):
+    root_to_note = st.session_state.trigger_note_dialog
+    st.session_state.trigger_note_dialog = None
+    note_dialog(root_to_note)
 
 # --- 💡 라우팅 ---
 if st.session_state.view == "cat_list": render_cat_selector()
