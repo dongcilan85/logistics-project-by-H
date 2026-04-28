@@ -2,6 +2,7 @@ import streamlit as st
 from supabase import create_client, Client
 from datetime import datetime, timezone, timedelta, time as dt_time
 import time
+import streamlit.components.v1 as components
 from utils.style import apply_premium_style
 
 # 1. 시스템 설정
@@ -594,6 +595,42 @@ def render_cat_detail():
                     for child in children: render_site_control(child)
                     if st.button("➕ 현장 추가", key=f"add_site_{root['id']}", use_container_width=True): add_site_dialog(root)
     except Exception as e: st.error(f"데이터 로드 오류: {e}")
+
+    # --- 💡 순정 Expander 상태 영구 보존용 투명 스크립트 주입 ---
+    js_code = """
+    <script>
+    setTimeout(function() {
+        const parentDoc = window.parent.document;
+        // Streamlit의 st.expander는 항상 <details> 형태임
+        const detailsElements = parentDoc.querySelectorAll('details');
+        detailsElements.forEach(d => {
+            const summary = d.querySelector('summary');
+            if(!summary) return;
+            // 고유 식별을 위해 summary의 텍스트 콘텐츠(작업 그룹명) 이용
+            const title = summary.innerText.trim();
+            if(!title.includes("🛠️")) return; // 작업 카드만 타겟팅
+            
+            // 1. 상태 복원
+            const savedState = window.parent.sessionStorage.getItem("fold_state_" + title);
+            if(savedState === "closed") {
+                d.removeAttribute('open');
+            } else if(savedState === "open") {
+                d.setAttribute('open', '');
+            }
+            
+            // 2. 이벤트 리스너 부착 (중복 부착 방지용 속성 체크)
+            if(!d.hasAttribute('data-fold-listener')) {
+                d.setAttribute('data-fold-listener', 'true');
+                d.addEventListener('toggle', (e) => {
+                    const isOpen = d.hasAttribute('open');
+                    window.parent.sessionStorage.setItem("fold_state_" + title, isOpen ? "open" : "closed");
+                });
+            }
+        });
+    }, 150); // DOM 렌더링 후 실행 대기
+    </script>
+    """
+    components.html(js_code, height=0, width=0)
 
     # 3. 하단 여백 및 고정 영역
     st.markdown('<div class="scroll-spacer-bottom"></div>', unsafe_allow_html=True)
