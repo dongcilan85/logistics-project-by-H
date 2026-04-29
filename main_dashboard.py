@@ -738,7 +738,6 @@ else:
     plan_mgmt_page = st.Page("pages/planning_mgmt.py", title="생산 계획 관리", icon="📅") 
     cat_page = st.Page("pages/category_mgmt.py", title="카테고리 관리", icon="📁")
     site_page = st.Page("pages/field_input.py", title="현장 기록", icon="📝")
-    warehouse_page = st.Page("pages/warehouse_mgmt.py", title="창고 관리", icon="📦")
     
     st.sidebar.divider()
     sc1, sc2 = st.sidebar.columns(2)
