@@ -509,6 +509,29 @@ def render_cat_selector():
                     st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
+    # --- 📅 [추가] 본부 수신 계획(오더) 알림 섹션 (위치 조정: 대분류 아래) ---
+    if not st.session_state.selected_main:
+        try:
+            pending_plans = supabase.table("production_plans").select("task_type").eq("status", "pending").execute()
+            if pending_plans.data:
+                pending_cats = sorted(list(set([r['task_type'] for r in pending_plans.data])))
+                st.divider()
+                st.markdown("<h6 style='margin:0 0 10px 0; color:#00AAFF;'>📅 본부 수신 계획 (확인 필요)</h6>", unsafe_allow_html=True)
+                
+                def go_to_cat_v2(cat_name):
+                    st.session_state.selected_category = cat_name
+                    st.session_state.view = "cat_detail"
+
+                for i in range(0, len(pending_cats), 2):
+                    cols = st.columns(2)
+                    for j in range(2):
+                        if i + j < len(pending_cats):
+                            pcat = pending_cats[i + j]
+                            if cols[j].button(f"🔔 {pcat}", key=f"pending_nav_v2_{pcat}", use_container_width=True, type="primary"):
+                                go_to_cat_v2(pcat)
+                                st.rerun()
+        except: pass
+
     # --- 🏃 진행 중인 작업 바로가기 추가 ---
     try:
         ongoing = supabase.table("active_tasks").select("task_type").execute()
