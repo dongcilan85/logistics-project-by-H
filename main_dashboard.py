@@ -747,9 +747,8 @@ else:
     if st.session_state.role == "Admin":
         pg = st.navigation({
             "관리실": [admin_main, plan_mgmt_page, cat_page],
-            "현장": [site_page],
-            "창고": [warehouse_page]
+            "현장": [site_page]
         })
     else:
-        pg = st.navigation({"현장": [site_page], "창고": [warehouse_page]})
+        pg = st.navigation({"현장": [site_page]})
     pg.run()
