@@ -202,12 +202,12 @@ def show_admin_dashboard():
                                             confirm_dashboard_finish_dialog(site, total_sec)
                                         if b2.button("취소", key=f"d_canc_{site['id']}", use_container_width=True):
                                             now = datetime.now(KST)
-                                            current_wage = int(get_config("hourly_wage", 10000))
+                                            # 취소 시 데이터 오염 방지를 위해 인원, 시간, 물량, 인건비를 모두 0으로 처리
                                             supabase.table("work_logs").insert({
                                                 "work_date": now.strftime("%Y-%m-%d"), "task": site['task_type'],
-                                                "workers": site['workers'], "quantity": 0,
-                                                "duration": round(total_sec / 3600, 2), "memo": f"현장에서 취소됨(관리자) / {display_name}",
-                                                "applied_wage": current_wage,
+                                                "workers": 0, "quantity": 0,
+                                                "duration": 0, "memo": f"❌ 작업 취소됨(관리자) / {display_name}",
+                                                "applied_wage": 0,
                                                 "plan_id": None
                                             }).execute()
                                             if site.get('plan_id'):
