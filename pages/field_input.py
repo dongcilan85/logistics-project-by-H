@@ -512,23 +512,27 @@ def render_cat_selector():
     # --- 📅 [추가] 본부 수신 계획(오더) 알림 섹션 (위치 조정: 대분류 아래) ---
     if not st.session_state.selected_main:
         try:
-            pending_plans = supabase.table("production_plans").select("task_type").eq("status", "pending").execute()
+            # 계획 전체 정보를 가져옴 (ID 등을 매칭하기 위함)
+            pending_plans = supabase.table("production_plans").select("*").eq("status", "pending").execute()
             if pending_plans.data:
-                pending_cats = sorted(list(set([r['task_type'] for r in pending_plans.data])))
-                st.divider()
-                st.markdown("<h6 style='margin:0 0 10px 0; color:#00AAFF;'>📅 생산 계획</h6>", unsafe_allow_html=True)
+                # 카테고리별로 가장 오래된(먼저 들어온) 계획 하나씩만 대표로 노출
+                plan_map = {}
+                for p in pending_plans.data:
+                    if p['task_type'] not in plan_map:
+                        plan_map[p['task_type']] = p
                 
-                def go_to_cat_v2(cat_name):
-                    st.session_state.selected_category = cat_name
-                    st.session_state.view = "cat_detail"
-
+                pending_cats = sorted(list(plan_map.keys()))
+                st.divider()
+                st.markdown("<h6 style='margin:0 0 10px 0; color:#00AAFF;'>📅 생산 계획 (즉시 수락)</h6>", unsafe_allow_html=True)
+                
                 for i in range(0, len(pending_cats), 2):
                     cols = st.columns(2)
                     for j in range(2):
                         if i + j < len(pending_cats):
                             pcat = pending_cats[i + j]
-                            if cols[j].button(f"🔔 {pcat}", key=f"pending_nav_v2_{pcat}", use_container_width=True, type="primary"):
-                                go_to_cat_v2(pcat)
+                            target_plan = plan_map[pcat]
+                            if cols[j].button(f"🔔 {pcat}", key=f"pending_nav_v2_{target_plan['id']}", use_container_width=True, type="primary"):
+                                st.session_state.trigger_accept_dialog = target_plan
                                 st.rerun()
         except: pass
 
@@ -668,6 +672,11 @@ if getattr(st.session_state, 'trigger_note_dialog', None):
     root_to_note = st.session_state.trigger_note_dialog
     st.session_state.trigger_note_dialog = None
     note_dialog(root_to_note)
+
+if getattr(st.session_state, 'trigger_accept_dialog', None):
+    plan_to_accept = st.session_state.trigger_accept_dialog
+    st.session_state.trigger_accept_dialog = None
+    accept_order_dialog(plan_to_accept)
 
 # --- 💡 라우팅 ---
 if st.session_state.view == "cat_list": render_cat_selector()
