@@ -363,6 +363,17 @@ def add_site_dialog(parent_task):
                 "parent_id": parent_task['id']
             }).execute(); st.rerun()
 
+# --- 💡 전역 다이얼로그 호출 (함수 정의 직후 배치하여 즉시 실행 보장) ---
+if st.session_state.get('trigger_accept_dialog'):
+    plan_to_accept = st.session_state.trigger_accept_dialog
+    del st.session_state['trigger_accept_dialog']
+    accept_order_dialog(plan_to_accept)
+
+if st.session_state.get('trigger_note_dialog'):
+    root_to_note = st.session_state.trigger_note_dialog
+    del st.session_state['trigger_note_dialog']
+    note_dialog(root_to_note)
+
 # --- 💡 기능 렌더러 ---
 def render_site_control(task):
     if task['status'] == 'finished':
@@ -666,17 +677,6 @@ def render_cat_detail():
     with st.container():
         if st.button("🚀 신규 작업 생성 (+)", key="footer_create_btn", use_container_width=True, type="primary"): 
             create_task_dialog(cat)
-
-# --- 💡 전역 다이얼로그 호출 (DOM 백화현상 방지) ---
-if getattr(st.session_state, 'trigger_note_dialog', None):
-    root_to_note = st.session_state.trigger_note_dialog
-    st.session_state.trigger_note_dialog = None
-    note_dialog(root_to_note)
-
-if getattr(st.session_state, 'trigger_accept_dialog', None):
-    plan_to_accept = st.session_state.trigger_accept_dialog
-    st.session_state.trigger_accept_dialog = None
-    accept_order_dialog(plan_to_accept)
 
 # --- 💡 라우팅 ---
 if st.session_state.view == "cat_list": render_cat_selector()
