@@ -192,9 +192,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 💡 다이얼로그 구역 ---
-@st.dialog("🚀 오더 수락 및 작업 현장 등록")
+@st.dialog("🚀 생산 시뮬레이션 계획 수락")
 def accept_order_dialog(plan):
-    st.write(f"**[{plan['task_type']}] 본부 지침 오더**")
+    st.write(f"**[{plan['task_type']}] 생산 시뮬레이션 계획**")
     st.write(f"목표 수량: **{plan['target_quantity']:,}건** | 배정 인원: **{plan['planned_workers']}명**")
     
     sites = get_site_names()
@@ -591,11 +591,11 @@ def render_cat_detail():
     # 2. 스크롤 영역 시작 여백
     st.markdown('<div class="scroll-spacer-top"></div>', unsafe_allow_html=True)
     
-    # 🔔 본부 신규 오더 수신함 렌더링
+    # 🔔 생산 시뮬레이션 계획 수신함 렌더링
     try:
         pending_res = supabase.table("production_plans").select("*").eq("task_type", cat).eq("status", "pending").execute()
         if pending_res.data:
-            st.markdown("<h6 style='margin-bottom: 5px; color:#00AAFF;'>🔔 본부 신규 오더 (수락 대기 중)</h6>", unsafe_allow_html=True)
+            st.markdown("<h6 style='margin-bottom: 5px; color:#00AAFF;'>🔔 생산 시뮬레이션 계획 (수락 대기 중)</h6>", unsafe_allow_html=True)
             for plan in pending_res.data:
                 with st.container(border=True):
                     pc1, pc2 = st.columns([7, 3])
