@@ -516,7 +516,7 @@ def render_cat_selector():
             if pending_plans.data:
                 pending_cats = sorted(list(set([r['task_type'] for r in pending_plans.data])))
                 st.divider()
-                st.markdown("<h6 style='margin:0 0 10px 0; color:#00AAFF;'>📅 본부 수신 계획 (확인 필요)</h6>", unsafe_allow_html=True)
+                st.markdown("<h6 style='margin:0 0 10px 0; color:#00AAFF;'>📅 생산 계획</h6>", unsafe_allow_html=True)
                 
                 def go_to_cat_v2(cat_name):
                     st.session_state.selected_category = cat_name
