@@ -476,6 +476,10 @@ def render_site_control(task):
         st.divider()
 
 def render_cat_selector():
+    # --- 💡 [추가] 계획 수락 트리거 콜백 함수 ---
+    def trigger_accept_callback(plan_obj):
+        st.session_state.trigger_accept_dialog = plan_obj
+
     st.write("### 카테고리 선택")
     hierarchy = get_dynamic_hierarchy()
     if not hierarchy: st.info("등록된 카테고리가 없습니다."); return
@@ -542,9 +546,13 @@ def render_cat_selector():
                         if i + j < len(pending_cats):
                             pcat = pending_cats[i + j]
                             target_plan = plan_map[pcat]
-                            if cols[j].button(f"🔔 {pcat}", key=f"pending_nav_v2_{target_plan['id']}", use_container_width=True, type="primary"):
-                                st.session_state.trigger_accept_dialog = target_plan
-                                st.rerun()
+                            # 💡 on_click 콜백을 사용하여 한 번의 클릭으로 즉시 팝업 트리거
+                            cols[j].button(f"🔔 {pcat}", 
+                                          key=f"pending_nav_v2_{target_plan['id']}", 
+                                          use_container_width=True, 
+                                          type="primary", 
+                                          on_click=trigger_accept_callback, 
+                                          args=(target_plan,))
         except: pass
 
     # --- 🏃 진행 중인 작업 바로가기 추가 ---
