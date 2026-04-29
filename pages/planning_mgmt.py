@@ -156,8 +156,18 @@ try:
                 sel_id = st.selectbox("제어할 계획 ID", options=df_active['id'].tolist())
                 ctrl_c1, ctrl_c2 = st.columns(2)
                 if ctrl_c1.button("🗑️ 계획 삭제", use_container_width=True):
-                    supabase.table("production_plans").delete().eq("id", sel_id).execute()
-                    st.rerun()
+                    try:
+                        # 1. 연관된 작업 기록(work_logs 및 active_tasks)의 plan_id를 NULL로 업데이트하여 연결 해제
+                        w_res = supabase.table("work_logs").update({"plan_id": None}).eq("plan_id", sel_id).execute()
+                        a_res = supabase.table("active_tasks").update({"plan_id": None}).eq("plan_id", sel_id).execute()
+                        
+                        # 2. 계획 삭제 진행
+                        supabase.table("production_plans").delete().eq("id", sel_id).execute()
+                        st.success(f"계획이 삭제되었습니다. (연결해제: 로그 {len(w_res.data)}건, 활성 {len(a_res.data)}건)")
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"삭제 실패 세부 정보: {e}")
                 if ctrl_c2.button("🔄 대기 상태로 강제 전환", use_container_width=True):
                     supabase.table("production_plans").update({"status": "pending"}).eq("id", sel_id).execute()
                     st.rerun()

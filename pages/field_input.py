@@ -192,9 +192,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 💡 다이얼로그 구역 ---
-@st.dialog("🚀 오더 수락 및 작업 현장 등록")
+@st.dialog("🚀 생산 시뮬레이션 계획 수락")
 def accept_order_dialog(plan):
-    st.write(f"**[{plan['task_type']}] 본부 지침 오더**")
+    st.write(f"**[{plan['task_type']}] 생산 시뮬레이션 계획**")
     st.write(f"목표 수량: **{plan['target_quantity']:,}건** | 배정 인원: **{plan['planned_workers']}명**")
     
     sites = get_site_names()
@@ -363,6 +363,17 @@ def add_site_dialog(parent_task):
                 "parent_id": parent_task['id']
             }).execute(); st.rerun()
 
+# --- 💡 전역 다이얼로그 호출 (함수 정의 직후 배치하여 즉시 실행 보장) ---
+if st.session_state.get('trigger_accept_dialog'):
+    plan_to_accept = st.session_state.trigger_accept_dialog
+    del st.session_state['trigger_accept_dialog']
+    accept_order_dialog(plan_to_accept)
+
+if st.session_state.get('trigger_note_dialog'):
+    root_to_note = st.session_state.trigger_note_dialog
+    del st.session_state['trigger_note_dialog']
+    note_dialog(root_to_note)
+
 # --- 💡 기능 렌더러 ---
 def render_site_control(task):
     if task['status'] == 'finished':
@@ -465,6 +476,10 @@ def render_site_control(task):
         st.divider()
 
 def render_cat_selector():
+    # --- 💡 [추가] 계획 수락 트리거 콜백 함수 ---
+    def trigger_accept_callback(plan_obj):
+        st.session_state.trigger_accept_dialog = plan_obj
+
     st.write("### 카테고리 선택")
     hierarchy = get_dynamic_hierarchy()
     if not hierarchy: st.info("등록된 카테고리가 없습니다."); return
@@ -509,6 +524,37 @@ def render_cat_selector():
                     st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
+    # --- 📅 [추가] 본부 수신 계획(오더) 알림 섹션 (위치 조정: 대분류 아래) ---
+    if not st.session_state.selected_main:
+        try:
+            # 계획 전체 정보를 가져옴 (ID 등을 매칭하기 위함)
+            pending_plans = supabase.table("production_plans").select("*").eq("status", "pending").execute()
+            if pending_plans.data:
+                # 카테고리별로 가장 오래된(먼저 들어온) 계획 하나씩만 대표로 노출
+                plan_map = {}
+                for p in pending_plans.data:
+                    if p['task_type'] not in plan_map:
+                        plan_map[p['task_type']] = p
+                
+                pending_cats = sorted(list(plan_map.keys()))
+                st.divider()
+                st.markdown("<h6 style='margin:0 0 10px 0; color:#00AAFF;'>📅 생산 계획 (즉시 수락)</h6>", unsafe_allow_html=True)
+                
+                for i in range(0, len(pending_cats), 2):
+                    cols = st.columns(2)
+                    for j in range(2):
+                        if i + j < len(pending_cats):
+                            pcat = pending_cats[i + j]
+                            target_plan = plan_map[pcat]
+                            # 💡 on_click 콜백을 사용하여 한 번의 클릭으로 즉시 팝업 트리거
+                            cols[j].button(f"🔔 {pcat}", 
+                                          key=f"pending_nav_v2_{target_plan['id']}", 
+                                          use_container_width=True, 
+                                          type="primary", 
+                                          on_click=trigger_accept_callback, 
+                                          args=(target_plan,))
+        except: pass
+
     # --- 🏃 진행 중인 작업 바로가기 추가 ---
     try:
         ongoing = supabase.table("active_tasks").select("task_type").execute()
@@ -545,11 +591,11 @@ def render_cat_detail():
     # 2. 스크롤 영역 시작 여백
     st.markdown('<div class="scroll-spacer-top"></div>', unsafe_allow_html=True)
     
-    # 🔔 본부 신규 오더 수신함 렌더링
+    # 🔔 생산 시뮬레이션 계획 수신함 렌더링
     try:
         pending_res = supabase.table("production_plans").select("*").eq("task_type", cat).eq("status", "pending").execute()
         if pending_res.data:
-            st.markdown("<h6 style='margin-bottom: 5px; color:#00AAFF;'>🔔 본부 신규 오더 (수락 대기 중)</h6>", unsafe_allow_html=True)
+            st.markdown("<h6 style='margin-bottom: 5px; color:#00AAFF;'>🔔 생산 시뮬레이션 계획 (수락 대기 중)</h6>", unsafe_allow_html=True)
             for plan in pending_res.data:
                 with st.container(border=True):
                     pc1, pc2 = st.columns([7, 3])
@@ -639,12 +685,6 @@ def render_cat_detail():
     with st.container():
         if st.button("🚀 신규 작업 생성 (+)", key="footer_create_btn", use_container_width=True, type="primary"): 
             create_task_dialog(cat)
-
-# --- 💡 전역 다이얼로그 호출 (DOM 백화현상 방지) ---
-if getattr(st.session_state, 'trigger_note_dialog', None):
-    root_to_note = st.session_state.trigger_note_dialog
-    st.session_state.trigger_note_dialog = None
-    note_dialog(root_to_note)
 
 # --- 💡 라우팅 ---
 if st.session_state.view == "cat_list": render_cat_selector()
