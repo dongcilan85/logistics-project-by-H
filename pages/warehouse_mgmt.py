@@ -72,7 +72,7 @@ with st.expander("🤖 이카운트 ERP 데이터 동기화", expanded=True):
 
     with c2:
         # 진행 중인 명령이 있으면 버튼 비활성화
-        is_busy = latest_cmd.data and latest_cmd.data[0]['status'] in ('pending', 'running')
+        is_busy = bool(latest_cmd.data and latest_cmd.data[0]['status'] in ('pending', 'running'))
         
         if st.button("🚀 데이터 수집 요청", type="primary", use_container_width=True, disabled=is_busy):
             supabase.table("rpa_commands").insert({
