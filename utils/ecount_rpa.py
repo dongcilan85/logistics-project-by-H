@@ -19,19 +19,10 @@ class EcountRPA:
 
     def _setup_driver(self):
         chrome_options = Options()
-        if self.headless:
-            chrome_options.add_argument("--headless=new") # 최신 headless 모드 사용
-        
+        chrome_options.add_argument("--headless") # 가장 안정적인 클래식 headless 모드
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--disable-extensions")
-        chrome_options.add_argument("--disable-infobars")
-        chrome_options.add_argument("--remote-debugging-port=9222")
-        chrome_options.add_argument("--window-size=1920,1080")
-        
-        # 유저 에이전트 설정
-        chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
         
         # 다운로드 경로 설정
         if not os.path.exists(self.download_path):
@@ -42,24 +33,25 @@ class EcountRPA:
             "download.default_directory": self.download_path,
             "download.prompt_for_download": False,
             "download.directory_upgrade": True,
-            "safebrowsing.enabled": True
         }
         chrome_options.add_experimental_option("prefs", prefs)
         
-        # 리눅스(Streamlit Cloud) 환경 체크 및 경로 설정
-        # 보통 /usr/bin/chromium-browser 또는 /usr/bin/chromium 위치에 존재함
-        chromium_bin = "/usr/bin/chromium" if os.path.exists("/usr/bin/chromium") else "/usr/bin/chromium-browser"
-        chromedriver_bin = "/usr/bin/chromedriver"
-        
-        if os.path.exists(chromedriver_bin):
-            chrome_options.binary_location = chromium_bin
-            service = Service(chromedriver_bin)
+        # 리눅스 환경 체크
+        chromedriver_path = "/usr/bin/chromedriver"
+        if os.path.exists(chromedriver_path):
+            # 시스템 설치 드라이버 사용 (Streamlit Cloud 권장 방식)
+            chrome_options.binary_location = "/usr/bin/chromium"
+            service = Service(executable_path=chromedriver_path)
+            print(f"DEBUG: Using system chromedriver at {chromedriver_path}")
         else:
             # 로컬 윈도우 환경
             service = Service(ChromeDriverManager().install())
             
-        self.driver = webdriver.Chrome(service=service, options=chrome_options)
-        self.driver.set_page_load_timeout(30) # 타임아웃 설정 추가
+        try:
+            self.driver = webdriver.Chrome(service=service, options=chrome_options)
+            self.driver.set_page_load_timeout(30)
+        except Exception as e:
+            raise Exception(f"브라우저 실행 실패: {str(e)}")
 
     def login(self):
         try:
