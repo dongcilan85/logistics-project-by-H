@@ -1,5 +1,6 @@
 import streamlit as st
 import time
+import os
 from supabase import create_client, Client
 from utils.style import apply_premium_style
 
