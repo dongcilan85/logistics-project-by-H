@@ -63,25 +63,55 @@ with st.container(border=True):
     headless = st.checkbox("백그라운드 모드로 실행 (브라우저 창 숨기기)", value=get_config("ecount_headless", "True") == "True")
     
     st.write("📂 **엑셀 다운로드 경로 설정**")
+    
+    # 💡 [개선] 내장 폴더 브라우저 구현
+    if "show_browser" not in st.session_state: st.session_state.show_browser = False
+    if "browser_path" not in st.session_state: 
+        st.session_state.browser_path = get_config("ecount_download_path", os.path.expanduser("~"))
+    
     c1, c2 = st.columns([4, 1])
     with c1:
         download_path = st.text_input("다운로드 경로 (로컬)", value=get_config("ecount_download_path", r"C:\Users\admin\Desktop\Ecount_Exports"), label_visibility="collapsed")
     with c2:
-        if st.button("폴더 선택", use_container_width=True):
+        if st.button("탐색기 열기", use_container_width=True):
+            st.session_state.show_browser = not st.session_state.show_browser
+            st.rerun()
+
+    if st.session_state.show_browser:
+        with st.container(border=True):
+            st.write(f"📍 현재 위치: `{st.session_state.browser_path}`")
+            
+            # 경로 존재 여부 확인
+            curr_path = st.session_state.browser_path
+            if not os.path.exists(curr_path):
+                curr_path = os.path.expanduser("~")
+                st.session_state.browser_path = curr_path
+
+            # 상위 폴더 이동 버튼
+            if st.button("⬅️ 상위 폴더로", use_container_width=True):
+                st.session_state.browser_path = os.path.dirname(curr_path)
+                st.rerun()
+
+            # 하위 폴더 목록
             try:
-                import tkinter as tk
-                from tkinter import filedialog
-                root = tk.Tk()
-                root.withdraw()
-                root.attributes('-topmost', True)
-                selected_path = filedialog.askdirectory()
-                root.destroy()
-                if selected_path:
-                    set_config("ecount_download_path", selected_path)
+                subdirs = [d for d in os.listdir(curr_path) if os.path.isdir(os.path.join(curr_path, d))]
+                selected_sub = st.selectbox("이동할 하위 폴더 선택", options=["-- 폴더 선택 --"] + sorted(subdirs))
+                
+                col_sel, col_cls = st.columns(2)
+                if selected_sub != "-- 폴더 선택 --":
+                    if col_sel.button("📂 이 폴더로 진입", use_container_width=True):
+                        st.session_state.browser_path = os.path.join(curr_path, selected_sub)
+                        st.rerun()
+                
+                if col_cls.button("✅ 현재 폴더를 경로로 지정", use_container_width=True, type="primary"):
+                    set_config("ecount_download_path", curr_path)
+                    st.session_state.show_browser = False
+                    st.success(f"경로 지정 완료: {curr_path}")
+                    time.sleep(0.5)
                     st.rerun()
             except Exception as e:
-                st.error("폴더 선택기를 열 수 없습니다. 경로를 직접 입력해 주세요.")
-    
+                st.error(f"폴더 목록을 불러올 수 없습니다: {e}")
+
     if st.button("💾 동작 설정 저장", use_container_width=True, type="primary"):
         h1 = set_config("ecount_headless", str(headless))
         d1 = set_config("ecount_download_path", download_path)
