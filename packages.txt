@@ -1,1 +1,3 @@
 fonts-nanum
+chromium
+chromium-driver

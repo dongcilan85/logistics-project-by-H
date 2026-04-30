@@ -25,10 +25,15 @@ class EcountRPA:
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument("--disable-gpu")
+        
+        # 유저 에이전트 설정 (봇 감지 방지)
+        chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
         
         # 다운로드 경로 설정
         if not os.path.exists(self.download_path):
-            os.makedirs(self.download_path)
+            try: os.makedirs(self.download_path)
+            except: pass
             
         prefs = {
             "download.default_directory": self.download_path,
@@ -38,7 +43,14 @@ class EcountRPA:
         }
         chrome_options.add_experimental_option("prefs", prefs)
         
-        service = Service(ChromeDriverManager().install())
+        # 리눅스(Streamlit Cloud) 환경 체크
+        if os.path.exists("/usr/bin/chromedriver"):
+            chrome_options.binary_location = "/usr/bin/chromium"
+            service = Service("/usr/bin/chromedriver")
+        else:
+            # 로컬 윈도우 환경
+            service = Service(ChromeDriverManager().install())
+            
         self.driver = webdriver.Chrome(service=service, options=chrome_options)
 
     def login(self):
