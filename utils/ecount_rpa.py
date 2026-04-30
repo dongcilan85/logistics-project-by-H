@@ -20,19 +20,22 @@ class EcountRPA:
     def _setup_driver(self):
         chrome_options = Options()
         if self.headless:
-            chrome_options.add_argument("--headless")
+            chrome_options.add_argument("--headless=new") # 최신 headless 모드 사용
         
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--window-size=1920,1080")
         chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--disable-extensions")
+        chrome_options.add_argument("--disable-infobars")
+        chrome_options.add_argument("--remote-debugging-port=9222")
+        chrome_options.add_argument("--window-size=1920,1080")
         
-        # 유저 에이전트 설정 (봇 감지 방지)
+        # 유저 에이전트 설정
         chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
         
         # 다운로드 경로 설정
         if not os.path.exists(self.download_path):
-            try: os.makedirs(self.download_path)
+            try: os.makedirs(self.download_path, exist_ok=True)
             except: pass
             
         prefs = {
@@ -43,15 +46,20 @@ class EcountRPA:
         }
         chrome_options.add_experimental_option("prefs", prefs)
         
-        # 리눅스(Streamlit Cloud) 환경 체크
-        if os.path.exists("/usr/bin/chromedriver"):
-            chrome_options.binary_location = "/usr/bin/chromium"
-            service = Service("/usr/bin/chromedriver")
+        # 리눅스(Streamlit Cloud) 환경 체크 및 경로 설정
+        # 보통 /usr/bin/chromium-browser 또는 /usr/bin/chromium 위치에 존재함
+        chromium_bin = "/usr/bin/chromium" if os.path.exists("/usr/bin/chromium") else "/usr/bin/chromium-browser"
+        chromedriver_bin = "/usr/bin/chromedriver"
+        
+        if os.path.exists(chromedriver_bin):
+            chrome_options.binary_location = chromium_bin
+            service = Service(chromedriver_bin)
         else:
             # 로컬 윈도우 환경
             service = Service(ChromeDriverManager().install())
             
         self.driver = webdriver.Chrome(service=service, options=chrome_options)
+        self.driver.set_page_load_timeout(30) # 타임아웃 설정 추가
 
     def login(self):
         try:
