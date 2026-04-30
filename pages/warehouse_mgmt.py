@@ -34,16 +34,16 @@ def get_config(key_name, default=""):
         return data_get[0]['value'] if data_get else default
     except: return default
 
-def set_config(key, value):
+def set_config(key_name, value):
     try:
         url_post = f"{url}/rest/v1/system_config"
-        headers = {
+        headers_post = {
             "apikey": key, 
             "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",
             "Prefer": "resolution=merge-duplicates"
         }
-        requests.post(url_post, headers=headers, json={"key": key, "value": str(value)}, timeout=5)
+        requests.post(url_post, headers=headers_post, json={"key": key_name, "value": str(value)}, timeout=5)
     except: pass
 
 with st.expander("🤖 이카운트 ERP 데이터 동기화", expanded=True):
