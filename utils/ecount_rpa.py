@@ -19,7 +19,14 @@ class EcountRPA:
 
     def _setup_driver(self):
         chrome_options = Options()
-        chrome_options.add_argument("--headless") # 가장 안정적인 클래식 headless 모드
+        
+        # 리눅스(서버) 환경 여부 판단
+        is_linux = os.path.exists("/usr/bin/chromedriver")
+        
+        # 리눅스는 항상 headless, 로컬 윈도우는 설정값 따름
+        if is_linux or self.headless:
+            chrome_options.add_argument("--headless")
+        
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
@@ -36,13 +43,11 @@ class EcountRPA:
         }
         chrome_options.add_experimental_option("prefs", prefs)
         
-        # 리눅스 환경 체크
+        # 리눅스/윈도우 환경에 맞는 드라이버 선택
         chromedriver_path = "/usr/bin/chromedriver"
-        if os.path.exists(chromedriver_path):
-            # 시스템 설치 드라이버 사용 (Streamlit Cloud 권장 방식)
+        if is_linux:
             chrome_options.binary_location = "/usr/bin/chromium"
             service = Service(executable_path=chromedriver_path)
-            print(f"DEBUG: Using system chromedriver at {chromedriver_path}")
         else:
             # 로컬 윈도우 환경
             service = Service(ChromeDriverManager().install())
@@ -52,6 +57,7 @@ class EcountRPA:
             self.driver.set_page_load_timeout(30)
         except Exception as e:
             raise Exception(f"브라우저 실행 실패: {str(e)}")
+
 
     def login(self):
         try:
