@@ -63,9 +63,19 @@ with st.expander("🤖 이카운트 ERP 데이터 동기화", expanded=True):
             
             st.info(f"{icon} **상태**: {text}  \n📅 시각: {time_str}")
             
-            # 진행 중이면 새로고침 버튼 표시 (무한 루프 방지)
+            # 진행 중이면 새로고침 + 취소 버튼 표시
             if cmd['status'] in ('pending', 'running'):
-                if st.button("🔄 상태 새로고침", use_container_width=True):
+                btn_col1, btn_col2 = st.columns(2)
+                if btn_col1.button("🔄 상태 새로고침", use_container_width=True):
+                    st.rerun()
+                if btn_col2.button("❌ 수집 취소", use_container_width=True):
+                    supabase.table("rpa_commands").update({
+                        "status": "failed",
+                        "message": "사용자가 수동 취소함",
+                        "completed_at": datetime.now(KST).isoformat()
+                    }).eq("id", cmd['id']).execute()
+                    st.toast("수집 요청이 취소되었습니다.")
+                    time.sleep(0.5)
                     st.rerun()
         else:
             st.info("아직 동기화 기록이 없습니다. 우측 버튼으로 첫 수집을 요청하세요.")
