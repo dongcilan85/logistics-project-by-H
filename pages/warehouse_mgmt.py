@@ -16,34 +16,63 @@ KST = timezone(timedelta(hours=9))
 
 apply_premium_style()
 
-st.markdown('<p class="main-header">📦 창고/재고 통합 관리 (Warehouse Mgmt)</p>', unsafe_allow_html=True)
+st.markdown('<p class="main-header">📦 창고/재고 통합 관리 (DEVELOP - 16:48)</p>', unsafe_allow_html=True)
 st.markdown("Ecount ERP 연동 데이터를 바탕으로 실시간 창고 보관 현황 및 핵심 변동 이력을 추적합니다.")
 
 # -------------------------------------------------------------
 # 1. Ecount 데이터 원격 동기화 (RPA 트리거)
 # -------------------------------------------------------------
+import requests
+
 def get_config(key, default=""):
     try:
-        res = supabase.table("system_config").select("value").eq("key", key).execute()
-        return res.data[0]['value'] if res.data else default
+        url = f"{url_val}/rest/v1/system_config?key=eq.{key}&select=value"
+        headers = {"apikey": key_val, "Authorization": f"Bearer {key_val}"}
+        resp = requests.get(url, headers=headers, timeout=5)
+        data = resp.json()
+        return data[0]['value'] if data else default
     except: return default
 
 def set_config(key, value):
     try:
-        supabase.table("system_config").upsert({"key": key, "value": str(value)}).execute()
+        url_post = f"{url}/rest/v1/system_config"
+        headers = {
+            "apikey": key, 
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            "Prefer": "resolution=merge-duplicates"
+        }
+        requests.post(url_post, headers=headers, json={"key": key, "value": str(value)}, timeout=5)
     except: pass
 
 with st.expander("🤖 이카운트 ERP 데이터 동기화", expanded=True):
-    # system_config에서 RPA 상태 조회
+    # 접속 정보 확인용 (진단용)
+    st.caption(f"🌐 연결 대상: {url}")
+
+    # 에이전트 상태 및 심장박동 조회
     rpa_trigger  = get_config("rpa_trigger", "idle")
     rpa_status   = get_config("rpa_status", "idle")
     rpa_message  = get_config("rpa_message", "에이전트 미연결")
     rpa_updated  = get_config("rpa_updated_at", "")
-    agent_online = rpa_status != "idle" or rpa_trigger != "idle"
+    heartbeat    = get_config("agent_heartbeat", "")
+
+    # 에이전트 온라인 판별 (심장박동이 15초 이내면 온라인)
+    is_online = False
+    if heartbeat:
+        try:
+            hb_dt = datetime.fromisoformat(heartbeat)
+            diff = (datetime.now(KST) - hb_dt).total_seconds()
+            if diff < 15: is_online = True
+        except: pass
 
     c1, c2 = st.columns([3, 1])
 
     with c1:
+        if is_online:
+            st.success("● 에이전트 온라인 (사무실 PC 연결됨)")
+        else:
+            st.error("○ 에이전트 오프라인 (사무실 PC 연결 끊김)")
+
         status_map = {
             "idle":      ("⚪", "대기 중"),
             "pending":   ("🔵", "수집 요청 전송됨 (에이전트 응답 대기)"),
