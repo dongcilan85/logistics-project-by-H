@@ -61,9 +61,28 @@ st.divider()
 st.subheader("🤖 RPA 동작 설정")
 with st.container(border=True):
     headless = st.checkbox("백그라운드 모드로 실행 (브라우저 창 숨기기)", value=get_config("ecount_headless", "True") == "True")
-    download_path = st.text_input("엑셀 다운로드 경로 (로컬)", value=get_config("ecount_download_path", r"C:\Users\admin\Desktop\Ecount_Exports"))
     
-    if st.button("💾 동작 설정 저장", use_container_width=True):
+    st.write("📂 **엑셀 다운로드 경로 설정**")
+    c1, c2 = st.columns([4, 1])
+    with c1:
+        download_path = st.text_input("다운로드 경로 (로컬)", value=get_config("ecount_download_path", r"C:\Users\admin\Desktop\Ecount_Exports"), label_visibility="collapsed")
+    with c2:
+        if st.button("폴더 선택", use_container_width=True):
+            try:
+                import tkinter as tk
+                from tkinter import filedialog
+                root = tk.Tk()
+                root.withdraw()
+                root.attributes('-topmost', True)
+                selected_path = filedialog.askdirectory()
+                root.destroy()
+                if selected_path:
+                    set_config("ecount_download_path", selected_path)
+                    st.rerun()
+            except Exception as e:
+                st.error("폴더 선택기를 열 수 없습니다. 경로를 직접 입력해 주세요.")
+    
+    if st.button("💾 동작 설정 저장", use_container_width=True, type="primary"):
         h1 = set_config("ecount_headless", str(headless))
         d1 = set_config("ecount_download_path", download_path)
         if h1 and d1:
