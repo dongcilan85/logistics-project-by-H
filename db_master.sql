@@ -189,7 +189,25 @@ WHERE NOT EXISTS (SELECT 1 FROM public.warehouse_inventory LIMIT 1);
 
 
 -- =========================================================================
--- SECTION 8: 캐시 새로고침 (최하단 1회 실행)
+-- SECTION 8: 테이블 접근 권한 부여 (anon/authenticated 역할)
+-- SQL Editor로 생성한 테이블은 자동 권한 부여가 안 되므로 명시적으로 설정
+-- =========================================================================
+
+GRANT ALL ON public.task_categories      TO anon, authenticated, service_role;
+GRANT ALL ON public.production_plans     TO anon, authenticated, service_role;
+GRANT ALL ON public.active_tasks         TO anon, authenticated, service_role;
+GRANT ALL ON public.work_logs            TO anon, authenticated, service_role;
+GRANT ALL ON public.system_config        TO anon, authenticated, service_role;
+GRANT ALL ON public.site_names           TO anon, authenticated, service_role;
+GRANT ALL ON public.warehouse_inventory  TO anon, authenticated, service_role;
+GRANT ALL ON public.warehouse_history    TO anon, authenticated, service_role;
+GRANT ALL ON public.rpa_commands         TO anon, authenticated, service_role;
+
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+
+
+-- =========================================================================
+-- SECTION 9: 캐시 새로고침 (최하단 1회 실행)
 -- =========================================================================
 
 NOTIFY pgrst, 'reload schema';

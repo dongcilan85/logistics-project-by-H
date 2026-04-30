@@ -28,73 +28,66 @@ def get_config(key, default=""):
         return res.data[0]['value'] if res.data else default
     except: return default
 
-with st.expander("🤖 이카운트 ERP 데이터 동기화", expanded=True):
-    # 최근 명령 상태 조회
+def set_config(key, value):
     try:
-        latest_cmd = supabase.table("rpa_commands") \
-            .select("*") \
-            .order("created_at", desc=True) \
-            .limit(1) \
-            .execute()
-    except:
-        latest_cmd = type('obj', (object,), {'data': []})()
-    
+        supabase.table("system_config").upsert({"key": key, "value": str(value)}).execute()
+    except: pass
+
+with st.expander("🤖 이카운트 ERP 데이터 동기화", expanded=True):
+    # system_config에서 RPA 상태 조회
+    rpa_trigger  = get_config("rpa_trigger", "idle")
+    rpa_status   = get_config("rpa_status", "idle")
+    rpa_message  = get_config("rpa_message", "에이전트 미연결")
+    rpa_updated  = get_config("rpa_updated_at", "")
+    agent_online = rpa_status != "idle" or rpa_trigger != "idle"
+
     c1, c2 = st.columns([3, 1])
-    
+
     with c1:
-        if latest_cmd.data:
-            cmd = latest_cmd.data[0]
-            status_map = {
-                "pending": ("🔵", "수집 대기 중..."),
-                "running": ("🟡", f"수집 진행 중: {cmd.get('message', '')}"),
-                "completed": ("🟢", f"✅ 최근 완료: {cmd.get('result_summary', '')}"),
-                "failed": ("🔴", f"❌ 실패: {cmd.get('message', '')}")
-            }
-            icon, text = status_map.get(cmd['status'], ("⚪", "알 수 없음"))
-            
-            completed_at = cmd.get('completed_at') or cmd.get('created_at', '')
-            if completed_at:
-                try:
-                    dt = datetime.fromisoformat(completed_at.replace('Z', '+00:00'))
-                    time_str = dt.astimezone(KST).strftime('%m/%d %H:%M')
-                except: time_str = completed_at[:16]
-            else:
-                time_str = "-"
-            
-            st.info(f"{icon} **상태**: {text}  \n📅 시각: {time_str}")
-            
-            # 진행 중이면 새로고침 + 취소 버튼 표시
-            if cmd['status'] in ('pending', 'running'):
-                btn_col1, btn_col2 = st.columns(2)
-                if btn_col1.button("🔄 상태 새로고침", use_container_width=True):
-                    st.rerun()
-                if btn_col2.button("❌ 수집 취소", use_container_width=True):
-                    supabase.table("rpa_commands").update({
-                        "status": "failed",
-                        "message": "사용자가 수동 취소함",
-                        "completed_at": datetime.now(KST).isoformat()
-                    }).eq("id", cmd['id']).execute()
-                    st.toast("수집 요청이 취소되었습니다.")
-                    time.sleep(0.5)
-                    st.rerun()
-        else:
-            st.info("아직 동기화 기록이 없습니다. 우측 버튼으로 첫 수집을 요청하세요.")
+        status_map = {
+            "idle":      ("⚪", "대기 중"),
+            "pending":   ("🔵", "수집 요청 전송됨 (에이전트 응답 대기)"),
+            "running":   ("🟡", f"수집 진행 중: {rpa_message}"),
+            "completed": ("🟢", f"{rpa_message}"),
+            "failed":    ("🔴", f"{rpa_message}"),
+        }
+        icon, text = status_map.get(rpa_status, ("⚪", rpa_message))
+
+        # 업데이트 시각 표시
+        time_str = "-"
+        if rpa_updated:
+            try:
+                dt = datetime.fromisoformat(rpa_updated.replace('Z', '+00:00'))
+                time_str = dt.astimezone(KST).strftime('%m/%d %H:%M:%S')
+            except: time_str = rpa_updated[:16]
+
+        st.info(f"{icon} **상태**: {text}  \n📅 업데이트: {time_str}")
+
+        if rpa_status in ('pending', 'running') or rpa_trigger == 'pending':
+            btn_col1, btn_col2 = st.columns(2)
+            if btn_col1.button("🔄 상태 새로고침", use_container_width=True):
+                st.rerun()
+            if btn_col2.button("❌ 수집 취소", use_container_width=True):
+                set_config("rpa_trigger", "idle")
+                set_config("rpa_status", "failed")
+                set_config("rpa_message", "사용자가 수동 취소함")
+                set_config("rpa_updated_at", datetime.now(KST).isoformat())
+                st.toast("수집 요청이 취소되었습니다.")
+                time.sleep(0.5)
+                st.rerun()
 
     with c2:
-        # 진행 중인 명령이 있으면 버튼 비활성화
-        is_busy = bool(latest_cmd.data and latest_cmd.data[0]['status'] in ('pending', 'running'))
-        
+        is_busy = bool(rpa_status in ('pending', 'running') or rpa_trigger == 'pending')
+
         if st.button("🚀 데이터 수집 요청", type="primary", use_container_width=True, disabled=is_busy):
-            supabase.table("rpa_commands").insert({
-                "command_type": "sync_inventory",
-                "status": "pending",
-                "message": "웹에서 수집 요청됨",
-                "requested_by": "admin"
-            }).execute()
+            set_config("rpa_trigger", "pending")
+            set_config("rpa_status", "pending")
+            set_config("rpa_message", "웹에서 수집 요청됨")
+            set_config("rpa_updated_at", datetime.now(KST).isoformat())
             st.toast("📡 수집 명령이 사무실 PC로 전송되었습니다!")
-            time.sleep(1)
+            time.sleep(0.5)
             st.rerun()
-        
+
         if is_busy:
             st.caption("⏳ 수집기가 작업 중입니다...")
 
