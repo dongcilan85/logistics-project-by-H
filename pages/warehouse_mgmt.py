@@ -63,10 +63,10 @@ with st.expander("🤖 이카운트 ERP 데이터 동기화", expanded=True):
             
             st.info(f"{icon} **상태**: {text}  \n📅 시각: {time_str}")
             
-            # 진행 중이면 자동 새로고침
+            # 진행 중이면 새로고침 버튼 표시 (무한 루프 방지)
             if cmd['status'] in ('pending', 'running'):
-                time.sleep(3)
-                st.rerun()
+                if st.button("🔄 상태 새로고침", use_container_width=True):
+                    st.rerun()
         else:
             st.info("아직 동기화 기록이 없습니다. 우측 버튼으로 첫 수집을 요청하세요.")
 
