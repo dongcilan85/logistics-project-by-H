@@ -14,77 +14,79 @@ key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 KST = timezone(timedelta(hours=9))
 
-ECOUNT_DIR = r"C:\Users\admin\Desktop\Ecount_Exports"
-
 apply_premium_style()
 
 st.markdown('<p class="main-header">📦 창고/재고 통합 관리 (Warehouse Mgmt)</p>', unsafe_allow_html=True)
 st.markdown("Ecount ERP 연동 데이터를 바탕으로 실시간 창고 보관 현황 및 핵심 변동 이력을 추적합니다.")
 
 # -------------------------------------------------------------
-# 1. Ecount 데이터 자동 동기화 처리 패널 (RPA)
+# 1. Ecount 데이터 원격 동기화 (RPA 트리거)
 # -------------------------------------------------------------
-from utils.ecount_rpa import EcountRPA
-
 def get_config(key, default=""):
     try:
         res = supabase.table("system_config").select("value").eq("key", key).execute()
         return res.data[0]['value'] if res.data else default
     except: return default
 
-with st.expander("🤖 이카운트 ERP RPA 자동 동기화", expanded=True):
+with st.expander("🤖 이카운트 ERP 데이터 동기화", expanded=True):
+    # 최근 명령 상태 조회
+    try:
+        latest_cmd = supabase.table("rpa_commands") \
+            .select("*") \
+            .order("created_at", desc=True) \
+            .limit(1) \
+            .execute()
+    except:
+        latest_cmd = type('obj', (object,), {'data': []})()
+    
     c1, c2 = st.columns([3, 1])
     
     with c1:
-        com_code = get_config("ecount_com_code")
-        user_id = get_config("ecount_user_id")
-        download_path = get_config("ecount_download_path", r"C:\Users\admin\Desktop\Ecount_Exports")
-        headless = get_config("ecount_headless", "True") == "True"
-        
-        if not com_code or not user_id:
-            st.warning("⚠️ 환경설정에서 이카운트 계정 정보를 먼저 설정해 주세요.")
+        if latest_cmd.data:
+            cmd = latest_cmd.data[0]
+            status_map = {
+                "pending": ("🔵", "수집 대기 중..."),
+                "running": ("🟡", f"수집 진행 중: {cmd.get('message', '')}"),
+                "completed": ("🟢", f"✅ 최근 완료: {cmd.get('result_summary', '')}"),
+                "failed": ("🔴", f"❌ 실패: {cmd.get('message', '')}")
+            }
+            icon, text = status_map.get(cmd['status'], ("⚪", "알 수 없음"))
+            
+            completed_at = cmd.get('completed_at') or cmd.get('created_at', '')
+            if completed_at:
+                try:
+                    dt = datetime.fromisoformat(completed_at.replace('Z', '+00:00'))
+                    time_str = dt.astimezone(KST).strftime('%m/%d %H:%M')
+                except: time_str = completed_at[:16]
+            else:
+                time_str = "-"
+            
+            st.info(f"{icon} **상태**: {text}  \n📅 시각: {time_str}")
+            
+            # 진행 중이면 자동 새로고침
+            if cmd['status'] in ('pending', 'running'):
+                time.sleep(3)
+                st.rerun()
         else:
-            st.info(f"📡 연동 계정: {user_id} ({com_code}) | 📂 경로: `{download_path}`")
+            st.info("아직 동기화 기록이 없습니다. 우측 버튼으로 첫 수집을 요청하세요.")
 
     with c2:
-        if st.button("🚀 RPA 실행 및 동기화", type="primary", use_container_width=True):
-            user_pw = get_config("ecount_user_pw")
-            
-            with st.status("이카운트 데이터 수집 및 동기화 진행 중...", expanded=True) as status:
-                st.write("1️⃣ RPA 브라우저 가동 중 (로그인 시도)...")
-                rpa = EcountRPA(com_code, user_id, user_pw, download_path, headless=headless)
-                
-                success, msg = rpa.login()
-                if not success:
-                    st.error(f"❌ {msg}")
-                    status.update(label="RPA 실행 실패", state="error")
-                else:
-                    st.write("2️⃣ 재고 현황 데이터 수집 중 (엑셀 다운로드)...")
-                    # TODO: 이카운트 실제 DOM에 맞춘 get_inventory_balance 상세 구현 필요
-                    # 현재는 파일이 해당 경로에 다운로드되었다고 가정하고 파싱 단계로 넘어갑니다.
-                    success, msg = rpa.get_inventory_balance()
-                    
-                    st.write("3️⃣ 다운로드된 엑셀 파싱 및 DB 반영 중...")
-                    try:
-                        # 가장 최근 다운로드된 엑셀 파일 찾기
-                        files = [os.path.join(download_path, f) for f in os.listdir(download_path) if f.endswith('.xlsx')]
-                        if not files:
-                            st.warning("수집된 엑셀 파일을 찾을 수 없습니다.")
-                        else:
-                            latest_file = max(files, key=os.path.getctime)
-                            df_new = pd.read_excel(latest_file)
-                            
-                            # (예시) 엑셀 컬럼 매칭 및 DB Upsert 로직
-                            # for _, row in df_new.iterrows():
-                            #     supabase.table("warehouse_inventory").upsert({...}).execute()
-                            
-                            st.success(f"✅ {len(df_new)}건의 데이터가 성공적으로 동기화되었습니다.")
-                            status.update(label="동기화 완료!", state="complete")
-                            time.sleep(1)
-                            st.rerun()
-                    except Exception as e:
-                        st.error(f"파싱/저장 오류: {e}")
-                        status.update(label="데이터 처리 오류", state="error")
+        # 진행 중인 명령이 있으면 버튼 비활성화
+        is_busy = latest_cmd.data and latest_cmd.data[0]['status'] in ('pending', 'running')
+        
+        if st.button("🚀 데이터 수집 요청", type="primary", use_container_width=True, disabled=is_busy):
+            supabase.table("rpa_commands").insert({
+                "command_type": "sync_inventory",
+                "status": "pending",
+                "message": "웹에서 수집 요청됨",
+                "requested_by": "admin"
+            }).execute()
+            st.toast("📡 수집 명령이 사무실 PC로 전송되었습니다!")
+            time.sleep(1)
+            st.rerun()
+        
+        if is_busy:
+            st.caption("⏳ 수집기가 작업 중입니다...")
 
 st.divider()
 
