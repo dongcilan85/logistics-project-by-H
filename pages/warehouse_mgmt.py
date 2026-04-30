@@ -24,13 +24,14 @@ st.markdown("Ecount ERP 연동 데이터를 바탕으로 실시간 창고 보관
 # -------------------------------------------------------------
 import requests
 
-def get_config(key, default=""):
+def get_config(key_name, default=""):
     try:
-        url = f"{url_val}/rest/v1/system_config?key=eq.{key}&select=value"
-        headers = {"apikey": key_val, "Authorization": f"Bearer {key_val}"}
-        resp = requests.get(url, headers=headers, timeout=5)
-        data = resp.json()
-        return data[0]['value'] if data else default
+        # 상단에 정의된 url, key 변수를 직접 사용
+        url_get = f"{url}/rest/v1/system_config?key=eq.{key_name}&select=value"
+        headers_get = {"apikey": key, "Authorization": f"Bearer {key}"}
+        resp_get = requests.get(url_get, headers=headers_get, timeout=5)
+        data_get = resp_get.json()
+        return data_get[0]['value'] if data_get else default
     except: return default
 
 def set_config(key, value):
