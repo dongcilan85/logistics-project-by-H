@@ -239,30 +239,24 @@ class EcountRPA:
                     except:
                         continue
             
-            if not success_click:
-                log("❌ 모든 프레임을 뒤졌으나 Excel 버튼을 찾지 못했습니다.")
-                return False, "Excel 버튼 탐색 실패"
-                
-            # 5. 파일 다운로드 감시
-            log(f"🔎 파일 생성 감시 중... ({self.download_path})")
-            timeout = 40
-            start_time = time.time()
-            downloaded_file = None
-            
-            while time.time() - start_time < timeout:
-                current_files = set(os.listdir(self.download_path))
-                new_files = list(current_files - before_files)
-                xlsx_files = [f for f in new_files if f.endswith('.xlsx') and not f.startswith('~')]
-                if xlsx_files:
-                    downloaded_file = xlsx_files[0]
-                    break
-                time.sleep(1)
-                
-            if downloaded_file:
-                log(f"✅ 수집 성공: {downloaded_file}")
-                return True, f"수집 완료: {downloaded_file}"
+            if success_click:
+                downloaded_file = self._wait_for_download(before_files)
+                if downloaded_file:
+                    mmdd = datetime.now().strftime("%m%d")
+                    new_name = f"{mmdd}_창고별재고현황(1).xlsx"
+                    old_path = os.path.join(self.download_path, downloaded_file)
+                    new_path = os.path.join(self.download_path, new_name)
+                    
+                    if os.path.exists(new_path): os.remove(new_path)
+                    os.rename(old_path, new_path)
+                    
+                    log(f"✅ 수집 성공: {new_name}")
+                    return True, f"수집 완료: {new_name}"
+                else:
+                    return False, "파일 다운로드 타임아웃 발생"
             else:
-                return False, "파일 다운로드 타임아웃 발생"
+                log("❌ Excel 버튼을 찾지 못했습니다.")
+                return False, "Excel 버튼 탐색 실패"
                 
         except Exception as e:
             log(f"❌ 수집 중 오류: {str(e)}")
@@ -272,12 +266,13 @@ class EcountRPA:
             return False, f"오류: {str(e)}"
 
     def get_item_inventory_by_warehouse(self, warehouses):
-        """관리항목별재고현황 창고별 순회 수집"""
+        """관리항목별재고현황 창고별 순회 수집 (사용자 지정 매크로 반영)"""
         from selenium.webdriver.common.keys import Keys
         log = lambda m: print(f"[{datetime.now().strftime('%H:%M:%S')}] {m}")
         
         try:
             wait = WebDriverWait(self.driver, 10)
+            mmdd = datetime.now().strftime("%m%d")
             
             # 1. 메뉴 이동
             log("🔍 '관리항목별재고현황' 메뉴 검색 및 이동...")
@@ -297,13 +292,10 @@ class EcountRPA:
             log("🚀 페이지 로딩 대기 중...")
             time.sleep(5)
 
-            mmdd = datetime.now().strftime("%m%d")
-            success_count = 0
-
-            for wh in warehouses:
+            for i, wh in enumerate(warehouses):
                 wh_code = wh['warehouse_code']
                 wh_name = wh['warehouse_name']
-                log(f"🏢 [{wh_name} ({wh_code})] 수집 시작...")
+                log(f"🏢 [{i+1}/{len(warehouses)}] {wh_name} ({wh_code}) 수집 시작...")
 
                 # 프레임 진입
                 self.driver.switch_to.default_content()
@@ -311,68 +303,93 @@ class EcountRPA:
                 if iframes:
                     self.driver.switch_to.frame(iframes[-1])
                 
-                # 창고 코드 입력 (일반적인 창고 입력 칸 매크로)
-                # Tab 1번 후 바로 입력하거나, 특정 ID를 찾아야 함.
-                # 여기서는 범용적으로 Body에 키를 보내는 방식과 요소를 찾는 방식을 병행
-                try:
-                    # 💡 [매크로] 보통 이카운트 조회화면 진입 시 첫 칸이 창고인 경우가 많음
-                    body = wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-                    
-                    # 기존 입력값 지우기 (Ctrl+A -> Backspace)
-                    body.send_keys(Keys.CONTROL + "a")
-                    body.send_keys(Keys.BACKSPACE)
-                    time.sleep(0.5)
+                body = wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+
+                if i == 0:
+                    # --- 첫 번째 창고 처리 ---
+                    log("  ⌨️ 첫 번째 창고 입력 시퀀스 실행")
+                    # Tab 4회 입력하여 창고 입력칸으로 이동
+                    for _ in range(4):
+                        body.send_keys(Keys.TAB)
+                        time.sleep(0.2)
                     
                     # 창고코드 입력
-                    for char in wh_code:
-                        body.send_keys(char)
-                        time.sleep(0.05)
+                    body.send_keys(wh_code)
+                    time.sleep(0.5)
                     body.send_keys(Keys.ENTER)
-                    time.sleep(1)
-                    
-                    # 조회 (F8)
-                    log(f"🔍 [{wh_name}] 데이터 조회 (F8)...")
-                    body.send_keys(Keys.F8)
-                    time.sleep(3) # 로딩 대기
-                    
-                    # 엑셀 다운로드 클릭
-                    log(f"📥 [{wh_name}] 엑셀 다운로드 시도...")
-                    before_files = set(os.listdir(self.download_path))
-                    
-                    # Excel 버튼 찾기 루프 (프레임 스캔)
-                    success_click = self._click_excel_button()
-                    
-                    if success_click:
-                        # 파일 다운로드 대기 및 이름 변경
-                        downloaded = self._wait_for_download(before_files)
-                        if downloaded:
-                            # 새 파일명: MMDD_창고명(1).xlsx (N은 우선 1로 고정하거나 순번 처리)
-                            new_name = f"{mmdd}_{wh_name}(1).xlsx"
-                            old_path = os.path.join(self.download_path, downloaded)
-                            new_path = os.path.join(self.download_path, new_name)
-                            
-                            # 기존에 같은 이름의 파일이 있으면 삭제 후 변경
-                            if os.path.exists(new_path):
-                                os.remove(new_path)
-                            os.rename(old_path, new_path)
-                            
-                            log(f"✅ [{wh_name}] 완료 -> {new_name}")
-                            success_count += 1
-                        else:
-                            log(f"⚠️ [{wh_name}] 다운로드 타임아웃")
-                    else:
-                        log(f"❌ [{wh_name}] Excel 버튼을 찾지 못함")
-                
-                except Exception as iter_e:
-                    log(f"❌ [{wh_name}] 처리 중 에러: {iter_e}")
-                    continue
-                
-                time.sleep(2) # 다음 창고 전 잠시 대기
+                    time.sleep(0.5)
 
-            return True, f"{len(warehouses)}개 중 {success_count}개 수집 완료"
+                    # Tab 7회 입력 후 오른쪽 방향키 1회
+                    for _ in range(7):
+                        body.send_keys(Keys.TAB)
+                        time.sleep(0.2)
+                    body.send_keys(Keys.RIGHT)
+                    time.sleep(0.5)
+
+                    # F8로 검색
+                    log("  🔍 F8 검색 실행")
+                    body.send_keys(Keys.F8)
+                
+                else:
+                    # --- 두 번째 창고부터 루프 처리 ---
+                    log("  ⌨️ 다음 창고 검색 시퀀스 실행 (F3)")
+                    # F3 눌러 검색 창 열기
+                    body.send_keys(Keys.F3)
+                    time.sleep(2)
+
+                    # Tab 3회 입력 후 Spacebar (기존 창고 삭제)
+                    for _ in range(3):
+                        body.send_keys(Keys.TAB)
+                        time.sleep(0.2)
+                    body.send_keys(Keys.SPACE)
+                    time.sleep(0.5)
+
+                    # Shift+Tab 1회, Tab 1회 (다시 입력창 이동)
+                    body.send_keys(Keys.SHIFT + Keys.TAB)
+                    time.sleep(0.2)
+                    body.send_keys(Keys.TAB)
+                    time.sleep(0.5)
+
+                    # 신규 창고코드 입력
+                    body.send_keys(wh_code)
+                    time.sleep(0.5)
+                    body.send_keys(Keys.ENTER)
+                    time.sleep(0.5)
+
+                    # F8로 다시 검색
+                    log("  🔍 F8 검색 실행")
+                    body.send_keys(Keys.F8)
+
+                # 검색 결과 로딩 대기
+                time.sleep(5)
+
+                # 엑셀 다운로드
+                log(f"  📥 엑셀 다운로드 시도...")
+                before_files = set(os.listdir(self.download_path))
+                
+                if self._click_excel_button():
+                    downloaded = self._wait_for_download(before_files)
+                    if downloaded:
+                        # 파일명: MMDD_창고명(1).xlsx
+                        new_name = f"{mmdd}_{wh_name}(1).xlsx"
+                        old_path = os.path.join(self.download_path, downloaded)
+                        new_path = os.path.join(self.download_path, new_name)
+                        
+                        if os.path.exists(new_path): os.remove(new_path)
+                        os.rename(old_path, new_path)
+                        log(f"  ✅ 완료: {new_name}")
+                    else:
+                        log(f"  ⚠️ 다운로드 타임아웃 발생")
+                else:
+                    log(f"  ❌ Excel 버튼을 찾지 못함")
+                
+                time.sleep(2)
+
+            log("🎉 모든 창고 수집이 완료되었습니다.")
+            return True, f"{len(warehouses)}개 창고 수집 완료"
 
         except Exception as e:
-            log(f"❌ 순회 수집 중 치명적 오류: {str(e)}")
+            log(f"❌ 순회 수집 중 오류: {str(e)}")
             return False, str(e)
 
     def _click_excel_button(self):
