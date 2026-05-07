@@ -121,4 +121,63 @@ with st.container(border=True):
             time.sleep(1)
             st.rerun()
 
+st.divider()
+
+# --- [UI: 창고 코드 관리 (RPA 루프용)] ---
+st.subheader("🏢 창고 코드 관리 (RPA 순회용)")
+st.write("관리항목별재고현황 수집 시 순회할 창고 리스트를 설정합니다.")
+
+# 데이터 로드
+try:
+    wh_res = supabase.table("warehouse_codes").select("*").order("warehouse_code").execute()
+    wh_df = pd.DataFrame(wh_res.data) if wh_res.data else pd.DataFrame(columns=["id", "warehouse_code", "warehouse_name"])
+    
+    # 💡 데이터 에디터 (추가, 수정, 삭제 가능)
+    edited_df = st.data_editor(
+        wh_df,
+        column_config={
+            "id": None, # ID 숨김
+            "warehouse_code": st.column_config.TextColumn("창고 코드 (ERP)", help="이카운트 검색 시 입력될 코드입니다.", required=True),
+            "warehouse_name": st.column_config.TextColumn("창고명 (파일명)", help="파일명 생성 시 사용될 명칭입니다.", required=True),
+            "created_at": None # 생성일 숨김
+        },
+        num_rows="dynamic",
+        use_container_width=True,
+        key="wh_codes_editor",
+        hide_index=True
+    )
+
+    if st.button("🏢 창고 리스트 저장", type="primary", use_container_width=True):
+        # 1. 삭제된 데이터 처리
+        if "wh_codes_editor" in st.session_state:
+            state = st.session_state.wh_codes_editor
+            
+            # 삭제 처리
+            if state.get("deleted_rows"):
+                for row_idx in state["deleted_rows"]:
+                    target_id = wh_df.iloc[row_idx]['id']
+                    supabase.table("warehouse_codes").delete().eq("id", target_id).execute()
+            
+            # 추가 및 수정 처리
+            # (data_editor의 특성상 전체를 다시 붓는 것이 안전할 때가 많으나, 여기서는 변경사항만 반영)
+            # 간결한 구현을 위해 전체 Upsert 방식으로 진행
+            for _, row in edited_df.iterrows():
+                upsert_data = {
+                    "warehouse_code": row['warehouse_code'],
+                    "warehouse_name": row['warehouse_name']
+                }
+                if pd.notnull(row.get('id')):
+                    upsert_data["id"] = int(row['id'])
+                
+                if row['warehouse_code'] and row['warehouse_name']:
+                    supabase.table("warehouse_codes").upsert(upsert_data).execute()
+            
+            st.success("✅ 창고 리스트가 DB에 반영되었습니다.")
+            time.sleep(0.5)
+            st.rerun()
+
+except Exception as e:
+    st.error(f"창고 리스트를 불러오는 중 오류가 발생했습니다: {e}")
+    st.info("💡 먼저 SQL Editor에서 'warehouse_codes' 테이블을 생성했는지 확인해 주세요.")
+
 st.caption("주의: 비밀번호 등 민감 정보는 시스템 관리자만 접근 가능한 영역에 보관됩니다.")

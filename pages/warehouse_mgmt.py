@@ -93,10 +93,12 @@ with st.expander("🤖 이카운트 ERP 데이터 동기화", expanded=True):
 
         st.info(f"{icon} **상태**: {text}  \n📅 업데이트: {time_str}")
 
+        # 테스트 편의를 위한 버튼들 (항상 보이거나 조건부 표시)
+        btn_col1, btn_col2, btn_col3 = st.columns(3)
+        if btn_col1.button("🔄 새로고침", use_container_width=True):
+            st.rerun()
+        
         if rpa_status in ('pending', 'running') or rpa_trigger == 'pending':
-            btn_col1, btn_col2 = st.columns(2)
-            if btn_col1.button("🔄 상태 새로고침", use_container_width=True):
-                st.rerun()
             if btn_col2.button("❌ 수집 취소", use_container_width=True):
                 set_config("rpa_trigger", "idle")
                 set_config("rpa_status", "failed")
@@ -105,17 +107,27 @@ with st.expander("🤖 이카운트 ERP 데이터 동기화", expanded=True):
                 st.toast("수집 요청이 취소되었습니다.")
                 time.sleep(0.5)
                 st.rerun()
+        
+        if btn_col3.button("🧹 초기화", use_container_width=True, help="상태가 꼬였을 때 idle로 강제 리셋"):
+            set_config("rpa_trigger", "idle")
+            set_config("rpa_status", "idle")
+            set_config("rpa_message", "사용자에 의해 초기화됨")
+            set_config("rpa_updated_at", datetime.now(KST).isoformat())
+            st.toast("상태가 초기화되었습니다.")
+            time.sleep(0.5)
+            st.rerun()
 
     with c2:
         is_busy = bool(rpa_status in ('pending', 'running') or rpa_trigger == 'pending')
 
         if st.button("🚀 데이터 수집 요청", type="primary", use_container_width=True, disabled=is_busy):
+            # 트리거 발동
             set_config("rpa_trigger", "pending")
             set_config("rpa_status", "pending")
             set_config("rpa_message", "웹에서 수집 요청됨")
             set_config("rpa_updated_at", datetime.now(KST).isoformat())
-            st.toast("📡 수집 명령이 사무실 PC로 전송되었습니다!")
-            time.sleep(0.5)
+            st.toast("📡 수집 명령 전송 중...")
+            time.sleep(1)
             st.rerun()
 
         if is_busy:

@@ -1,5 +1,6 @@
 import os
 import time
+from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -27,6 +28,21 @@ class EcountRPA:
         if is_linux or self.headless:
             chrome_options.add_argument("--headless")
         
+        # 사용자 프로필 경로 설정 (인증 정보 유지용 - 절대 경로)
+        base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        user_data_path = os.path.join(base_path, "chrome_profile")
+        if not os.path.exists(user_data_path):
+            os.makedirs(user_data_path)
+            
+        chrome_options.add_argument(f"--user-data-dir={user_data_path}")
+        chrome_options.add_argument("--profile-directory=Default")
+        
+        # 자동화 흔적 지우기 (Stealth 설정)
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
+        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        
+        # 기본 설정들
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
@@ -60,58 +76,352 @@ class EcountRPA:
 
 
     def login(self):
+        log = lambda m: print(f"[{datetime.now().strftime('%H:%M:%S')}] {m}")
         try:
             self._setup_driver()
+            log("🌐 이카운트 로그인 페이지 접속 중...")
             self.driver.get("https://login.ecount.com/")
             wait = WebDriverWait(self.driver, 20)
             
             # 회사코드 입력
-            com_input = wait.until(EC.presence_of_element_located((By.ID, "COM_CODE")))
+            log("🏢 회사코드 입력 시도...")
+            com_input = wait.until(EC.presence_of_element_located((By.ID, "com_code")))
             com_input.clear()
             com_input.send_keys(self.com_code)
             
             # 아이디 입력
-            id_input = self.driver.find_element(By.ID, "USER_ID")
+            log("👤 아이디 입력 시도...")
+            id_input = self.driver.find_element(By.ID, "id")
             id_input.clear()
             id_input.send_keys(self.user_id)
-            
-            # 다음/로그인 버튼 클릭 (이카운트 로그인 방식에 따라 다름)
-            login_btn = self.driver.find_element(By.ID, "btn_login")
-            login_btn.click()
-            
-            # 비밀번호 입력 (보통 ID 입력 후 나타남)
-            time.sleep(1)
-            pw_input = wait.until(EC.presence_of_element_located((By.ID, "USER_PW")))
+
+            # 비밀번호 입력
+            log("🔑 비밀번호 입력 시도...")
+            pw_input = self.driver.find_element(By.ID, "passwd")
             pw_input.clear()
             pw_input.send_keys(self.user_pw)
             
-            # 최종 로그인
-            pw_input.submit()
+            # 로그인 버튼 클릭
+            log("🚀 로그인 버튼 클릭!")
+            login_btn = self.driver.find_element(By.ID, "save")
+            login_btn.click()
             
-            # 메인 화면 진입 확인
-            wait.until(EC.presence_of_element_located((By.CLASS_NAME, "main-container")))
-            return True, "로그인 성공"
+            # 로그인 성공 확인 (URL 우선 판정)
+            log("⌛ 메인 화면 진입 확인 중...")
+            time.sleep(1) # 대기 시간 단축
+            
+            current_url = self.driver.current_url
+            if "view/erp" in current_url.lower() or "logincc.ecount.com" in current_url.lower():
+                 log("✅ 로그인 성공 확인됨")
+                 return True, "로그인 성공"
+            
+            # 요소 확인도 더 빠르게
+            try:
+                WebDriverWait(self.driver, 1).until(EC.presence_of_element_located((By.ID, "txtSearch")))
+                log("✅ 로그인 성공 확인됨 (검색창 발견)")
+                return True, "로그인 성공"
+            except: pass
+            
+            return True, "로그인 성공 (추정 후 진행)"
+
         except Exception as e:
+            log(f"❌ 로그인 오류: {str(e)}")
             if self.driver: self.driver.quit()
             return False, f"로그인 실패: {str(e)}"
 
     def get_inventory_balance(self):
-        """재고현황 데이터를 엑셀로 다운로드하는 로직 (예시)"""
+        """창고별 재고현황 수집 로직 (상세 매크로 반영)"""
+        from selenium.webdriver.common.keys import Keys
+        from selenium.webdriver.common.action_chains import ActionChains
+        
+        log = lambda m: print(f"[{datetime.now().strftime('%H:%M:%S')}] {m}")
         try:
-            # 1. 재고현황 메뉴로 이동 (URL 직접 접근 또는 메뉴 클릭)
-            # 이카운트 내부 URL 구조는 세션에 따라 달라질 수 있어 조심해야 함
-            # 여기서는 표준적인 재고현황 진입 시나리오를 작성합니다.
+            wait = WebDriverWait(self.driver, 10)
+            actions = ActionChains(self.driver)
             
-            # 2. 엑셀 다운로드 버튼 클릭
-            # (이카운트의 실제 DOM 구조에 맞춘 추가 작업 필요)
+            # 1. 메뉴 이동 (검색 방식)
+            log("🔍 '창고별재고현황' 메뉴 검색 및 이동...")
+            self.driver.switch_to.default_content()
+            try:
+                search_box = wait.until(EC.presence_of_element_located((By.ID, "txtSearch")))
+            except:
+                search_box = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@placeholder='메뉴검색']")))
             
-            time.sleep(5) # 작업 시간 확보
-            return True, "데이터 수집 완료"
+            search_box.clear()
+            # 한 글자씩 타이핑 (인식률 향상)
+            for char in "창고별재고현황":
+                search_box.send_keys(char)
+                time.sleep(0.1)
+                
+            time.sleep(0.5)
+            search_box.send_keys(Keys.ENTER)
+            
+            # 2. 프레임 로딩 대기 및 진입
+            log("🚀 페이지 로딩 및 프레임 전환 중...")
+            time.sleep(5) 
+            
+            # 이카운트 특유의 ifrm... 프레임 찾기
+            iframes = self.driver.find_elements(By.TAG_NAME, "iframe")
+            if iframes:
+                log(f"📦 작업 프레임으로 진입합니다.")
+                self.driver.switch_to.frame(iframes[-1])
+            
+            # 3. 키보드 매크로 실행
+            log("⌨️ 매크로 실행: Tab(7) -> Right(1) -> F8(조회)")
+            body = wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+            
+            # 탭 7번
+            for i in range(7):
+                body.send_keys(Keys.TAB)
+                time.sleep(0.3)
+                
+            # 오른쪽 방향키 1번
+            body.send_keys(Keys.RIGHT)
+            time.sleep(0.5)
+            
+            # F8 조회
+            log("🔍 F8 키로 데이터 조회를 시작합니다.")
+            body.send_keys(Keys.F8)
+            time.sleep(5) # 결과 로딩 대기
+            
+            # 4. 엑셀 다운로드
+            log("📥 엑셀 다운로드 버튼('Excel') 찾는 중...")
+            before_files = set(os.listdir(self.download_path))
+            
+            # 4. 엑셀 다운로드 (모든 프레임 스캔 방식)
+            log("📥 모든 프레임을 스캔하여 'Excel' 버튼 탐색 중...")
+            before_files = set(os.listdir(self.download_path))
+            
+            self.driver.switch_to.default_content() # 일단 전체 화면으로 나옴
+            
+            success_click = False
+            # 1단계: 메인 화면에서 시도
+            # 2단계: 모든 프레임 내부를 하나씩 검사
+            all_frames = self.driver.find_elements(By.TAG_NAME, "iframe")
+            log(f"🔎 총 {len(all_frames)}개의 프레임 탐색 시작...")
+            
+            # 메인 컨텐츠 + 모든 프레임 순회 함수
+            def try_click_in_current_context():
+                excel_selectors = [
+                    (By.XPATH, "//*[text()='Excel']"),
+                    (By.XPATH, "//button[contains(., 'Excel')]"),
+                    (By.XPATH, "//a[contains(., 'Excel')]"),
+                    (By.ID, "btnExcel"),
+                    (By.ID, "Excel")
+                ]
+                for selector in excel_selectors:
+                    try:
+                        btn = self.driver.find_element(*selector)
+                        if btn.is_displayed():
+                            try:
+                                btn.click()
+                            except:
+                                self.driver.execute_script("arguments[0].click();", btn)
+                            return True
+                    except: continue
+                return False
+
+            # 먼저 메인에서 시도
+            if try_click_in_current_context():
+                success_click = True
+            else:
+                # 각 프레임 진입 후 시도
+                for i, frame in enumerate(all_frames):
+                    try:
+                        self.driver.switch_to.default_content()
+                        # 다시 요소를 찾아야 함 (프레임 이동 시 기존 참조가 깨질 수 있음)
+                        target_frame = self.driver.find_elements(By.TAG_NAME, "iframe")[i]
+                        self.driver.switch_to.frame(target_frame)
+                        if try_click_in_current_context():
+                            log(f"✅ {i+1}번째 프레임에서 Excel 버튼 발견 및 클릭 성공!")
+                            success_click = True
+                            break
+                    except:
+                        continue
+            
+            if not success_click:
+                log("❌ 모든 프레임을 뒤졌으나 Excel 버튼을 찾지 못했습니다.")
+                return False, "Excel 버튼 탐색 실패"
+                
+            # 5. 파일 다운로드 감시
+            log(f"🔎 파일 생성 감시 중... ({self.download_path})")
+            timeout = 40
+            start_time = time.time()
+            downloaded_file = None
+            
+            while time.time() - start_time < timeout:
+                current_files = set(os.listdir(self.download_path))
+                new_files = list(current_files - before_files)
+                xlsx_files = [f for f in new_files if f.endswith('.xlsx') and not f.startswith('~')]
+                if xlsx_files:
+                    downloaded_file = xlsx_files[0]
+                    break
+                time.sleep(1)
+                
+            if downloaded_file:
+                log(f"✅ 수집 성공: {downloaded_file}")
+                return True, f"수집 완료: {downloaded_file}"
+            else:
+                return False, "파일 다운로드 타임아웃 발생"
+                
         except Exception as e:
-            return False, f"데이터 수집 실패: {str(e)}"
-        finally:
-            if self.driver:
-                self.driver.quit()
+            log(f"❌ 수집 중 오류: {str(e)}")
+            return False, f"오류: {str(e)}"
+        except Exception as e:
+            log(f"❌ 수집 중 오류: {str(e)}")
+            return False, f"오류: {str(e)}"
+
+    def get_item_inventory_by_warehouse(self, warehouses):
+        """관리항목별재고현황 창고별 순회 수집"""
+        from selenium.webdriver.common.keys import Keys
+        log = lambda m: print(f"[{datetime.now().strftime('%H:%M:%S')}] {m}")
+        
+        try:
+            wait = WebDriverWait(self.driver, 10)
+            
+            # 1. 메뉴 이동
+            log("🔍 '관리항목별재고현황' 메뉴 검색 및 이동...")
+            self.driver.switch_to.default_content()
+            try:
+                search_box = wait.until(EC.presence_of_element_located((By.ID, "txtSearch")))
+            except:
+                search_box = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@placeholder='메뉴검색']")))
+            
+            search_box.clear()
+            for char in "관리항목별재고현황":
+                search_box.send_keys(char)
+                time.sleep(0.1)
+            time.sleep(0.5)
+            search_box.send_keys(Keys.ENTER)
+            
+            log("🚀 페이지 로딩 대기 중...")
+            time.sleep(5)
+
+            mmdd = datetime.now().strftime("%m%d")
+            success_count = 0
+
+            for wh in warehouses:
+                wh_code = wh['warehouse_code']
+                wh_name = wh['warehouse_name']
+                log(f"🏢 [{wh_name} ({wh_code})] 수집 시작...")
+
+                # 프레임 진입
+                self.driver.switch_to.default_content()
+                iframes = self.driver.find_elements(By.TAG_NAME, "iframe")
+                if iframes:
+                    self.driver.switch_to.frame(iframes[-1])
+                
+                # 창고 코드 입력 (일반적인 창고 입력 칸 매크로)
+                # Tab 1번 후 바로 입력하거나, 특정 ID를 찾아야 함.
+                # 여기서는 범용적으로 Body에 키를 보내는 방식과 요소를 찾는 방식을 병행
+                try:
+                    # 💡 [매크로] 보통 이카운트 조회화면 진입 시 첫 칸이 창고인 경우가 많음
+                    body = wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+                    
+                    # 기존 입력값 지우기 (Ctrl+A -> Backspace)
+                    body.send_keys(Keys.CONTROL + "a")
+                    body.send_keys(Keys.BACKSPACE)
+                    time.sleep(0.5)
+                    
+                    # 창고코드 입력
+                    for char in wh_code:
+                        body.send_keys(char)
+                        time.sleep(0.05)
+                    body.send_keys(Keys.ENTER)
+                    time.sleep(1)
+                    
+                    # 조회 (F8)
+                    log(f"🔍 [{wh_name}] 데이터 조회 (F8)...")
+                    body.send_keys(Keys.F8)
+                    time.sleep(3) # 로딩 대기
+                    
+                    # 엑셀 다운로드 클릭
+                    log(f"📥 [{wh_name}] 엑셀 다운로드 시도...")
+                    before_files = set(os.listdir(self.download_path))
+                    
+                    # Excel 버튼 찾기 루프 (프레임 스캔)
+                    success_click = self._click_excel_button()
+                    
+                    if success_click:
+                        # 파일 다운로드 대기 및 이름 변경
+                        downloaded = self._wait_for_download(before_files)
+                        if downloaded:
+                            # 새 파일명: MMDD_창고명(1).xlsx (N은 우선 1로 고정하거나 순번 처리)
+                            new_name = f"{mmdd}_{wh_name}(1).xlsx"
+                            old_path = os.path.join(self.download_path, downloaded)
+                            new_path = os.path.join(self.download_path, new_name)
+                            
+                            # 기존에 같은 이름의 파일이 있으면 삭제 후 변경
+                            if os.path.exists(new_path):
+                                os.remove(new_path)
+                            os.rename(old_path, new_path)
+                            
+                            log(f"✅ [{wh_name}] 완료 -> {new_name}")
+                            success_count += 1
+                        else:
+                            log(f"⚠️ [{wh_name}] 다운로드 타임아웃")
+                    else:
+                        log(f"❌ [{wh_name}] Excel 버튼을 찾지 못함")
+                
+                except Exception as iter_e:
+                    log(f"❌ [{wh_name}] 처리 중 에러: {iter_e}")
+                    continue
+                
+                time.sleep(2) # 다음 창고 전 잠시 대기
+
+            return True, f"{len(warehouses)}개 중 {success_count}개 수집 완료"
+
+        except Exception as e:
+            log(f"❌ 순회 수집 중 치명적 오류: {str(e)}")
+            return False, str(e)
+
+    def _click_excel_button(self):
+        """현재 화면의 모든 프레임에서 Excel 버튼을 찾아 클릭"""
+        self.driver.switch_to.default_content()
+        
+        def try_click():
+            selectors = [
+                (By.XPATH, "//*[text()='Excel']"),
+                (By.XPATH, "//button[contains(., 'Excel')]"),
+                (By.ID, "btnExcel")
+            ]
+            for s in selectors:
+                try:
+                    btn = self.driver.find_element(*s)
+                    if btn.is_displayed():
+                        self.driver.execute_script("arguments[0].click();", btn)
+                        return True
+                except: continue
+            return False
+
+        if try_click(): return True
+        
+        frames = self.driver.find_elements(By.TAG_NAME, "iframe")
+        for i in range(len(frames)):
+            try:
+                self.driver.switch_to.default_content()
+                f = self.driver.find_elements(By.TAG_NAME, "iframe")[i]
+                self.driver.switch_to.frame(f)
+                if try_click(): return True
+            except: continue
+        return False
+
+    def _wait_for_download(self, before_files, timeout=30):
+        """새로 다운로드된 파일명을 반환"""
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            current_files = set(os.listdir(self.download_path))
+            new_files = list(current_files - before_files)
+            xlsx_files = [f for f in new_files if f.endswith('.xlsx') and not f.startswith('~')]
+            if xlsx_files:
+                return xlsx_files[0]
+            time.sleep(1)
+        return None
+
+    def close(self):
+        if self.driver:
+            self.driver.quit()
+            self.driver = None
 
 # 테스트용 로직 (단독 실행 시)
 if __name__ == "__main__":
