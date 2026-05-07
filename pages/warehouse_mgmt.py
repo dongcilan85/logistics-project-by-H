@@ -237,53 +237,64 @@ with v2:
 st.divider()
 
 # -------------------------------------------------------------
-# 5. 직관적 하단 재고 테이블 (과거 변동 이력 비교 포함)
+# 6. 창고별 상세 재고 비용 현황 (신규)
 # -------------------------------------------------------------
-st.subheader("📋 세부 재고 마스터 리스트")
+st.subheader("💰 창고별 상세 재고 비용 분석")
+st.write("각 창고별 품목의 실시간 재고량과 입고 단가를 바탕으로 자산 가치를 분석합니다.")
 
-# History DataFrame에서 가장 최신 변동량(어제 등)을 품목별로 Mapping하기 위한 준비
-latest_history = {}
-if not hist_df.empty:
-    idx = hist_df.groupby('item_name')['record_date'].transform(max) == hist_df['record_date']
-    hist_latest = hist_df[idx].drop_duplicates(subset=['item_name'], keep='last')
-    for _, r in hist_latest.iterrows():
-        latest_history[r['item_name']] = r['diff_amount']
+@st.cache_data(ttl=5)
+def load_detail_data():
+    try:
+        res = supabase.table("warehouse_inventory_details").select("*").execute()
+        return pd.DataFrame(res.data) if res.data else pd.DataFrame()
+    except:
+        return pd.DataFrame()
 
-cols = st.columns([1, 2, 2.5, 2.5, 1.5, 1.5, 1])
-with cols[0]: st.markdown("**구역**")
-with cols[1]: st.markdown("**품목/카테고리**")
-with cols[2]: st.markdown("**포화도(%)**")
-with cols[3]: st.markdown("**현재재고 / 최대용량**")
-with cols[4]: st.markdown("**단가(₩)**")
-with cols[5]: st.markdown("**총액(₩)**")
-with cols[6]: st.markdown("**변동**")
+detail_df = load_detail_data()
 
-for i, row in df.iterrows():
-    c = st.columns([1, 2, 2.5, 2.5, 1.5, 1.5, 1])
-    with c[0]: st.write(f"**{row['location_zone']}**")
-    with c[1]: 
-        st.write(f"**{row['item_name']}**")
-        st.caption(f"{row['category']}")
-        
-    pct = row['포화도(%)']
-    color = "red" if pct >= 90 else "#3b82f6"
-    with c[2]: 
-        st.markdown(f"""
-        <div style="width:100%; background-color:#e5e7eb; border-radius:4px; margin-top:8px;">
-            <div style="width:{min(pct, 100)}%; background-color:{color}; height:8px; border-radius:4px;"></div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.caption(f"{pct}%")
-        
-    with c[3]: st.write(f"{row['current_quantity']:,} / {row['max_capacity']:,} {row.get('unit_type', '')}")
-    with c[4]: st.write(f"{row['unit_price']:,}")
-    with c[5]: st.write(f"{row['total_price']:,}")
+if detail_df.empty:
+    st.info("💡 아직 수집된 상세 재고 데이터가 없습니다. 상단의 '데이터 수집 요청'을 진행해 주세요.")
+else:
+    # 필터 섹션
+    with st.container(border=True):
+        f1, f2 = st.columns([1, 2])
+        with f1:
+            all_whs = sorted(detail_df['warehouse_name'].unique())
+            selected_whs = st.multiselect("🏢 창고 선택", options=all_whs, default=all_whs)
+        with f2:
+            search_term = st.text_input("🔍 품목명 또는 코드로 검색", placeholder="검색어를 입력하세요...")
+
+    # 데이터 필터링
+    filtered_df = detail_df[detail_df['warehouse_name'].isin(selected_whs)]
+    if search_term:
+        filtered_df = filtered_df[
+            filtered_df['item_name_spec'].str.contains(search_term, case=False) | 
+            filtered_df['item_code'].str.contains(search_term, case=False)
+        ]
+
+    # 요약 지표
+    total_detail_qty = filtered_df['stock_qty'].sum()
+    total_detail_cost = filtered_df['inventory_cost'].sum()
     
-    diff = latest_history.get(row['item_name'], 0)
-    with c[6]: 
-        if diff == 0:
-            st.markdown("<span style='color:gray;'>-</span>", unsafe_allow_html=True)
-        elif diff > 0:
-            st.markdown(f"<span style='color:#ef4444; font-weight:bold;'>▲ {diff:,}</span>", unsafe_allow_html=True)
-        else:
-            st.markdown(f"<span style='color:#3b82f6; font-weight:bold;'>▼ {abs(diff):,}</span>", unsafe_allow_html=True)
+    c1, c2, c3 = st.columns(3)
+    c1.metric("선택된 품목 수", f"{len(filtered_df):,} 개")
+    c2.metric("총 재고 수량", f"{total_detail_qty:,}")
+    c3.metric("총 재고 비용", f"₩ {total_detail_cost:,.0f}")
+
+    # 상세 테이블
+    st.dataframe(
+        filtered_df[['warehouse_name', 'item_code', 'item_name_spec', 'stock_qty', 'unit_price', 'inventory_cost']],
+        column_config={
+            "warehouse_name": "창고명",
+            "item_code": "품목코드",
+            "item_name_spec": "품목명[규격]",
+            "stock_qty": st.column_config.NumberColumn("재고수량", format="%d"),
+            "unit_price": st.column_config.NumberColumn("입고단가", format="₩ %d"),
+            "inventory_cost": st.column_config.NumberColumn("재고비용", format="₩ %d"),
+        },
+        use_container_width=True,
+        hide_index=True
+    )
+
+st.divider()
+st.caption("주의: 비밀번호 등 민감 정보는 시스템 관리자만 접근 가능한 영역에 보관됩니다.")
