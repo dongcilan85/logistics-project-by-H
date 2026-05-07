@@ -161,14 +161,29 @@ def process_inventory_excel(dl_path):
         return
 
     try:
-        # 엑셀 읽기 (첫 2행 정도가 헤더일 수 있으므로 유동적 대응이 필요할 수 있으나 기본값으로 시작)
-        df = pd.read_excel(target_file)
+        # 1. 데이터의 실제 헤더 위치를 찾기 위해 헤더 없이 먼저 읽음
+        df_raw = pd.read_excel(target_file, header=None)
+        
+        header_row_idx = -1
+        for i, row in df_raw.iterrows():
+            if '품목코드' in row.values:
+                header_row_idx = i
+                break
+        
+        if header_row_idx == -1:
+            log(f"❌ 엑셀 내에서 '품목코드' 컬럼을 찾을 수 없습니다: {target_file}", level="error")
+            return
+
+        # 2. 찾은 헤더 위치로 데이터 다시 읽기
+        df = pd.read_excel(target_file, header=header_row_idx)
+        
+        # 컬럼명 앞뒤 공백 제거
+        df.columns = [str(c).strip() for c in df.columns]
         
         # 필수 컬럼 존재 확인 (사용자 제공 컬럼명 기준)
         required_cols = ['창고명', '품목코드', '품목명[규격]', '재고수량', '입고단가']
-        available_cols = df.columns.tolist()
         
-        # 컬럼명이 정확히 일치하지 않을 경우를 대비해 필터링 (NaN 제거 등)
+        # 데이터가 있는 행만 필터링 (품목코드가 있는 행만)
         df = df.dropna(subset=['품목코드'])
         
         # 데이터 타입 변환 및 계산
@@ -180,9 +195,9 @@ def process_inventory_excel(dl_path):
         upload_data = []
         for _, row in df.iterrows():
             upload_data.append({
-                "warehouse_name": str(row.get('창고명', '')),
-                "item_code": str(row.get('품목코드', '')),
-                "item_name_spec": str(row.get('품목명[규격]', '')),
+                "warehouse_name": str(row.get('창고명', '')).strip(), # 공백 및 줄바꿈 제거
+                "item_code": str(row.get('품목코드', '')).strip(),
+                "item_name_spec": str(row.get('품목명[규격]', '')).strip(),
                 "stock_qty": float(row.get('재고수량', 0)),
                 "unit_price": float(row.get('입고단가', 0)),
                 "inventory_cost": float(row.get('재고비용', 0))

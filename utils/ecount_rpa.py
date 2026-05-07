@@ -293,8 +293,8 @@ class EcountRPA:
             time.sleep(5)
 
             for i, wh in enumerate(warehouses):
-                wh_code = wh['warehouse_code']
-                wh_name = wh['warehouse_name']
+                wh_code = str(wh['warehouse_code']).strip()
+                wh_name = str(wh['warehouse_name']).strip()
                 log(f"🏢 [{i+1}/{len(warehouses)}] {wh_name} ({wh_code}) 수집 시작...")
 
                 # 프레임 진입
