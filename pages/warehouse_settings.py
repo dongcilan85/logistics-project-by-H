@@ -64,7 +64,11 @@ st.subheader("🤖 RPA 동작 설정")
 with st.container(border=True):
     headless = st.checkbox("백그라운드 모드로 실행 (브라우저 창 숨기기)", value=get_config("ecount_headless", "True") == "True")
     
-    st.write("📂 **엑셀 다운로드 경로 설정**")
+    st.write("⏰ **자동 수집 시간 설정**")
+    scheduled_times = st.text_input("수집 시간 (24시간 형식, 콤마로 구분)", 
+                                    value=get_config("rpa_scheduled_times", "09:00, 18:00"),
+                                    placeholder="예: 09:00, 13:00, 18:00")
+    st.caption("💡 지정된 시간이 되면 에이전트가 자동으로 수집을 시작합니다.")
     
     # 💡 [개선] 내장 폴더 브라우저 구현
     if "show_browser" not in st.session_state: st.session_state.show_browser = False
@@ -117,7 +121,8 @@ with st.container(border=True):
     if st.button("💾 동작 설정 저장", use_container_width=True, type="primary"):
         h1 = set_config("ecount_headless", str(headless))
         d1 = set_config("ecount_download_path", download_path)
-        if h1 and d1:
+        t1 = set_config("rpa_scheduled_times", scheduled_times)
+        if h1 and d1 and t1:
             st.success("✅ RPA 동작 설정이 저장되었습니다.")
             time.sleep(1)
             st.rerun()

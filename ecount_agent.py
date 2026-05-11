@@ -186,6 +186,10 @@ def process_inventory_excel(dl_path):
         # 데이터가 있는 행만 필터링 (품목코드가 있는 행만)
         df = df.dropna(subset=['품목코드'])
         
+        # '계' 또는 '합계'가 포함된 행 제외 (이카운트 집계 행 방지)
+        df = df[~df['품목코드'].astype(str).str.contains('계|합계', na=False)]
+        df = df[~df['품목명[규격]'].astype(str).str.contains('계|합계', na=False)]
+        
         # 데이터 타입 변환 및 계산
         df['재고수량'] = pd.to_numeric(df['재고수량'], errors='coerce').fillna(0)
         df['입고단가'] = pd.to_numeric(df['입고단가'], errors='coerce').fillna(0)
@@ -221,28 +225,49 @@ def process_inventory_excel(dl_path):
 
 def main():
     print("=" * 60)
-    print("  🤖 IWP RPA 에이전트 v4 (상세 진단) 시작")
+    print("  🤖 IWP RPA 에이전트 v4 (스케줄러 지원) 시작")
     print(f"  🌐 연결 대상: {SUPABASE_URL}")
     print("=" * 60)
     
     # 연결 테스트
-    test = db_get("admin_password")
-    log(f"✅ Supabase 연결 확인 성공")
+    db_get("admin_password")
+    log("✅ Supabase 연결 확인 성공")
     
+    last_run_id = "" # 마지막으로 실행된 스케줄 ID (중복 방지)
+
     while True:
         try:
+            # 하트비트 업데이트
             db_set("agent_heartbeat", datetime.now(KST).isoformat())
             
+            # 1. 수동 트리거 체크
             trigger = db_get("rpa_trigger")
             if trigger == "pending":
+                log("📡 [트리거] 웹 대시보드에서 수집 요청이 들어왔습니다.")
                 execute_rpa()
             
-            time.sleep(5)
+            # 2. 자동 스케줄 체크
+            now = datetime.now(KST)
+            current_minute = now.strftime("%H:%M")
+            
+            scheduled_times_str = db_get("rpa_scheduled_times")
+            if scheduled_times_str not in ("NULL", "ERROR"):
+                scheduled_times = [t.strip() for t in scheduled_times_str.split(",")]
+                
+                if current_minute in scheduled_times:
+                    # 오늘 해당 시각에 이미 실행했는지 확인
+                    run_id = f"{now.strftime('%Y-%m-%d')} {current_minute}"
+                    if last_run_id != run_id:
+                        log(f"⏰ [스케줄] 지정된 시각({current_minute})이 되어 자동 수집을 시작합니다.")
+                        execute_rpa()
+                        last_run_id = run_id
+            
+            time.sleep(10) # 10초마다 체크
         except KeyboardInterrupt:
             break
         except Exception as e:
             log(f"⚠️ 루프 오류: {e}")
-            time.sleep(5)
+            time.sleep(10)
 
 if __name__ == "__main__":
     main()
