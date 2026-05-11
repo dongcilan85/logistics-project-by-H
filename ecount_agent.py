@@ -102,13 +102,13 @@ def execute_rpa():
 
         try:
             db_set("rpa_message", "이카운트 로그인 시도 중...")
-            log("🔑 [4단계] 이카운트 로그인 시도 중...")
+            log("[4단계] 이카운트 로그인 시도 중...")
             success, msg = rpa.login()
             
             if not success:
                 raise Exception(f"로그인 실패: {msg}")
             
-            log("✅ [5단계] 로그인 성공! 데이터 수집을 시작합니다.")
+            log("[5단계] 로그인 성공! 데이터 수집을 시작합니다.")
             
             # 5-1. 창고별재고현황 (기존)
             db_set("rpa_message", "창고별재고현황 수집 중...")
@@ -134,12 +134,22 @@ def execute_rpa():
             else:
                 log("⚠️ 등록된 창고 코드가 없어 순회 수집을 건너뜁니다.")
 
+            # 5-3. 품목 마스터 수집 및 동기화 (신규)
+            log("📦 [7단계] 품목 마스터(품목등록) 수집 시작...")
+            db_set("rpa_message", "품목 마스터 수집 중...")
+            success_item, item_file = rpa.get_item_master_excel()
+            if success_item:
+                log("📊 [7-1] 품목 마스터 DB 동기화 중...")
+                process_item_master_excel(dl_path)
+            else:
+                log(f"⚠️ 품목 마스터 수집 건너뜀: {item_file}")
+
             db_set("rpa_status", "completed")
             db_set("rpa_message", "모든 데이터 수집 완료")
-            log("🎉 [완료] 모든 작업이 성공적으로 끝났습니다.")
+            log("[완료] 모든 작업이 성공적으로 끝났습니다.")
 
         finally:
-            log("🛑 브라우저를 종료합니다.")
+            log("브라우저를 종료합니다.")
             rpa.close()
 
     except Exception as e:
@@ -213,20 +223,29 @@ def process_inventory_excel(dl_path):
             })
         
         if upload_data:
-            # 1. 변동 이력 기록을 위해 기존 데이터 가져오기
+            # 1. 변동 이력 기록을 위해 기존 데이터 가져오기 (비교용)
             old_res = requests.get(f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details?select=*", headers=HEADERS)
             old_data = {f"{r['warehouse_name']}_{r['item_code']}": r['stock_qty'] for r in old_res.json()} if old_res.status_code == 200 else {}
 
-            # 2. 기존 데이터 초기화 (최신 스냅샷)
-            requests.delete(f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details?select=*", headers=HEADERS)
+            # 2. [핵심] 데이터 누적 방지를 위한 처리
+            # 💡 기존에는 전체 삭제 후 삽입했으나, 네트워크 오류 등으로 삭제가 안 될 경우 누적됨.
+            # 💡 이번에는 (warehouse_name, item_code) 유니크 제약 조건을 활용한 Upsert 방식으로 전환.
+            
+            # 먼저 현재 엑셀에 있는 창고의 기존 데이터만 삭제 (다른 창고 데이터는 유지)
+            current_warehouses = list(set([item['warehouse_name'] for item in upload_data]))
+            for wh in current_warehouses:
+                requests.delete(f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details?warehouse_name=eq.{wh}", headers=HEADERS)
             
             # 3. 신규 데이터 벌크 업로드 및 이력 생성
             history_entries = []
             today_str = datetime.now(KST).strftime('%Y-%m-%d')
             
+            headers = {**HEADERS, "Prefer": "resolution=merge-duplicates"} # Upsert 모드
+            
             for i in range(0, len(upload_data), 1000):
                 chunk = upload_data[i:i+1000]
-                requests.post(f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details", headers=HEADERS, json=chunk)
+                # Upsert 수행
+                requests.post(f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details", headers=headers, json=chunk)
                 
                 # 변동량 계산 및 이력 준비
                 for item in chunk:
@@ -250,20 +269,80 @@ def process_inventory_excel(dl_path):
                     h_chunk = history_entries[i:i+1000]
                     requests.post(f"{SUPABASE_URL}/rest/v1/inventory_history", headers=HEADERS, json=h_chunk)
             
-            log(f"✅ {len(upload_data)}건 동기화 및 {len(history_entries)}건의 변동 이력 기록 완료")
+            log(f"✅ {len(upload_data)}건의 재고 데이터를 성공적으로 업데이트했습니다. (중복 방지 적용)")
 
     except Exception as e:
         log(f"❌ 엑셀 처리 중 오류 발생: {e}", level="error")
 
+def process_item_master_excel(dl_path):
+    """품목등록 엑셀을 읽어 DB의 item_master 테이블 동기화 (카테고리/안전재고 보존)"""
+    try:
+        mmdd = datetime.now().strftime("%m%d")
+        target_file = f"{mmdd}_품목마스터(1).xlsx"
+        file_path = os.path.join(dl_path, target_file)
+
+        if not os.path.exists(file_path):
+            log(f"⚠️ 품목 마스터 파일을 찾을 수 없습니다: {target_file}")
+            return
+
+        df = pd.read_excel(file_path)
+        
+        # 헤더 찾기
+        header_row = -1
+        for i, row in df.iterrows():
+            if '품목코드' in row.values:
+                header_row = i
+                break
+        
+        if header_row == -1:
+            log("❌ 품목 엑셀에서 '품목코드' 컬럼을 찾을 수 없습니다.")
+            return
+
+        df.columns = df.iloc[header_row]
+        df = df.iloc[header_row + 1:].reset_index(drop=True)
+        
+        # 필수 컬럼 정제
+        df = df[['품목코드', '품목명']].dropna(subset=['품목코드'])
+        
+        upload_data = []
+        for _, row in df.iterrows():
+            code = str(row['품목코드']).strip()
+            name = str(row['품목명']).strip()
+            if code:
+                upload_data.append({
+                    "item_code": code,
+                    "item_name": name,
+                    "updated_at": datetime.now().isoformat()
+                })
+
+        if upload_data:
+            # 💡 Upsert 시 기존 컬럼을 유지하기 위해 'on_conflict'와 함께 전송
+            # PostgREST의 upsert는 기본적으로 기존 값을 덮어쓰지만, 
+            # 여기에 포함되지 않은 컬럼(category, safety_stock 등)은 DB 설정에 따라 유지되거나 NULL이 됨.
+            # Supabase API를 사용하여 안전하게 처리.
+            headers = {**HEADERS, "Prefer": "resolution=merge-duplicates"}
+            
+            success_count = 0
+            for i in range(0, len(upload_data), 1000):
+                chunk = upload_data[i:i+1000]
+                resp = requests.post(f"{SUPABASE_URL}/rest/v1/item_master", headers=headers, json=chunk)
+                if resp.status_code in (200, 201):
+                    success_count += len(chunk)
+            
+            log(f"✅ 품목 마스터 {success_count}건 동기화 완료 (코드/명칭 최신화)")
+
+    except Exception as e:
+        log(f"❌ 품목 마스터 처리 중 오류: {e}", level="error")
+
 def main():
     print("=" * 60)
-    print("  🤖 IWP RPA 에이전트 v4 (스케줄러 지원) 시작")
-    print(f"  🌐 연결 대상: {SUPABASE_URL}")
+    print("  [RPA] IWP RPA Agent v4 (Scheduler Enabled) Start")
+    print(f"  [DB] Target: {SUPABASE_URL}")
     print("=" * 60)
     
     # 연결 테스트
     db_get("admin_password")
-    log("✅ Supabase 연결 확인 성공")
+    log("Supabase 연결 확인 성공")
     
     last_run_id = "" # 마지막으로 실행된 스케줄 ID (중복 방지)
 

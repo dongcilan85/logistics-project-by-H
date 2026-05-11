@@ -741,6 +741,20 @@ else:
     warehouse_page = st.Page("pages/warehouse_mgmt.py", title="창고 현황", icon="📦")
     warehouse_settings_page = st.Page("pages/warehouse_settings.py", title="창고 환경설정", icon="⚙️")
     
+    # --- [사이드바: RPA 제어 섹션 복구] ---
+    st.sidebar.divider()
+    st.sidebar.subheader("🤖 RPA 에이전트 제어")
+    
+    rpa_status = get_config("rpa_status", "idle")
+    rpa_msg = get_config("rpa_message", "대기 중")
+    status_icon = "🟢" if rpa_status == "idle" else "🟡" if rpa_status == "pending" else "🔵" if rpa_status == "running" else "🔴"
+    st.sidebar.info(f"{status_icon} **상태**: {rpa_msg}")
+    
+    if st.sidebar.button("🚀 이카운트 재고 수집 시작", use_container_width=True, type="primary"):
+        supabase.table("system_config").upsert({"key": "rpa_trigger", "value": "pending"}).execute()
+        supabase.table("system_config").upsert({"key": "rpa_status", "value": "pending"}).execute()
+        st.sidebar.success("수집 명령 전달됨!"); time.sleep(1); st.rerun()
+
     st.sidebar.divider()
     sc1, sc2 = st.sidebar.columns(2)
     if sc1.button("🔓 로그아웃", use_container_width=True): st.session_state.role = None; st.rerun()

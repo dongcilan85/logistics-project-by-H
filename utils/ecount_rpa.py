@@ -435,6 +435,56 @@ class EcountRPA:
             time.sleep(1)
         return None
 
+    def get_item_master_excel(self):
+        """이카운트 품목등록 메뉴에서 전체 품목 리스트 다운로드"""
+        from selenium.webdriver.common.keys import Keys
+        log = lambda m: print(f"[{datetime.now().strftime('%H:%M:%S')}] {m}")
+        
+        try:
+            wait = WebDriverWait(self.driver, 15)
+            mmdd = datetime.now().strftime("%m%d")
+            
+            log("🔍 '품목등록' 메뉴 검색 및 이동...")
+            self.driver.switch_to.default_content()
+            try:
+                search_box = wait.until(EC.presence_of_element_located((By.ID, "txtSearch")))
+            except:
+                search_box = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@placeholder='메뉴검색']")))
+            
+            search_box.clear()
+            for char in "품목등록":
+                search_box.send_keys(char)
+                time.sleep(0.1)
+            search_box.send_keys(Keys.ENTER)
+            
+            log("🚀 품목 리스트 페이지 로딩 대기...")
+            time.sleep(5)
+
+            # 엑셀 다운로드
+            log("📥 품목 마스터 엑셀 다운로드 시도...")
+            before_files = set(os.listdir(self.download_path))
+            
+            # 품목등록 페이지는 보통 하단에 Excel 버튼이 있거나 옵션 내부에 있음
+            if self._click_excel_button():
+                downloaded = self._wait_for_download(before_files)
+                if downloaded:
+                    new_name = f"{mmdd}_품목마스터(1).xlsx"
+                    old_path = os.path.join(self.download_path, downloaded)
+                    new_path = os.path.join(self.download_path, new_name)
+                    
+                    if os.path.exists(new_path): os.remove(new_path)
+                    os.rename(old_path, new_path)
+                    log(f"✅ 품목 마스터 다운로드 완료: {new_name}")
+                    return True, new_name
+                else:
+                    return False, "다운로드 타임아웃"
+            else:
+                return False, "Excel 버튼을 찾지 못함"
+
+        except Exception as e:
+            log(f"❌ 품목 마스터 수집 중 오류: {str(e)}")
+            return False, str(e)
+
     def close(self):
         if self.driver:
             self.driver.quit()

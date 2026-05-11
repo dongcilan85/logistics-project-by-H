@@ -13,10 +13,8 @@ def init_connection():
 
 supabase = init_connection()
 
-st.title("⚙️ 창고 및 RPA 환경설정")
-
 # -------------------------------------------------------------
-# [기능] 설정값 가져오기/저장하기
+# [기능] 설정값 가져오기/저장하기 (최상단 배치)
 # -------------------------------------------------------------
 def get_config(key, default=""):
     try:
@@ -32,6 +30,31 @@ def set_config(key, value):
     except:
         return False
 
+st.title("⚙️ 창고 및 RPA 환경설정")
+
+# -------------------------------------------------------------
+# [복구] 이카운트 계정 설정 섹션
+# -------------------------------------------------------------
+st.subheader("🔑 이카운트 계정 설정")
+with st.container(border=True):
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        com_code = st.text_input("회사 코드", value=get_config("ecount_com_code"))
+    with col2:
+        user_id = st.text_input("아이디", value=get_config("ecount_user_id"))
+    with col3:
+        user_pw = st.text_input("비밀번호", type="password", value=get_config("ecount_user_pw"))
+    
+    if st.button("💾 계정 정보 저장", use_container_width=True, type="primary"):
+        set_config("ecount_com_code", com_code)
+        set_config("ecount_user_id", user_id)
+        set_config("ecount_user_pw", user_pw)
+        st.success("✅ 이카운트 계정 정보가 안전하게 저장되었습니다.")
+        time.sleep(1)
+        st.rerun()
+
+st.divider()
+
 # --- [UI: RPA 동작 설정] ---
 st.subheader("🤖 RPA 동작 설정")
 with st.container(border=True):
@@ -45,7 +68,7 @@ with st.container(border=True):
     download_path = st.text_input("📂 엑셀 다운로드 경로", 
                                   value=get_config("ecount_download_path", r"C:\Users\admin\Desktop\Ecount_Exports"))
 
-    if st.button("💾 동작 설정 저장", use_container_width=True, type="primary"):
+    if st.button("💾 동작 설정 저장", use_container_width=True):
         set_config("ecount_headless", str(headless))
         set_config("ecount_download_path", download_path)
         set_config("rpa_scheduled_times", scheduled_times)
@@ -65,7 +88,6 @@ try:
     wh_res = supabase.table("warehouse_codes").select("*").order("warehouse_code").execute()
     wh_df = pd.DataFrame(wh_res.data) if wh_res.data else pd.DataFrame(columns=["id", "warehouse_code", "warehouse_name", "is_available"])
     
-    # 💡 Boolean 타입 강제 지정 (UI 체크박스 오작동 방지)
     if not wh_df.empty:
         wh_df['is_available'] = wh_df['is_available'].astype(bool)
 
@@ -84,18 +106,14 @@ try:
         hide_index=True
     )
 
-    if st.button("🏢 창고 정보 저장", type="primary", use_container_width=True):
+    if st.button("🏢 창고 정보 저장", use_container_width=True):
         with st.status("데이터 저장 중...", expanded=True) as status:
-            # 1. 삭제 처리
             state = st.session_state.wh_editor_final
             if state.get("deleted_rows"):
-                status.write("🗑️ 삭제된 항목 처리 중...")
                 for row_idx in state["deleted_rows"]:
                     tid = wh_df.iloc[row_idx]['id']
                     supabase.table("warehouse_codes").delete().eq("id", tid).execute()
 
-            # 2. 업데이트 및 삽입 처리 (벌크 방식)
-            status.write("💾 변경사항 반영 중...")
             upsert_list = []
             for _, row in edited_wh_df.iterrows():
                 if pd.notnull(row['warehouse_code']) and str(row['warehouse_code']).strip():
@@ -109,9 +127,7 @@ try:
                     upsert_list.append(item)
             
             if upsert_list:
-                # 💡 벌크 Upsert 실행
-                res = supabase.table("warehouse_codes").upsert(upsert_list).execute()
-                status.write(f"✅ {len(upsert_list)}개 창고 정보 동기화 완료")
+                supabase.table("warehouse_codes").upsert(upsert_list).execute()
             
             status.update(label="✅ 저장 완료!", state="complete", expanded=False)
             
