@@ -1,300 +1,211 @@
 import streamlit as st
 import pandas as pd
-from supabase import create_client, Client
-import plotly.express as px
-import plotly.graph_objects as go
-from datetime import datetime, timezone, timedelta
 import time
 import os
-from utils.style import apply_premium_style
+from datetime import datetime, timedelta
+import plotly.express as px
+from supabase import create_client, Client
 
-# 시스템 설정
-url = st.secrets["supabase"]["url"]
-key = st.secrets["supabase"]["key"]
-supabase: Client = create_client(url, key)
-KST = timezone(timedelta(hours=9))
+# --- Supabase 설정 ---
+@st.cache_resource
+def init_connection():
+    url = st.secrets["supabase"]["url"]
+    key = st.secrets["supabase"]["key"]
+    return create_client(url, key)
 
-apply_premium_style()
+supabase = init_connection()
 
-st.markdown('<p class="main-header">📦 창고/재고 통합 관리 (DEVELOP - 16:48)</p>', unsafe_allow_html=True)
-st.markdown("Ecount ERP 연동 데이터를 바탕으로 실시간 창고 보관 현황 및 핵심 변동 이력을 추적합니다.")
+# 페이지 설정
+st.set_page_config(page_title="IWP 창고 관리 대시보드", layout="wide")
+
+st.title("📦 창고 통합 관리 대시보드")
+st.write(f"최종 업데이트: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
 # -------------------------------------------------------------
-# 1. Ecount 데이터 원격 동기화 (RPA 트리거)
+# 1. 데이터 로드 및 통합 (Join Logic)
 # -------------------------------------------------------------
-import requests
-
-def get_config(key_name, default=""):
+@st.cache_data(ttl=5)
+def load_comprehensive_data():
     try:
-        # 상단에 정의된 url, key 변수를 직접 사용
-        url_get = f"{url}/rest/v1/system_config?key=eq.{key_name}&select=value"
-        headers_get = {"apikey": key, "Authorization": f"Bearer {key}"}
-        resp_get = requests.get(url_get, headers=headers_get, timeout=5)
-        data_get = resp_get.json()
-        return data_get[0]['value'] if data_get else default
-    except: return default
-
-def set_config(key_name, value):
-    try:
-        url_post = f"{url}/rest/v1/system_config"
-        headers_post = {
-            "apikey": key, 
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json",
-            "Prefer": "resolution=merge-duplicates"
-        }
-        requests.post(url_post, headers=headers_post, json={"key": key_name, "value": str(value)}, timeout=5)
-    except: pass
-
-with st.expander("🤖 이카운트 ERP 데이터 동기화", expanded=True):
-    # 접속 정보 확인용 (진단용)
-    st.caption(f"🌐 연결 대상: {url}")
-
-    # 에이전트 상태 및 심장박동 조회
-    rpa_trigger  = get_config("rpa_trigger", "idle")
-    rpa_status   = get_config("rpa_status", "idle")
-    rpa_message  = get_config("rpa_message", "에이전트 미연결")
-    rpa_updated  = get_config("rpa_updated_at", "")
-    heartbeat    = get_config("agent_heartbeat", "")
-
-    # 에이전트 온라인 판별 (심장박동이 15초 이내면 온라인)
-    is_online = False
-    if heartbeat:
-        try:
-            hb_dt = datetime.fromisoformat(heartbeat)
-            diff = (datetime.now(KST) - hb_dt).total_seconds()
-            if diff < 15: is_online = True
-        except: pass
-
-    c1, c2 = st.columns([3, 1])
-
-    with c1:
-        if is_online:
-            st.success("● 에이전트 온라인 (사무실 PC 연결됨)")
+        # 1. 기초 데이터 로드
+        inv_res = supabase.table("warehouse_inventory_details").select("*").execute()
+        wh_res = supabase.table("warehouse_codes").select("warehouse_name, is_available").execute()
+        item_res = supabase.table("item_master").select("*").execute()
+        
+        inv_df = pd.DataFrame(inv_res.data) if inv_res.data else pd.DataFrame()
+        wh_df = pd.DataFrame(wh_res.data) if wh_res.data else pd.DataFrame()
+        item_df = pd.DataFrame(item_res.data) if item_res.data else pd.DataFrame()
+        
+        if inv_df.empty: return pd.DataFrame()
+        
+        # 2. 창고 가용성 정보 병합
+        if not wh_df.empty:
+            inv_df = inv_df.merge(wh_df, on="warehouse_name", how="left")
         else:
-            st.error("○ 에이전트 오프라인 (사무실 PC 연결 끊김)")
-
-        status_map = {
-            "idle":      ("⚪", "대기 중"),
-            "pending":   ("🔵", "수집 요청 전송됨 (에이전트 응답 대기)"),
-            "running":   ("🟡", f"수집 진행 중: {rpa_message}"),
-            "completed": ("🟢", f"{rpa_message}"),
-            "failed":    ("🔴", f"{rpa_message}"),
-        }
-        icon, text = status_map.get(rpa_status, ("⚪", rpa_message))
-
-        # 업데이트 시각 표시
-        time_str = "-"
-        if rpa_updated:
-            try:
-                dt = datetime.fromisoformat(rpa_updated.replace('Z', '+00:00'))
-                time_str = dt.astimezone(KST).strftime('%m/%d %H:%M:%S')
-            except: time_str = rpa_updated[:16]
-
-        st.info(f"{icon} **상태**: {text}  \n📅 업데이트: {time_str}")
-
-        # 테스트 편의를 위한 버튼들 (항상 보이거나 조건부 표시)
-        btn_col1, btn_col2, btn_col3 = st.columns(3)
-        if btn_col1.button("🔄 새로고침", use_container_width=True):
-            st.rerun()
+            inv_df['is_available'] = True # 기본값
+            
+        # 3. 품목 마스터 정보 병합
+        if not item_df.empty:
+            inv_df = inv_df.merge(item_df, on="item_code", how="left", suffixes=('', '_master'))
+        else:
+            inv_df['category'] = '일반'
+            inv_df['safety_stock'] = 0
+            inv_df['excess_threshold'] = 1000
+            
+        # 결측치 처리
+        inv_df['is_available'] = inv_df['is_available'].fillna(True)
+        inv_df['category'] = inv_df['category'].fillna('일반')
+        inv_df['safety_stock'] = inv_df['safety_stock'].fillna(0)
+        inv_df['excess_threshold'] = inv_df['excess_threshold'].fillna(1000)
         
-        if rpa_status in ('pending', 'running') or rpa_trigger == 'pending':
-            if btn_col2.button("❌ 수집 취소", use_container_width=True):
-                set_config("rpa_trigger", "idle")
-                set_config("rpa_status", "failed")
-                set_config("rpa_message", "사용자가 수동 취소함")
-                set_config("rpa_updated_at", datetime.now(KST).isoformat())
-                st.toast("수집 요청이 취소되었습니다.")
-                time.sleep(0.5)
-                st.rerun()
+        # 상태 판별
+        def get_status(row):
+            if row['stock_qty'] <= 0: return "❌ 품절"
+            if row['stock_qty'] < row['safety_stock']: return "⚠️ 부족"
+            if row['stock_qty'] > row['excess_threshold']: return "📈 과잉"
+            return "✅ 정상"
+            
+        inv_df['status'] = inv_df.apply(get_status, axis=1)
         
-        if btn_col3.button("🧹 초기화", use_container_width=True, help="상태가 꼬였을 때 idle로 강제 리셋"):
-            set_config("rpa_trigger", "idle")
-            set_config("rpa_status", "idle")
-            set_config("rpa_message", "사용자에 의해 초기화됨")
-            set_config("rpa_updated_at", datetime.now(KST).isoformat())
-            st.toast("상태가 초기화되었습니다.")
-            time.sleep(0.5)
-            st.rerun()
-
-    with c2:
-        is_busy = bool(rpa_status in ('pending', 'running') or rpa_trigger == 'pending')
-
-        if st.button("🚀 데이터 수집 요청", type="primary", use_container_width=True, disabled=is_busy):
-            # 트리거 발동
-            set_config("rpa_trigger", "pending")
-            set_config("rpa_status", "pending")
-            set_config("rpa_message", "웹에서 수집 요청됨")
-            set_config("rpa_updated_at", datetime.now(KST).isoformat())
-            st.toast("📡 수집 명령 전송 중...")
-            time.sleep(1)
-            st.rerun()
-
-        if is_busy:
-            st.caption("⏳ 수집기가 작업 중입니다...")
-
-st.divider()
-
-# -------------------------------------------------------------
-# 2. 데이터 로드 (DB Fetch)
-# -------------------------------------------------------------
-@st.cache_data(ttl=5)
-def load_data():
-    try:
-        inv = supabase.table("warehouse_inventory").select("*").execute().data
-        history = supabase.table("warehouse_history").select("*").execute().data
-        return inv, history
+        return inv_df
     except Exception as e:
-        st.error(f"데이터 로드 실패: {e}")
-        return [], []
-
-inventory_data, history_data = load_data()
-
-if not inventory_data:
-    st.info("DB에 등록된 품목이 없습니다. 기초 세팅(SQL)을 먼저 구동해 주세요.")
-    st.stop()
-
-df = pd.DataFrame(inventory_data)
-hist_df = pd.DataFrame(history_data)
-
-# 데이터 가공
-df['포화도(%)'] = ((df['current_quantity'] / df['max_capacity']) * 100).round(1)
-df['total_price'] = df['current_quantity'] * df['unit_price']
-
-# 4대 핵심 지표 산출
-# 1) 전체 창고 포화도
-total_qty = df['current_quantity'].sum()
-total_cap = df['max_capacity'].sum()
-global_utilization = round((total_qty / total_cap * 100) if total_cap > 0 else 0, 1)
-
-# 2) 현재 재고 비용
-total_value = df['total_price'].sum()
-
-# 3) 포화 임박 창고 (가장 꽉 찬 구역)
-zone_util = df.groupby('location_zone').agg({'current_quantity': 'sum', 'max_capacity': 'sum'}).reset_index()
-zone_util['ratio'] = zone_util['current_quantity'] / zone_util['max_capacity'] * 100
-worst_zone = zone_util.sort_values('ratio', ascending=False).iloc[0]
-worst_zone_name = worst_zone['location_zone']
-worst_zone_ratio = round(worst_zone['ratio'], 1)
-
-# 4) 변동량 1위 품목 (history 기반 abs(diff) 기준)
-top_mover_text = "기록없음"
-if not hist_df.empty:
-    hist_df['abs_diff'] = hist_df['diff_amount'].abs()
-    top_mover = hist_df.sort_values('abs_diff', ascending=False).iloc[0]
-    sign = "+" if top_mover['diff_amount'] > 0 else ""
-    top_mover_text = f"{top_mover['item_name']} ({sign}{top_mover['diff_amount']})"
-
-# -------------------------------------------------------------
-# 3. 최상단 4대 로직 요약 지표 (Metrics)
-# -------------------------------------------------------------
-st.subheader("📊 4대 전략 창고 지표")
-m1, m2, m3, m4 = st.columns(4)
-with m1:
-    st.metric("전체 창고 포화도", f"{global_utilization}%",
-              delta="적정" if global_utilization < 80 else "과포화", 
-              delta_color="normal" if global_utilization < 80 else "inverse")
-with m2:
-    st.metric("현재 재고 비용", f"₩ {total_value:,}")
-with m3:
-    st.metric("🚨 포화 임박 창고", f"{worst_zone_name}", delta=f"{worst_zone_ratio}% 포화", delta_color="inverse")
-with m4:
-    st.metric("📈 변동량 1위 품목", f"{top_mover_text}")
-
-st.divider()
-
-# -------------------------------------------------------------
-# 4. 시각화 (Charts: 구역별 바 & 임박품목 게이지)
-# -------------------------------------------------------------
-v1, v2 = st.columns([1.2, 1])
-with v1:
-    st.markdown("**(1) 구역별(Zone) 보관 현황 (Bar Chart)**")
-    fig1 = px.bar(zone_util, x='location_zone', y=['current_quantity', 'max_capacity'], 
-                  barmode='group', title='',
-                  labels={'value': '수량', 'variable': '구분', 'location_zone': '구역'})
-    fig1.update_traces(marker_color=['#3b82f6', '#e5e7eb']) 
-    st.plotly_chart(fig1, use_container_width=True)
-
-with v2:
-    st.markdown("**(2) 위험 등급 품목 경고 (Gauge Chart)**")
-    top_critical = df.sort_values('포화도(%)', ascending=False).head(2) # 2개만 렌더링
-    fig2 = go.Figure()
-    for i, (_, row) in enumerate(top_critical.iterrows()):
-        fig2.add_trace(go.Indicator(
-            mode = "gauge+number", value = row['포화도(%)'],
-            domain = {'x': [0.1, 0.9], 'y': [0.1 + (i*0.45), 0.4 + (i*0.45)]},
-            title = {'text': f"{row['item_name']} ({row['location_zone']})", 'font': {'size': 13}},
-            gauge = {
-                'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': "darkblue"},
-                'bar': {'color': "red" if row['포화도(%)'] >= 90 else "#3b82f6"},
-                'bgcolor': "white", 'borderwidth': 2, 'bordercolor': "gray",
-                'threshold': {'line': {'color': "red", 'width': 4}, 'thickness': 0.75, 'value': 90}
-            }
-        ))
-    fig2.update_layout(height=400, margin=dict(l=20, r=20, t=10, b=10))
-    st.plotly_chart(fig2, use_container_width=True)
-
-st.divider()
-
-# -------------------------------------------------------------
-# 6. 창고별 상세 재고 비용 현황 (신규)
-# -------------------------------------------------------------
-st.subheader("💰 창고별 상세 재고 비용 분석")
-st.write("각 창고별 품목의 실시간 재고량과 입고 단가를 바탕으로 자산 가치를 분석합니다.")
-
-@st.cache_data(ttl=5)
-def load_detail_data():
-    try:
-        res = supabase.table("warehouse_inventory_details").select("*").execute()
-        return pd.DataFrame(res.data) if res.data else pd.DataFrame()
-    except:
+        st.error(f"데이터 로드 중 오류: {e}")
         return pd.DataFrame()
 
-detail_df = load_detail_data()
+df = load_comprehensive_data()
 
-if detail_df.empty:
-    st.info("💡 아직 수집된 상세 재고 데이터가 없습니다. 상단의 '데이터 수집 요청'을 진행해 주세요.")
-else:
-    # 필터 섹션
-    with st.container(border=True):
-        f1, f2 = st.columns([1, 2])
-        with f1:
-            all_whs = sorted(detail_df['warehouse_name'].unique())
-            selected_whs = st.multiselect("🏢 창고 선택", options=all_whs, default=all_whs)
-        with f2:
-            search_term = st.text_input("🔍 품목명 또는 코드로 검색", placeholder="검색어를 입력하세요...")
-
-    # 데이터 필터링
-    filtered_df = detail_df[detail_df['warehouse_name'].isin(selected_whs)]
-    if search_term:
-        filtered_df = filtered_df[
-            filtered_df['item_name_spec'].str.contains(search_term, case=False) | 
-            filtered_df['item_code'].str.contains(search_term, case=False)
-        ]
-
-    # 요약 지표
-    total_detail_qty = filtered_df['stock_qty'].sum()
-    total_detail_cost = filtered_df['inventory_cost'].sum()
+if df.empty:
+    st.info("💡 수집된 재고 데이터가 없습니다. 에이전트를 통해 수집을 먼저 진행해 주세요.")
     
-    c1, c2, c3 = st.columns(3)
-    c1.metric("선택된 품목 수", f"{len(filtered_df):,} 개")
-    c2.metric("총 재고 수량", f"{total_detail_qty:,}")
-    c3.metric("총 재고 비용", f"₩ {total_detail_cost:,.0f}")
+    # RPA 트리거 섹션 (빠른 접근용)
+    if st.button("🔄 지금 데이터 수집 요청하기", type="primary"):
+        supabase.table("system_config").upsert({"key": "rpa_trigger", "value": "pending"}).execute()
+        st.success("✅ 수집 요청이 전송되었습니다. 에이전트가 곧 수집을 시작합니다.")
+    st.stop()
 
-    # 상세 테이블
-    st.dataframe(
-        filtered_df[['warehouse_name', 'item_code', 'item_name_spec', 'stock_qty', 'unit_price', 'inventory_cost']],
-        column_config={
-            "warehouse_name": "창고명",
-            "item_code": "품목코드",
-            "item_name_spec": "품목명[규격]",
-            "stock_qty": st.column_config.NumberColumn("재고수량", format="%d"),
-            "unit_price": st.column_config.NumberColumn("입고단가", format="₩ %d"),
-            "inventory_cost": st.column_config.NumberColumn("재고비용", format="₩ %d"),
-        },
-        use_container_width=True,
-        hide_index=True
-    )
+# -------------------------------------------------------------
+# 2. 상단 요약 지표 (KPI Dashboard)
+# -------------------------------------------------------------
+# 지표 계산
+total_asset = df['inventory_cost'].sum()
+available_asset = df[df['is_available'] == True]['inventory_cost'].sum()
+unavailable_asset = df[df['is_available'] == False]['inventory_cost'].sum()
+
+sold_out_count = len(df[df['status'] == "❌ 품절"].drop_duplicates(subset=['item_code']))
+low_stock_count = len(df[df['status'] == "⚠️ 부족"].drop_duplicates(subset=['item_code']))
+excess_stock_count = len(df[df['status'] == "📈 과잉"].drop_duplicates(subset=['item_code']))
+
+c1, c2, c3, c4 = st.columns(4)
+with c1:
+    st.metric("📦 총 재고 자산", f"₩{total_asset:,.0f}")
+    st.caption(f"가용: ₩{available_asset:,.0f} / 비가용: ₩{unavailable_asset:,.0f}")
+with c2:
+    st.metric("❌ 품절 품목 (전체창고)", f"{sold_out_count} 건", delta_color="inverse")
+with c3:
+    st.metric("⚠️ 재고 부족", f"{low_stock_count} 건", delta_color="off")
+with c4:
+    st.metric("📈 과잉 재고", f"{excess_stock_count} 건")
 
 st.divider()
-st.caption("주의: 비밀번호 등 민감 정보는 시스템 관리자만 접근 가능한 영역에 보관됩니다.")
+
+# -------------------------------------------------------------
+# 3. 탭 구성 (카테고리 및 이슈 관리)
+# -------------------------------------------------------------
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 전체 현황", "🛠️ 부자재", "📦 무형상품", "🔥 이슈(품절/부족)", "📈 과잉재고"])
+
+with tab1:
+    col_a, col_b = st.columns([2, 1])
+    with col_a:
+        st.subheader("🏢 전체 재고 리스트")
+        # 검색 필터
+        f1, f2 = st.columns([1, 2])
+        with f1:
+            wh_list = ["전체"] + sorted(df['warehouse_name'].unique().tolist())
+            sel_wh = st.selectbox("🏢 창고 필터", wh_list)
+        with f2:
+            q = st.text_input("🔍 품목명/코드 검색", key="q1")
+        
+        view_df = df.copy()
+        if sel_wh != "전체": view_df = view_df[view_df['warehouse_name'] == sel_wh]
+        if q: view_df = view_df[view_df['item_name_spec'].str.contains(q, case=False) | view_df['item_code'].str.contains(q, case=False)]
+        
+        st.dataframe(
+            view_df[['status', 'warehouse_name', 'item_code', 'item_name_spec', 'category', 'stock_qty', 'safety_stock', 'inventory_cost']],
+            column_config={
+                "status": "상태",
+                "warehouse_name": "창고명",
+                "item_code": "품목코드",
+                "item_name_spec": "품목명[규격]",
+                "category": "분류",
+                "stock_qty": st.column_config.NumberColumn("현재고", format="%d"),
+                "safety_stock": st.column_config.NumberColumn("안전재고", format="%d"),
+                "inventory_cost": st.column_config.NumberColumn("재고비용", format="₩%d")
+            },
+            use_container_width=True, hide_index=True
+        )
+    
+    with col_b:
+        st.subheader("💡 가용성 비중")
+        avail_sum = df.groupby('is_available')['inventory_cost'].sum().reset_index()
+        avail_sum['is_available'] = avail_sum['is_available'].map({True: "가용재고", False: "비가용재고"})
+        fig = px.pie(avail_sum, values='inventory_cost', names='is_available', hole=0.4, color_discrete_sequence=['#3b82f6', '#94a3b8'])
+        st.plotly_chart(fig, use_container_width=True)
+
+with tab2:
+    st.subheader("🛠️ 부자재 재고 관리")
+    st.write("부자재 카테고리로 분류된 품목들의 현황입니다.")
+    sub_df = df[df['category'] == "부자재"]
+    if not sub_df.empty:
+        st.dataframe(sub_df[['status', 'warehouse_name', 'item_code', 'item_name_spec', 'stock_qty', 'inventory_cost']], use_container_width=True, hide_index=True)
+    else:
+        st.info("부자재로 분류된 품목이 없습니다. [환경설정]에서 카테고리를 지정해 주세요.")
+
+with tab3:
+    st.subheader("📦 무형상품 관리")
+    st.write("서비스, 라이선스 등 무형상품 현황입니다.")
+    intangible_df = df[df['category'] == "무형상품"]
+    if not intangible_df.empty:
+        st.dataframe(intangible_df[['status', 'warehouse_name', 'item_code', 'item_name_spec', 'stock_qty', 'inventory_cost']], use_container_width=True, hide_index=True)
+    else:
+        st.info("무형상품으로 분류된 품목이 없습니다.")
+
+with tab4:
+    st.subheader("🔥 품절 및 재고 부족 리포트")
+    st.write("즉시 발주 또는 이동이 필요한 품목들입니다.")
+    issue_df = df[df['status'].isin(["❌ 품절", "⚠️ 부족"])].sort_values("status")
+    if not issue_df.empty:
+        st.dataframe(
+            issue_df[['status', 'warehouse_name', 'item_code', 'item_name_spec', 'stock_qty', 'safety_stock']], 
+            column_config={
+                "status": "상태",
+                "stock_qty": st.column_config.NumberColumn("현재고", format="%d"),
+                "safety_stock": st.column_config.NumberColumn("안전재고", format="%d")
+            },
+            use_container_width=True, hide_index=True
+        )
+        
+        # 엑셀 출력 버튼 (가상)
+        if st.button("📥 이슈 리스트 엑셀 다운로드"):
+            st.info("엑셀 생성 기능 준비 중입니다.")
+    else:
+        st.success("✅ 현재 품절이나 부족한 재고가 없습니다.")
+
+with tab5:
+    st.subheader("📈 과잉 재고 리스트")
+    st.write("설정된 과잉 기준치를 초과한 품목입니다. 효율적인 자산 관리를 위해 소진 전략이 필요합니다.")
+    excess_df = df[df['status'] == "📈 과잉"].sort_values("stock_qty", ascending=False)
+    if not excess_df.empty:
+        st.dataframe(
+            excess_df[['warehouse_name', 'item_code', 'item_name_spec', 'stock_qty', 'excess_threshold', 'inventory_cost']], 
+            column_config={
+                "stock_qty": st.column_config.NumberColumn("현재고", format="%d"),
+                "excess_threshold": st.column_config.NumberColumn("과잉기준", format="%d"),
+                "inventory_cost": st.column_config.NumberColumn("재고비용", format="₩%d")
+            },
+            use_container_width=True, hide_index=True
+        )
+    else:
+        st.info("과잉 재고로 분류된 품목이 없습니다.")
+
+st.divider()
+st.caption("주의: 이 데이터는 RPA 에이전트의 최신 수집 결과를 바탕으로 합니다. 실시간 정확도를 위해 정기적인 수집을 권장합니다.")

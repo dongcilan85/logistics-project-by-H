@@ -186,9 +186,14 @@ def process_inventory_excel(dl_path):
         # 데이터가 있는 행만 필터링 (품목코드가 있는 행만)
         df = df.dropna(subset=['품목코드'])
         
-        # '계' 또는 '합계'가 포함된 행 제외 (이카운트 집계 행 방지)
-        df = df[~df['품목코드'].astype(str).str.contains('계|합계', na=False)]
-        df = df[~df['품목명[규격]'].astype(str).str.contains('계|합계', na=False)]
+        # '계', '합계', '소계', '총계' 등이 포함된 집계 행 철저히 제외
+        exclude_keywords = '계|합계|소계|총계|Total'
+        df = df[~df['품목코드'].astype(str).str.contains(exclude_keywords, na=False)]
+        df = df[~df['품목명[규격]'].astype(str).str.contains(exclude_keywords, na=False)]
+        
+        # 창고명 컬럼에도 '계'가 들어간 행이 있다면 제외
+        if '창고명' in df.columns:
+            df = df[~df['창고명'].astype(str).str.contains(exclude_keywords, na=False)]
         
         # 데이터 타입 변환 및 계산
         df['재고수량'] = pd.to_numeric(df['재고수량'], errors='coerce').fillna(0)
@@ -208,17 +213,44 @@ def process_inventory_excel(dl_path):
             })
         
         if upload_data:
-            # 1. 기존 데이터 초기화 (최신 스냅샷 유지를 위해)
+            # 1. 변동 이력 기록을 위해 기존 데이터 가져오기
+            old_res = requests.get(f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details?select=*", headers=HEADERS)
+            old_data = {f"{r['warehouse_name']}_{r['item_code']}": r['stock_qty'] for r in old_res.json()} if old_res.status_code == 200 else {}
+
+            # 2. 기존 데이터 초기화 (최신 스냅샷)
             requests.delete(f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details?select=*", headers=HEADERS)
             
-            # 2. 신규 데이터 벌크 업로드 (1000개 단위)
+            # 3. 신규 데이터 벌크 업로드 및 이력 생성
+            history_entries = []
+            today_str = datetime.now(KST).strftime('%Y-%m-%d')
+            
             for i in range(0, len(upload_data), 1000):
                 chunk = upload_data[i:i+1000]
-                resp = requests.post(f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details", headers=HEADERS, json=chunk)
-                if resp.status_code not in (200, 201):
-                    log(f"❌ DB 업로드 실패 ({resp.status_code}): {resp.text}", level="error")
+                requests.post(f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details", headers=HEADERS, json=chunk)
+                
+                # 변동량 계산 및 이력 준비
+                for item in chunk:
+                    key = f"{item['warehouse_name']}_{item['item_code']}"
+                    prev = old_data.get(key, 0)
+                    curr = item['stock_qty']
+                    if prev != curr: # 변동이 있을 때만 기록
+                        history_entries.append({
+                            "record_date": today_str,
+                            "warehouse_name": item['warehouse_name'],
+                            "item_code": item['item_code'],
+                            "item_name_spec": item['item_name_spec'],
+                            "prev_qty": prev,
+                            "curr_qty": curr,
+                            "diff_qty": curr - prev
+                        })
             
-            log(f"✅ {len(upload_data)}건의 재고 내역이 성공적으로 DB에 동기화되었습니다.")
+            # 4. 변동 이력 DB 저장
+            if history_entries:
+                for i in range(0, len(history_entries), 1000):
+                    h_chunk = history_entries[i:i+1000]
+                    requests.post(f"{SUPABASE_URL}/rest/v1/inventory_history", headers=HEADERS, json=h_chunk)
+            
+            log(f"✅ {len(upload_data)}건 동기화 및 {len(history_entries)}건의 변동 이력 기록 완료")
 
     except Exception as e:
         log(f"❌ 엑셀 처리 중 오류 발생: {e}", level="error")
