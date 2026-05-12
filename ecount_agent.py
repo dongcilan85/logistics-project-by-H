@@ -333,7 +333,6 @@ def process_item_master_excel(dl_path):
             upload_data.append({
                 "item_code": code,
                 "item_name": str(row.get(name_col, '')).strip(),
-                "spec": str(row.get(spec_col, '')).strip(),
                 "category": str(row.get(cat_col, '?쇰컲')).strip()
             })
         
