@@ -87,7 +87,6 @@ def execute_rpa():
         # 다운로드 경로 및 브라우저 모드 설정 (DB에서 읽기)
         dl_path = db_get("ecount_download_path")
         headless_val = db_get("ecount_headless")
-        is_headless = True if str(headless_val).lower() == 'true' else False
         
         if dl_path in ("NULL", "ERROR", ""):
             dl_path = r"C:\Users\admin\Desktop\Ecount_Exports" 
@@ -97,54 +96,65 @@ def execute_rpa():
             except: pass
 
         log("🖥️ [3단계] 크롬 브라우저를 실행합니다... (잠시만 기다려 주세요)")
-        rpa = EcountRPA(com_code, user_id, user_pw, dl_path, headless=is_headless)
-
+        
         try:
-            db_set("rpa_message", "이카운트 로그인 시도 중...")
-            log("[4단계] 이카운트 로그인 시도 중...")
-            success, msg = rpa.login()
+            trigger_type = db_get("rpa_trigger")
+            if trigger_type in ("NULL", "ERROR", "idle"): trigger_type = "all"
+            log(f"🚀 [트리거 감지] 실행 유형: {trigger_type}")
             
+            # 다운로드 경로 및 브라우저 모드 설정 (DB에서 읽기)
+            dl_path = db_get("ecount_download_path")
+            headless_val = db_get("ecount_headless_mode")
+            is_headless = True if str(headless_val).lower() == 'true' else False
+            
+            rpa = EcountRPA(com_code, user_id, user_pw, dl_path, headless=is_headless)
+            
+            # 로그인 시도
+            success, msg = rpa.login()
             if not success:
                 raise Exception(f"로그인 실패: {msg}")
             
-            log("[5단계] 로그인 성공! 데이터 수집을 시작합니다.")
+            log("[5단계] 로그인 성공! 요청된 작업을 시작합니다.")
             
-            # 5-1. 창고별재고현황
-            db_set("rpa_message", "창고별재고현황 수집 중...")
-            rpa.get_inventory_balance()
-            
-            # 수집된 엑셀 데이터를 DB에 실시간 반영
-            log("📊 [5-1-1] 수집된 엑셀 데이터를 DB에 동기화 중...")
-            process_inventory_excel(dl_path)
+            # --- [1] 창고별재고현황 (inventory_balance) ---
+            if trigger_type in ('pending', 'all', 'inventory_balance'):
+                log("📊 [6-1] 창고별재고현황(기본) 수집 시작...")
+                db_set("rpa_message", "창고별재고현황 수집 중...")
+                rpa.get_inventory_balance()
+                log("📊 [6-1-1] 수집된 엑셀 데이터를 DB에 동기화 중...")
+                process_inventory_excel(dl_path)
 
-            # 5-2. 관리항목별재고현황 (순회 수집)
-            log("🔄 [6단계] 관리항목별재고현황 순회 수집 시작...")
-            db_set("rpa_message", "창고별 순회 수집 중...")
-            
-            wh_url = f"{SUPABASE_URL}/rest/v1/warehouse_codes?select=warehouse_code,warehouse_name"
-            wh_resp = requests.get(wh_url, headers=HEADERS, timeout=5)
-            warehouses = wh_resp.json()
-            
-            if warehouses:
-                log(f"   - 대상 창고: {len(warehouses)}개")
-                success_iter, msg_iter = rpa.get_item_inventory_by_warehouse(warehouses)
-                log(f"   - 결과: {msg_iter}")
-            else:
-                log("⚠️ 등록된 창고 코드가 없어 순회 수집을 건너뜁니다.")
+            # --- [2] 관리항목별재고현황 (warehouse_inventory - 순회 수집) ---
+            if trigger_type in ('pending', 'all', 'warehouse_inventory'):
+                log("🔄 [6-2] 관리항목별재고현황 순회 수집 시작...")
+                db_set("rpa_message", "창고별 순회 수집 중...")
+                
+                # DB에서 창고 리스트 가져오기
+                wh_url = f"{SUPABASE_URL}/rest/v1/warehouse_codes?select=warehouse_code,warehouse_name"
+                wh_resp = requests.get(wh_url, headers=HEADERS, timeout=5)
+                warehouses = wh_resp.json()
+                
+                if warehouses:
+                    log(f"   - 대상 창고: {len(warehouses)}개")
+                    success_iter, msg_iter = rpa.get_item_inventory_by_warehouse(warehouses)
+                    log(f"   - 결과: {msg_iter}")
+                else:
+                    log("⚠️ 등록된 창고 코드가 없어 순회 수집을 건너뜀")
 
-            # 5-3. 품목 마스터 수집 및 동기화
-            log("📦 [7단계] 품목 마스터(품목등록) 수집 시작...")
-            db_set("rpa_message", "품목 마스터 수집 중...")
-            success_item, item_file = rpa.get_item_master_excel()
-            if success_item:
-                log("📊 [7-1] 품목 마스터 DB 동기화 중...")
-                process_item_master_excel(dl_path)
-            else:
-                log(f"⚠️ 품목 마스터 수집 건너뜀: {item_file}")
+            # --- [3] 품목 마스터 (item_master) ---
+            if trigger_type in ('pending', 'all', 'item_master'):
+                log("📦 [6-3] 품목 마스터(품목등록) 수집 시작...")
+                db_set("rpa_message", "품목 마스터 수집 중...")
+                success_item, item_file = rpa.get_item_master_excel()
+                if success_item:
+                    log("📊 [6-3-1] 품목 마스터 DB 동기화 중...")
+                    process_item_master_excel(dl_path)
+                else:
+                    log(f"⚠️ 품목 마스터 수집 건너뜀: {item_file}")
 
             db_set("rpa_status", "completed")
-            db_set("rpa_message", "모든 데이터 수집 완료")
-            log("[완료] 모든 작업이 성공적으로 끝났습니다.")
+            db_set("rpa_message", f"작업 완료 ({trigger_type})")
+            log(f"[완료] {trigger_type} 작업이 성공적으로 끝났습니다.")
 
         finally:
             log("브라우저를 종료합니다.")
