@@ -252,7 +252,6 @@ def process_inventory_excel(dl_path):
                 "warehouse_name": str(row.get(wh_col, '')).strip(),
                 "item_code": str(row.get(code_col, '')).strip(),
                 "item_name_spec": str(row.get(name_col, '')).strip(),
-                "category": clean_cat,
                 "expiration_date": exp_date,
                 "stock_qty": float(row.get('calc_qty', 0)),
                 "unit_price": float(row.get('calc_price', 0)),
@@ -354,11 +353,16 @@ def process_item_master_excel(dl_path):
             code = str(row.get(code_col, '')).strip()
             if not code or code.lower() in ('nan', 'none'): continue
             
+            raw_cat = str(row.get(cat_col, '일반')).strip()
+            clean_cat = raw_cat.replace('[', '').replace(']', '')
+            if not clean_cat or clean_cat.lower() in ('nan', 'none', '일반', 'undefined'): 
+                clean_cat = '일반'
+                
             upload_data.append({
                 "item_code": code,
                 "item_name": str(row.get(name_col, '')).strip(),
                 "spec": str(row.get(spec_col, '')).strip(),
-                "category": str(row.get(cat_col, '일반')).strip()
+                "category": clean_cat
             })
         
         if upload_data:
