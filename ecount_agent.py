@@ -252,6 +252,8 @@ def process_inventory_excel(dl_path):
                 "warehouse_name": str(row.get(wh_col, '')).strip(),
                 "item_code": str(row.get(code_col, '')).strip(),
                 "item_name_spec": str(row.get(name_col, '')).strip(),
+                "category": clean_cat,
+                "expiration_date": exp_date,
                 "stock_qty": float(row.get('calc_qty', 0)),
                 "unit_price": float(row.get('calc_price', 0)),
                 "inventory_cost": float(row.get('calc_cost', 0))
