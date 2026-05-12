@@ -167,6 +167,7 @@ def execute_rpa():
         log(f"❌ [에러] {error_msg}", level="error")
     finally:
         db_set("rpa_trigger", "idle")
+        # KST 시간을 ISO 포맷으로 기록하여 표준시 혼선 방지
         db_set("rpa_updated_at", datetime.now(KST).isoformat())
 
 def process_inventory_excel(dl_path):
