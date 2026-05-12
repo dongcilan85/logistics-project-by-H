@@ -208,11 +208,17 @@ def process_inventory_excel(dl_path):
                     return col
             return default
 
-        code_col = find_col(['품목코드', 'ItemCode', '상품코드'], '품목코드')
-        name_col = find_col(['품목명', 'ItemName', '상품명', '규격'], '품목명[규격]')
-        wh_col = find_col(['창고명', 'Warehouse', '창고'], '창고명')
-        qty_col = find_col(['재고수량', '현재고', 'Qty', '수량'], '재고수량')
-        price_col = find_col(['입고단가', '단가', 'Price', '원가'], '입고단가')
+        code_col = find_col(['품목코드'], '품목코드')
+        name_col = find_col(['품목명'], '품목명[규격]')
+        # '창고명'이 '창고코드'보다 먼저 정확히 매칭되도록 순서 중요
+        wh_col = next((c for c in df.columns if str(c).strip() == '창고명'), None)
+        if not wh_col:
+            wh_col = find_col(['창고명'], '창고명')
+        qty_col = next((c for c in df.columns if str(c).strip() == '수'), None)
+        if not qty_col:
+            qty_col = find_col(['재고수량', '현재고', '수량', 'Qty'], '수')
+        price_col = find_col(['입고단가', '단가'], '입고단가')
+        log(f"  컬럼 매핑: 품목코드={code_col}, 품목명={name_col}, 창고명={wh_col}, 수량={qty_col}, 단가={price_col}")
 
         # 3. 데이터 정제
         def is_valid(val):
@@ -366,11 +372,20 @@ def process_item_master_excel(dl_path):
                 "category": clean_cat
             })
         
+        log(f"📋 [품목 분석] {len(upload_data)}건의 품목 정보를 업데이트합니다.")
         if upload_data:
-            headers = {**HEADERS, "Prefer": "resolution=merge-duplicates"}
-            for i in range(0, len(upload_data), 1000):
-                requests.post(f"{SUPABASE_URL}/rest/v1/item_master", headers=headers, json=upload_data[i:i+1000])
-            log(f"✅ 품목 마스터 {len(upload_data)}건 동기화 완료")
+            # upsert: on_conflict=item_code 방식으로 업로드
+            up_headers = {**HEADERS, "Prefer": "resolution=merge-duplicates,return=representation"}
+            success_count = 0
+            for i in range(0, len(upload_data), 500):
+                chunk = upload_data[i:i+500]
+                resp = requests.post(
+                    f"{SUPABASE_URL}/rest/v1/item_master?on_conflict=item_code",
+                    headers=up_headers, json=chunk
+                )
+                if resp.status_code in (200, 201): success_count += len(chunk)
+                else: log(f"❌ 품목 업로드 오류: {resp.status_code} {resp.text[:200]}", level="error")
+            log(f"✅ 품목 마스터 {success_count}건 동기화 성공")
 
     except Exception as e:
         log(f"❌ 품목 마스터 처리 오류: {e}", level="error")
