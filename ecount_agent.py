@@ -1,7 +1,7 @@
 """
 =============================================================
  IWP Ecount RPA Agent v4 (상세 디버그 모드)
- - 각 단계별 실행 로그를 상세히 출력
+ - 단계별 실행 로그를 상세히 출력
 =============================================================
 """
 import os
@@ -12,7 +12,7 @@ import pandas as pd
 import logging
 from datetime import datetime, timezone, timedelta
 
-# --- 시간대 설정 (대한민국 표준시) ---
+# --- 시간대 설정 (서울/KST) ---
 KST = timezone(timedelta(hours=9))
 
 # --- 로그 설정 ---
@@ -47,7 +47,6 @@ HEADERS = {
     "Authorization": f"Bearer {SUPABASE_KEY}",
     "Content-Type": "application/json"
 }
-KST = timezone(timedelta(hours=9))
 
 def db_get(key):
     try:
@@ -63,9 +62,6 @@ def db_set(key, value):
         requests.post(url, headers={**HEADERS, "Prefer": "resolution=merge-duplicates"}, 
                       json={"key": key, "value": str(value)}, timeout=5)
     except: pass
-
-# def log(msg):
-#     print(f"[{datetime.now(KST).strftime('%H:%M:%S')}] {msg}")
 
 # --- 핵심 RPA 실행 ---
 def execute_rpa():
@@ -83,25 +79,25 @@ def execute_rpa():
         log(f"   - 아이디: {user_id[:2]}***")
         
         if com_code in ("NULL", "ERROR") or user_id in ("NULL", "ERROR"):
-            raise Exception("이카운트 계정 정보가 DB에 없습니다. 웹 환경설정에서 저장해 주세요.")
+            raise Exception("이카운트 계정 정보가 DB에 없습니다. 환경설정에서 입력해 주세요.")
 
         log("🌐 [2단계] 브라우저 드라이버 설정 중...")
         from utils.ecount_rpa import EcountRPA
         
         # 다운로드 경로 및 브라우저 모드 설정 (DB에서 읽기)
         dl_path = db_get("ecount_download_path")
-        headless = db_get("ecount_headless") # 누락된 부분 추가
+        headless_val = db_get("ecount_headless")
+        is_headless = True if str(headless_val).lower() == 'true' else False
         
         if dl_path in ("NULL", "ERROR", ""):
-            dl_path = r"C:\Users\admin\Desktop\Ecount_Exports" # 기본값
+            dl_path = r"C:\Users\admin\Desktop\Ecount_Exports" 
             
         if not os.path.exists(dl_path): 
             try: os.makedirs(dl_path, exist_ok=True)
             except: pass
 
-        # RPA 객체 생성 (디버깅을 위해 headless=False 강제 적용)
         log("🖥️ [3단계] 크롬 브라우저를 실행합니다... (잠시만 기다려 주세요)")
-        rpa = EcountRPA(com_code, user_id, user_pw, dl_path, headless=False)
+        rpa = EcountRPA(com_code, user_id, user_pw, dl_path, headless=is_headless)
 
         try:
             db_set("rpa_message", "이카운트 로그인 시도 중...")
@@ -113,7 +109,7 @@ def execute_rpa():
             
             log("[5단계] 로그인 성공! 데이터 수집을 시작합니다.")
             
-            # 5-1. 창고별재고현황 (기존)
+            # 5-1. 창고별재고현황
             db_set("rpa_message", "창고별재고현황 수집 중...")
             rpa.get_inventory_balance()
             
@@ -125,7 +121,6 @@ def execute_rpa():
             log("🔄 [6단계] 관리항목별재고현황 순회 수집 시작...")
             db_set("rpa_message", "창고별 순회 수집 중...")
             
-            # DB에서 창고 리스트 가져오기
             wh_url = f"{SUPABASE_URL}/rest/v1/warehouse_codes?select=warehouse_code,warehouse_name"
             wh_resp = requests.get(wh_url, headers=HEADERS, timeout=5)
             warehouses = wh_resp.json()
@@ -137,7 +132,7 @@ def execute_rpa():
             else:
                 log("⚠️ 등록된 창고 코드가 없어 순회 수집을 건너뜁니다.")
 
-            # 5-3. 품목 마스터 수집 및 동기화 (신규)
+            # 5-3. 품목 마스터 수집 및 동기화
             log("📦 [7단계] 품목 마스터(품목등록) 수집 시작...")
             db_set("rpa_message", "품목 마스터 수집 중...")
             success_item, item_file = rpa.get_item_master_excel()
@@ -174,79 +169,59 @@ def process_inventory_excel(dl_path):
         return
 
     try:
-        # 1. 데이터의 실제 헤더 위치를 찾기 위해 헤더 없이 먼저 읽음
         df_raw = pd.read_excel(target_file, header=None)
         
         header_row_idx = -1
         for i, row in df_raw.iterrows():
-            if '품목코드' in row.values:
+            if any('품목코드' in str(v) for v in row.values if pd.notna(v)):
                 header_row_idx = i
                 break
         
         if header_row_idx == -1:
-            log(f"❌ 엑셀 내에서 '품목코드' 컬럼을 찾을 수 없습니다: {target_file}", level="error")
+            log(f"❌ 엑셀 내에서 '품목코드' 헤더를 찾을 수 없습니다: {target_file}", level="error")
             return
 
-        # 2. 찾은 헤더 위치로 데이터 다시 읽기
         df = pd.read_excel(target_file, header=header_row_idx)
-        
-        # 컬럼명 앞뒤 공백 제거
         df.columns = [str(c).strip() for c in df.columns]
-        
-        # 필수 컬럼 존재 확인 (사용자 제공 컬럼명 기준)
-        required_cols = ['창고명', '품목코드', '품목명[규격]', '재고수량', '입고단가']
-        
-        # 3. 데이터 정제 (유령 데이터 및 합계 행 제거)
+
+        def find_col(keywords, default):
+            for col in df.columns:
+                if any(k in col for k in keywords): return col
+            return default
+
+        code_col = find_col(['품목코드', 'Item Code'], '품목코드')
+        name_col = find_col(['품목명', 'Item Name'], '품목명[규격]')
+        wh_col = find_col(['창고명', 'Warehouse'], '창고명')
+        qty_col = find_col(['재고수량', '현재고', 'Qty'], '재고수량')
+        price_col = find_col(['입고단가', '단가', 'Price'], '입고단가')
+
         def is_valid(val):
             v = str(val).strip().lower()
             return v not in ('nan', 'none', 'null', '', 'undefined')
 
-        # 컬럼 유연 매칭 (품목명[규격] 또는 품목명 포함 컬럼 찾기)
-        item_name_col = next((c for c in df.columns if '품목명' in str(c)), '품목명[규격]')
+        df = df[df[code_col].apply(is_valid)]
+        if wh_col in df.columns: df = df[df[wh_col].apply(is_valid)]
+        if name_col in df.columns: df = df[df[name_col].apply(is_valid)]
 
-        # 필수 컬럼들에 대해 유효성 검사 (하나라도 위반 시 제거)
-        df = df[df['품목코드'].apply(is_valid)]
-        
-        if '창고명' in df.columns:
-            df = df[df['창고명'].apply(is_valid)]
-            
-        if item_name_col in df.columns:
-            df = df[df[item_name_col].apply(is_valid)]
-
-        # '계', '합계', '소계' 등이 포함된 집계 행 철저히 제외
         exclude_keywords = '계|합계|소계|총계|Total'
-        df = df[~df['품목코드'].astype(str).str.contains(exclude_keywords, na=False)]
+        df = df[~df[code_col].astype(str).str.contains(exclude_keywords, na=False)]
         
-        if item_name_col in df.columns:
-            df = df[~df[item_name_col].astype(str).str.contains(exclude_keywords, na=False)]
-        
-        if '창고명' in df.columns:
-            df = df[~df['창고명'].astype(str).str.contains(exclude_keywords, na=False)]
-        
-        # 데이터 타입 변환 및 계산
-        df['재고수량'] = pd.to_numeric(df['재고수량'], errors='coerce').fillna(0)
-        df['입고단가'] = pd.to_numeric(df['입고단가'], errors='coerce').fillna(0)
-        df['재고비용'] = df['재고수량'] * df['입고단가']
+        df['calc_qty'] = pd.to_numeric(df[qty_col], errors='coerce').fillna(0)
+        df['calc_price'] = pd.to_numeric(df[price_col], errors='coerce').fillna(0)
+        df['calc_cost'] = df['calc_qty'] * df['calc_price']
 
-        # Supabase 업로드 준비
         upload_data = []
         for _, row in df.iterrows():
-            # 분류(카테고리) 및 유효기간(관리항목) 추출
-            # 💡 '품목구분' 또는 '구분'이 포함된 컬럼 찾기
             cat_col = next((c for c in row.index if '구분' in str(c)), None)
             raw_cat = str(row.get(cat_col, '일반')).strip() if cat_col else '일반'
-            
             clean_cat = raw_cat.replace('[', '').replace(']', '')
-            if not clean_cat or clean_cat.lower() in ('nan', 'none', '일반', 'undefined'): 
-                clean_cat = '일반'
+            if not clean_cat or clean_cat.lower() in ('nan', 'none', '일반', 'undefined'): clean_cat = '일반'
             
-            # 관리항목명(유효기간) 추출 로직
             exp_raw = str(row.get('관리항목명', '')).strip()
-            if not exp_raw: exp_raw = str(row.get('유효기간', '')).strip()
+            if not exp_raw or exp_raw.lower() == 'nan': exp_raw = str(row.get('유효기간', '')).strip()
             
-            # 날짜 형식 정제 (예: 2025-12-31, 251231 등 대응)
             exp_date = None
-            if exp_raw and exp_raw != 'nan' and exp_raw != 'None':
+            if exp_raw and exp_raw.lower() not in ('nan', 'none', ''):
                 import re
                 nums = re.sub(r'[^0-9]', '', exp_raw)
                 if len(nums) == 8: exp_date = f"{nums[:4]}-{nums[4:6]}-{nums[6:8]}"
@@ -254,47 +229,37 @@ def process_inventory_excel(dl_path):
                 else: exp_date = exp_raw
 
             upload_data.append({
-                "warehouse_name": str(row.get('창고명', '')).strip(),
-                "item_code": str(row.get('품목코드', '')).strip(),
-                "item_name_spec": str(row.get(item_name_col, '')).strip(),
+                "warehouse_name": str(row.get(wh_col, '')).strip(),
+                "item_code": str(row.get(code_col, '')).strip(),
+                "item_name_spec": str(row.get(name_col, '')).strip(),
                 "category": clean_cat,
                 "expiration_date": exp_date,
-                "stock_qty": float(row.get('재고수량', 0)),
-                "unit_price": float(row.get('입고단가', 0)),
-                "inventory_cost": float(row.get('재고비용', 0))
+                "stock_qty": float(row.get('calc_qty', 0)),
+                "unit_price": float(row.get('calc_price', 0)),
+                "inventory_cost": float(row.get('calc_cost', 0))
             })
         
         if upload_data:
-            # 1. 변동 이력 기록을 위해 기존 데이터 가져오기 (비교용)
             old_res = requests.get(f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details?select=*", headers=HEADERS)
             old_data = {f"{r['warehouse_name']}_{r['item_code']}": r['stock_qty'] for r in old_res.json()} if old_res.status_code == 200 else {}
 
-            # 2. [핵심] 데이터 누적 방지를 위한 처리
-            # 💡 기존에는 전체 삭제 후 삽입했으나, 네트워크 오류 등으로 삭제가 안 될 경우 누적됨.
-            # 💡 이번에는 (warehouse_name, item_code) 유니크 제약 조건을 활용한 Upsert 방식으로 전환.
-            
-            # 먼저 현재 엑셀에 있는 창고의 기존 데이터만 삭제 (다른 창고 데이터는 유지)
             current_warehouses = list(set([item['warehouse_name'] for item in upload_data]))
             for wh in current_warehouses:
                 requests.delete(f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details?warehouse_name=eq.{wh}", headers=HEADERS)
             
-            # 3. 신규 데이터 벌크 업로드 및 이력 생성
             history_entries = []
             today_str = datetime.now(KST).strftime('%Y-%m-%d')
-            
-            headers = {**HEADERS, "Prefer": "resolution=merge-duplicates"} # Upsert 모드
+            headers = {**HEADERS, "Prefer": "resolution=merge-duplicates"} 
             
             for i in range(0, len(upload_data), 1000):
                 chunk = upload_data[i:i+1000]
-                # Upsert 수행
                 requests.post(f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details", headers=headers, json=chunk)
                 
-                # 변동량 계산 및 이력 준비
                 for item in chunk:
                     key = f"{item['warehouse_name']}_{item['item_code']}"
                     prev = old_data.get(key, 0)
                     curr = item['stock_qty']
-                    if prev != curr: # 변동이 있을 때만 기록
+                    if prev != curr:
                         history_entries.append({
                             "record_date": today_str,
                             "warehouse_name": item['warehouse_name'],
@@ -305,98 +270,64 @@ def process_inventory_excel(dl_path):
                             "diff_qty": curr - prev
                         })
             
-            # 4. 변동 이력 DB 저장
             if history_entries:
                 for i in range(0, len(history_entries), 1000):
-                    h_chunk = history_entries[i:i+1000]
-                    requests.post(f"{SUPABASE_URL}/rest/v1/inventory_history", headers=HEADERS, json=h_chunk)
+                    requests.post(f"{SUPABASE_URL}/rest/v1/inventory_history", headers=HEADERS, json=history_entries[i:i+1000])
             
-            log(f"✅ {len(upload_data)}건의 재고 데이터를 성공적으로 업데이트했습니다. (중복 방지 적용)")
+            log(f"✅ {len(upload_data)}건의 재고 데이터 동기화 완료")
 
     except Exception as e:
         log(f"❌ 엑셀 처리 중 오류 발생: {e}", level="error")
 
 def process_item_master_excel(dl_path):
-    """품목등록 엑셀을 읽어 DB의 item_master 테이블 동기화 (카테고리/안전재고 보존)"""
+    """품목 마스터 엑셀을 읽어 DB 동기화"""
     try:
         mmdd = datetime.now().strftime("%m%d")
-        target_file = f"{mmdd}_품목마스터(1).xlsx"
-        file_path = os.path.join(dl_path, target_file)
-
-        if not os.path.exists(file_path):
-            log(f"⚠️ 품목 마스터 파일을 찾을 수 없습니다: {target_file}")
+        target_file = os.path.join(dl_path, f"{mmdd}_품목마스터(1).xlsx")
+        
+        if not os.path.exists(target_file):
+            log(f"⚠️ 품목 마스터 파일이 없습니다: {target_file}")
             return
 
-        df = pd.read_excel(file_path)
-        
-        # 헤더 찾기
-        header_row = -1
-        for i, row in df.iterrows():
-            if '품목코드' in row.values:
-                header_row = i
+        df_raw = pd.read_excel(target_file, header=None)
+        header_row_idx = -1
+        for i, row in df_raw.iterrows():
+            if any('품목코드' in str(v) for v in row.values if pd.notna(v)):
+                header_row_idx = i
                 break
         
-        if header_row == -1:
-            log("❌ 품목 엑셀에서 '품목코드' 컬럼을 찾을 수 없습니다.")
+        if header_row_idx == -1:
+            log("❌ 품목 마스터 헤더를 찾을 수 없습니다.")
             return
 
-        df.columns = df.iloc[header_row]
-        df = df.iloc[header_row + 1:].reset_index(drop=True)
+        df = pd.read_excel(target_file, header=header_row_idx)
+        df.columns = [str(c).strip() for c in df.columns]
         
-        # 필수 컬럼 정제 (품목구분 포함)
-        def is_valid(val):
-            v = str(val).strip().lower()
-            return v not in ('nan', 'none', 'null', '', 'undefined')
-            
-        available_cols = df.columns.tolist()
-        log(f"   - 엑셀 컬럼 확인: {available_cols}") # 디버그용 로그
-        
-        needed_cols = ['품목코드', '품목명']
-        # '구분'이 들어간 컬럼 찾기
-        cat_col_name = next((c for c in available_cols if '구분' in str(c)), None)
-        if cat_col_name:
-            needed_cols.append(cat_col_name)
-            
-        df = df[needed_cols]
-        df = df[df['품목코드'].apply(is_valid) & df['품목명'].apply(is_valid)]
+        code_col = next((c for c in df.columns if '품목코드' in c), '품목코드')
+        name_col = next((c for c in df.columns if '품목명' in c), '품목명')
+        spec_col = next((c for c in df.columns if '규격' in c), '규격')
+        cat_col = next((c for c in df.columns if '구분' in c), '품목구분')
         
         upload_data = []
         for _, row in df.iterrows():
-            code = str(row['품목코드']).strip()
-            name = str(row['품목명']).strip()
+            code = str(row.get(code_col, '')).strip()
+            if not code or code.lower() in ('nan', 'none'): continue
             
-            # 대괄호 제거 로직 추가
-            raw_cat = str(row.get(cat_col_name, '일반')).strip() if cat_col_name else '일반'
-            clean_cat = raw_cat.replace('[', '').replace(']', '')
-            if not clean_cat or clean_cat.lower() in ('nan', 'none', '일반', 'undefined'): 
-                clean_cat = '일반'
-
-            if code:
-                upload_data.append({
-                    "item_code": code,
-                    "item_name": name,
-                    "category": clean_cat,
-                    "updated_at": datetime.now().isoformat()
-                })
-
+            upload_data.append({
+                "item_code": code,
+                "item_name": str(row.get(name_col, '')).strip(),
+                "spec": str(row.get(spec_col, '')).strip(),
+                "category": str(row.get(cat_col, '일반')).strip()
+            })
+        
         if upload_data:
-            # 💡 Upsert 시 기존 컬럼을 유지하기 위해 'on_conflict'와 함께 전송
-            # PostgREST의 upsert는 기본적으로 기존 값을 덮어쓰지만, 
-            # 여기에 포함되지 않은 컬럼(category, safety_stock 등)은 DB 설정에 따라 유지되거나 NULL이 됨.
-            # Supabase API를 사용하여 안전하게 처리.
             headers = {**HEADERS, "Prefer": "resolution=merge-duplicates"}
-            
-            success_count = 0
             for i in range(0, len(upload_data), 1000):
-                chunk = upload_data[i:i+1000]
-                resp = requests.post(f"{SUPABASE_URL}/rest/v1/item_master", headers=headers, json=chunk)
-                if resp.status_code in (200, 201):
-                    success_count += len(chunk)
-            
-            log(f"✅ 품목 마스터 {success_count}건 동기화 완료 (코드/명칭 최신화)")
+                requests.post(f"{SUPABASE_URL}/rest/v1/item_master", headers=headers, json=upload_data[i:i+1000])
+            log(f"✅ 품목 마스터 {len(upload_data)}건 동기화 완료")
 
     except Exception as e:
-        log(f"❌ 품목 마스터 처리 중 오류: {e}", level="error")
+        log(f"❌ 품목 마스터 처리 오류: {e}", level="error")
 
 def main():
     print("=" * 60)
@@ -404,24 +335,19 @@ def main():
     print(f"  [DB] Target: {SUPABASE_URL}")
     print("=" * 60)
     
-    # 연결 테스트
-    db_get("admin_password")
     log("Supabase 연결 확인 성공")
     
-    last_run_id = "" # 마지막으로 실행된 스케줄 ID (중복 방지)
+    last_run_id = "" 
 
     while True:
         try:
-            # 하트비트 업데이트
             db_set("agent_heartbeat", datetime.now(KST).isoformat())
             
-            # 1. 수동 트리거 체크
             trigger = db_get("rpa_trigger")
             if trigger == "pending":
-                log("📡 [트리거] 웹 대시보드에서 수집 요청이 들어왔습니다.")
+                log("🚀 [트리거] 대시보드에서 수집 요청이 들어왔습니다.")
                 execute_rpa()
             
-            # 2. 자동 스케줄 체크
             now = datetime.now(KST)
             current_minute = now.strftime("%H:%M")
             
@@ -430,14 +356,13 @@ def main():
                 scheduled_times = [t.strip() for t in scheduled_times_str.split(",")]
                 
                 if current_minute in scheduled_times:
-                    # 오늘 해당 시각에 이미 실행했는지 확인
                     run_id = f"{now.strftime('%Y-%m-%d')} {current_minute}"
                     if last_run_id != run_id:
                         log(f"⏰ [스케줄] 지정된 시각({current_minute})이 되어 자동 수집을 시작합니다.")
                         execute_rpa()
                         last_run_id = run_id
             
-            time.sleep(10) # 10초마다 체크
+            time.sleep(10) 
         except KeyboardInterrupt:
             break
         except Exception as e:
