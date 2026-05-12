@@ -172,14 +172,19 @@ def execute_rpa():
 
 def process_inventory_excel(dl_path):
     """수집된 엑셀 파일을 읽어 DB(warehouse_inventory_details)에 업로드"""
-    mmdd = datetime.now().strftime("%m%d")
-    target_file = os.path.join(dl_path, f"{mmdd}_창고별재고현황(1).xlsx")
-    
-    if not os.path.exists(target_file):
-        log(f"⚠️ 동기화할 엑셀 파일이 없습니다: {target_file}", level="warning")
-        return
-
     try:
+        # 0. 가장 최근에 생성된 '창고별재고현황' 파일 찾기
+        import glob
+        files = glob.glob(os.path.join(dl_path, "*창고별재고현황*.xlsx"))
+        if not files:
+            log(f"⚠️ 동기화할 '창고별재고현황' 엑셀 파일이 폴더에 없습니다: {dl_path}", level="warning")
+            return
+        
+        # 가장 최근 파일 선택
+        target_file = max(files, key=os.path.getmtime)
+        log(f"📄 최신 엑셀 파일 탐색 완료: {os.path.basename(target_file)}")
+
+        # 1. 데이터의 실제 헤더 위치를 찾기 위해 헤더 없이 먼저 읽음
         df_raw = pd.read_excel(target_file, header=None)
         
         header_row_idx = -1
@@ -209,18 +214,14 @@ def process_inventory_excel(dl_path):
         qty_col = find_col(['재고수량', '현재고', 'Qty', '수량'], '재고수량')
         price_col = find_col(['입고단가', '단가', 'Price', '원가'], '입고단가')
 
-        # 3. 데이터 정제 (유령 데이터 및 합계 행 제거)
+        # 3. 데이터 정제
         def is_valid(val):
             v = str(val).strip().lower()
             return v not in ('nan', 'none', 'null', '', 'undefined', 'nan', '0', '0.0')
 
-        # 필수 컬럼(코드, 창고명) 유효성 검사 - 창고명이나 품목명이 비어있으면 삭제
-        if code_col in df.columns:
-            df = df[df[code_col].apply(lambda x: is_valid(x))]
-        if wh_col in df.columns:
-            df = df[df[wh_col].apply(lambda x: is_valid(x))]
-        if name_col in df.columns:
-            df = df[df[name_col].apply(lambda x: is_valid(x))]
+        if code_col in df.columns: df = df[df[code_col].apply(lambda x: is_valid(x))]
+        if wh_col in df.columns: df = df[df[wh_col].apply(lambda x: is_valid(x))]
+        if name_col in df.columns: df = df[df[name_col].apply(lambda x: is_valid(x))]
 
         exclude_keywords = '계|합계|소계|총계|Total'
         df = df[~df[code_col].astype(str).str.contains(exclude_keywords, na=False)]
@@ -258,45 +259,55 @@ def process_inventory_excel(dl_path):
                 "inventory_cost": float(row.get('calc_cost', 0))
             })
         
+        log(f"📋 [분석 완료] {len(upload_data)}건의 데이터를 업로드합니다.")
+
         if upload_data:
+            # 기존 데이터 조회 (변동 이력용)
             old_res = requests.get(f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details?select=*", headers=HEADERS)
             old_data = {f"{r['warehouse_name']}_{r['item_code']}": r['stock_qty'] for r in old_res.json()} if old_res.status_code == 200 else {}
 
-            # 먼저 현재 엑셀에 있는 창고의 기존 데이터만 삭제 (다른 창고 데이터는 유지)
+            # 기존 데이터 삭제 (현재 수집된 창고 기준)
             current_warehouses = list(set([item['warehouse_name'] for item in upload_data]))
             import urllib.parse
             for wh in current_warehouses:
                 safe_wh = urllib.parse.quote(wh)
                 requests.delete(f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details?warehouse_name=eq.{safe_wh}", headers=HEADERS)
             
+            # 신규 데이터 업로드
+            headers = {**HEADERS, "Prefer": "resolution=merge-duplicates"} 
+            success_count = 0
+            for i in range(0, len(upload_data), 500):
+                chunk = upload_data[i:i+500]
+                resp = requests.post(f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details", headers=headers, json=chunk)
+                if resp.status_code in (200, 201, 204): success_count += len(chunk)
+                else: log(f"❌ 업로드 오류: {resp.text}", level="error")
+            
+            log(f"✅ 재고 데이터 {success_count}건 동기화 성공")
+
+            # 변동 이력 기록 (테이블명 확인 필수: inventory_history)
             history_entries = []
             today_str = datetime.now(KST).strftime('%Y-%m-%d')
-            headers = {**HEADERS, "Prefer": "resolution=merge-duplicates"} 
-            
-            for i in range(0, len(upload_data), 1000):
-                chunk = upload_data[i:i+1000]
-                requests.post(f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details", headers=headers, json=chunk)
-                
-                for item in chunk:
-                    key = f"{item['warehouse_name']}_{item['item_code']}"
-                    prev = old_data.get(key, 0)
-                    curr = item['stock_qty']
-                    if prev != curr:
-                        history_entries.append({
-                            "record_date": today_str,
-                            "warehouse_name": item['warehouse_name'],
-                            "item_code": item['item_code'],
-                            "item_name_spec": item['item_name_spec'],
-                            "prev_qty": prev,
-                            "curr_qty": curr,
-                            "diff_qty": curr - prev
-                        })
+            for item in upload_data:
+                key = f"{item['warehouse_name']}_{item['item_code']}"
+                prev = old_data.get(key, 0)
+                curr = item['stock_qty']
+                if prev != curr:
+                    history_entries.append({
+                        "record_date": today_str,
+                        "warehouse_name": item['warehouse_name'],
+                        "item_code": item['item_code'],
+                        "item_name_spec": item['item_name_spec'],
+                        "prev_qty": prev, "curr_qty": curr, "diff_qty": curr - prev
+                    })
             
             if history_entries:
-                for i in range(0, len(history_entries), 1000):
-                    requests.post(f"{SUPABASE_URL}/rest/v1/inventory_history", headers=HEADERS, json=history_entries[i:i+1000])
-            
-            log(f"✅ {len(upload_data)}건의 재고 데이터 동기화 완료")
+                for i in range(0, len(history_entries), 500):
+                    requests.post(f"{SUPABASE_URL}/rest/v1/inventory_history", headers=HEADERS, json=history_entries[i:i+500])
+        else:
+            log("⚠️ 업로드할 유효 데이터가 없습니다.", level="warning")
+
+    except Exception as e:
+        log(f"❌ 엑셀 처리 오류: {e}", level="error")
 
     except Exception as e:
         log(f"❌ 엑셀 처리 중 오류 발생: {e}", level="error")
