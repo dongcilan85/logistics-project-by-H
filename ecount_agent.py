@@ -373,8 +373,9 @@ def main():
             db_set("agent_heartbeat", datetime.now(KST).isoformat())
             
             trigger = db_get("rpa_trigger")
-            if trigger == "pending":
-                log("🚀 [트리거] 대시보드에서 수집 요청이 들어왔습니다.")
+            # 'idle', 'NULL', 'ERROR'가 아니면 수집 시작 (상세 트리거 포함)
+            if trigger not in ("idle", "NULL", "ERROR", ""):
+                log(f"🚀 [트리거 감지] 대시보드에서 요청이 들어왔습니다: {trigger}")
                 execute_rpa()
             
             now = datetime.now(KST)
