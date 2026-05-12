@@ -184,24 +184,32 @@ def process_inventory_excel(dl_path):
         df = pd.read_excel(target_file, header=header_row_idx)
         df.columns = [str(c).strip() for c in df.columns]
 
+        # 컬럼 유연 매칭 (공백 무시 및 키워드 포함 여부로 탐색)
         def find_col(keywords, default):
             for col in df.columns:
-                if any(k in col for k in keywords): return col
+                c_clean = str(col).replace(' ', '').replace('\n', '')
+                if any(k.replace(' ', '') in c_clean for k in keywords):
+                    return col
             return default
 
-        code_col = find_col(['품목코드', 'Item Code'], '품목코드')
-        name_col = find_col(['품목명', 'Item Name'], '품목명[규격]')
-        wh_col = find_col(['창고명', 'Warehouse'], '창고명')
-        qty_col = find_col(['재고수량', '현재고', 'Qty'], '재고수량')
-        price_col = find_col(['입고단가', '단가', 'Price'], '입고단가')
+        code_col = find_col(['품목코드', 'ItemCode', '상품코드'], '품목코드')
+        name_col = find_col(['품목명', 'ItemName', '상품명', '규격'], '품목명[규격]')
+        wh_col = find_col(['창고명', 'Warehouse', '창고'], '창고명')
+        qty_col = find_col(['재고수량', '현재고', 'Qty', '수량'], '재고수량')
+        price_col = find_col(['입고단가', '단가', 'Price', '원가'], '입고단가')
 
+        # 3. 데이터 정제 (유령 데이터 및 합계 행 제거)
         def is_valid(val):
             v = str(val).strip().lower()
-            return v not in ('nan', 'none', 'null', '', 'undefined')
+            return v not in ('nan', 'none', 'null', '', 'undefined', 'nan', '0', '0.0')
 
-        df = df[df[code_col].apply(is_valid)]
-        if wh_col in df.columns: df = df[df[wh_col].apply(is_valid)]
-        if name_col in df.columns: df = df[df[name_col].apply(is_valid)]
+        # 필수 컬럼(코드, 창고명) 유효성 검사 - 창고명이나 품목명이 비어있으면 삭제
+        if code_col in df.columns:
+            df = df[df[code_col].apply(lambda x: is_valid(x))]
+        if wh_col in df.columns:
+            df = df[df[wh_col].apply(lambda x: is_valid(x))]
+        if name_col in df.columns:
+            df = df[df[name_col].apply(lambda x: is_valid(x))]
 
         exclude_keywords = '계|합계|소계|총계|Total'
         df = df[~df[code_col].astype(str).str.contains(exclude_keywords, na=False)]
@@ -243,9 +251,12 @@ def process_inventory_excel(dl_path):
             old_res = requests.get(f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details?select=*", headers=HEADERS)
             old_data = {f"{r['warehouse_name']}_{r['item_code']}": r['stock_qty'] for r in old_res.json()} if old_res.status_code == 200 else {}
 
+            # 먼저 현재 엑셀에 있는 창고의 기존 데이터만 삭제 (다른 창고 데이터는 유지)
             current_warehouses = list(set([item['warehouse_name'] for item in upload_data]))
+            import urllib.parse
             for wh in current_warehouses:
-                requests.delete(f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details?warehouse_name=eq.{wh}", headers=HEADERS)
+                safe_wh = urllib.parse.quote(wh)
+                requests.delete(f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details?warehouse_name=eq.{safe_wh}", headers=HEADERS)
             
             history_entries = []
             today_str = datetime.now(KST).strftime('%Y-%m-%d')
@@ -303,10 +314,18 @@ def process_item_master_excel(dl_path):
         df = pd.read_excel(target_file, header=header_row_idx)
         df.columns = [str(c).strip() for c in df.columns]
         
-        code_col = next((c for c in df.columns if '품목코드' in c), '품목코드')
-        name_col = next((c for c in df.columns if '품목명' in c), '품목명')
-        spec_col = next((c for c in df.columns if '규격' in c), '규격')
-        cat_col = next((c for c in df.columns if '구분' in c), '품목구분')
+        # 컬럼 유연 매칭
+        def find_col(keywords, default):
+            for col in df.columns:
+                c_clean = str(col).replace(' ', '').replace('\n', '')
+                if any(k.replace(' ', '') in c_clean for k in keywords):
+                    return col
+            return default
+
+        code_col = find_col(['품목코드', 'ItemCode'], '품목코드')
+        name_col = find_col(['품목명', 'ItemName'], '품목명')
+        spec_col = find_col(['규격'], '규격')
+        cat_col = find_col(['구분', '카테고리'], '품목구분')
         
         upload_data = []
         for _, row in df.iterrows():
