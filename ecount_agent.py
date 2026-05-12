@@ -12,6 +12,9 @@ import pandas as pd
 import logging
 from datetime import datetime, timezone, timedelta
 
+# --- 시간대 설정 (대한민국 표준시) ---
+KST = timezone(timedelta(hours=9))
+
 # --- 로그 설정 ---
 LOG_FILE = os.path.join(os.path.dirname(__file__), "agent_log.txt")
 logging.basicConfig(
@@ -96,9 +99,9 @@ def execute_rpa():
             try: os.makedirs(dl_path, exist_ok=True)
             except: pass
 
-        # RPA 객체 생성
+        # RPA 객체 생성 (디버깅을 위해 headless=False 강제 적용)
         log("🖥️ [3단계] 크롬 브라우저를 실행합니다... (잠시만 기다려 주세요)")
-        rpa = EcountRPA(com_code, user_id, user_pw, dl_path, headless=(headless == "True"))
+        rpa = EcountRPA(com_code, user_id, user_pw, dl_path, headless=False)
 
         try:
             db_set("rpa_message", "이카운트 로그인 시도 중...")
@@ -193,15 +196,30 @@ def process_inventory_excel(dl_path):
         # 필수 컬럼 존재 확인 (사용자 제공 컬럼명 기준)
         required_cols = ['창고명', '품목코드', '품목명[규격]', '재고수량', '입고단가']
         
-        # 데이터가 있는 행만 필터링 (품목코드가 있는 행만)
-        df = df.dropna(subset=['품목코드'])
+        # 3. 데이터 정제 (유령 데이터 및 합계 행 제거)
+        def is_valid(val):
+            v = str(val).strip().lower()
+            return v not in ('nan', 'none', 'null', '', 'undefined')
+
+        # 컬럼 유연 매칭 (품목명[규격] 또는 품목명 포함 컬럼 찾기)
+        item_name_col = next((c for c in df.columns if '품목명' in str(c)), '품목명[규격]')
+
+        # 필수 컬럼들에 대해 유효성 검사 (하나라도 위반 시 제거)
+        df = df[df['품목코드'].apply(is_valid)]
         
-        # '계', '합계', '소계', '총계' 등이 포함된 집계 행 철저히 제외
+        if '창고명' in df.columns:
+            df = df[df['창고명'].apply(is_valid)]
+            
+        if item_name_col in df.columns:
+            df = df[df[item_name_col].apply(is_valid)]
+
+        # '계', '합계', '소계' 등이 포함된 집계 행 철저히 제외
         exclude_keywords = '계|합계|소계|총계|Total'
         df = df[~df['품목코드'].astype(str).str.contains(exclude_keywords, na=False)]
-        df = df[~df['품목명[규격]'].astype(str).str.contains(exclude_keywords, na=False)]
         
-        # 창고명 컬럼에도 '계'가 들어간 행이 있다면 제외
+        if item_name_col in df.columns:
+            df = df[~df[item_name_col].astype(str).str.contains(exclude_keywords, na=False)]
+        
         if '창고명' in df.columns:
             df = df[~df['창고명'].astype(str).str.contains(exclude_keywords, na=False)]
         
@@ -213,10 +231,34 @@ def process_inventory_excel(dl_path):
         # Supabase 업로드 준비
         upload_data = []
         for _, row in df.iterrows():
+            # 분류(카테고리) 및 유효기간(관리항목) 추출
+            # 💡 '품목구분' 또는 '구분'이 포함된 컬럼 찾기
+            cat_col = next((c for c in row.index if '구분' in str(c)), None)
+            raw_cat = str(row.get(cat_col, '일반')).strip() if cat_col else '일반'
+            
+            clean_cat = raw_cat.replace('[', '').replace(']', '')
+            if not clean_cat or clean_cat.lower() in ('nan', 'none', '일반', 'undefined'): 
+                clean_cat = '일반'
+            
+            # 관리항목명(유효기간) 추출 로직
+            exp_raw = str(row.get('관리항목명', '')).strip()
+            if not exp_raw: exp_raw = str(row.get('유효기간', '')).strip()
+            
+            # 날짜 형식 정제 (예: 2025-12-31, 251231 등 대응)
+            exp_date = None
+            if exp_raw and exp_raw != 'nan' and exp_raw != 'None':
+                import re
+                nums = re.sub(r'[^0-9]', '', exp_raw)
+                if len(nums) == 8: exp_date = f"{nums[:4]}-{nums[4:6]}-{nums[6:8]}"
+                elif len(nums) == 6: exp_date = f"20{nums[:2]}-{nums[2:4]}-{nums[4:6]}"
+                else: exp_date = exp_raw
+
             upload_data.append({
-                "warehouse_name": str(row.get('창고명', '')).strip(), # 공백 및 줄바꿈 제거
+                "warehouse_name": str(row.get('창고명', '')).strip(),
                 "item_code": str(row.get('품목코드', '')).strip(),
-                "item_name_spec": str(row.get('품목명[규격]', '')).strip(),
+                "item_name_spec": str(row.get(item_name_col, '')).strip(),
+                "category": clean_cat,
+                "expiration_date": exp_date,
                 "stock_qty": float(row.get('재고수량', 0)),
                 "unit_price": float(row.get('입고단가', 0)),
                 "inventory_cost": float(row.get('재고비용', 0))
@@ -301,17 +343,39 @@ def process_item_master_excel(dl_path):
         df.columns = df.iloc[header_row]
         df = df.iloc[header_row + 1:].reset_index(drop=True)
         
-        # 필수 컬럼 정제
-        df = df[['품목코드', '품목명']].dropna(subset=['품목코드'])
+        # 필수 컬럼 정제 (품목구분 포함)
+        def is_valid(val):
+            v = str(val).strip().lower()
+            return v not in ('nan', 'none', 'null', '', 'undefined')
+            
+        available_cols = df.columns.tolist()
+        log(f"   - 엑셀 컬럼 확인: {available_cols}") # 디버그용 로그
+        
+        needed_cols = ['품목코드', '품목명']
+        # '구분'이 들어간 컬럼 찾기
+        cat_col_name = next((c for c in available_cols if '구분' in str(c)), None)
+        if cat_col_name:
+            needed_cols.append(cat_col_name)
+            
+        df = df[needed_cols]
+        df = df[df['품목코드'].apply(is_valid) & df['품목명'].apply(is_valid)]
         
         upload_data = []
         for _, row in df.iterrows():
             code = str(row['품목코드']).strip()
             name = str(row['품목명']).strip()
+            
+            # 대괄호 제거 로직 추가
+            raw_cat = str(row.get(cat_col_name, '일반')).strip() if cat_col_name else '일반'
+            clean_cat = raw_cat.replace('[', '').replace(']', '')
+            if not clean_cat or clean_cat.lower() in ('nan', 'none', '일반', 'undefined'): 
+                clean_cat = '일반'
+
             if code:
                 upload_data.append({
                     "item_code": code,
                     "item_name": name,
+                    "category": clean_cat,
                     "updated_at": datetime.now().isoformat()
                 })
 

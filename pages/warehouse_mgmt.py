@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import time
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import plotly.express as px
 from supabase import create_client, Client
 
@@ -15,11 +15,14 @@ def init_connection():
 
 supabase = init_connection()
 
+# --- 시간대 설정 (대한민국 표준시) ---
+KST = timezone(timedelta(hours=9))
+
 # 페이지 설정
 st.set_page_config(page_title="IWP 창고 관리 대시보드", layout="wide")
 
 st.title("📦 창고 통합 관리 대시보드")
-st.write(f"최종 업데이트: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+st.write(f"최종 업데이트 (KST): {datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')}")
 
 # -------------------------------------------------------------
 # 1. 데이터 로드 및 통합 (Join Logic)
@@ -37,6 +40,10 @@ def load_comprehensive_data():
         
         if inv_df.empty: return pd.DataFrame()
         
+        # 💡 유효기간 컬럼 보장 (DB에 아직 없더라도 에러 방지)
+        if 'expiration_date' not in inv_df.columns:
+            inv_df['expiration_date'] = None
+
         if not wh_df.empty:
             inv_df = inv_df.merge(wh_df, on="warehouse_name", how="left")
         else:
@@ -69,14 +76,47 @@ if df.empty:
     st.stop()
 
 # -------------------------------------------------------------
-# 2. 상단 요약 지표 (KPI Dashboard)
+# 2. 유효기간 및 상태 분석 로직
+# -------------------------------------------------------------
+today = datetime.now(KST).date()
+
+def analyze_expiration(row):
+    if pd.isna(row.get('expiration_date')) or not row['expiration_date']:
+        return "⚪ 정보없음", 9999
+    
+    try:
+        exp_date = pd.to_datetime(row['expiration_date']).date()
+        diff_days = (exp_date - today).days
+        
+        if diff_days < 365:
+            return "🔴 1년 미만", diff_days
+        elif diff_days < 548: # 1년 6개월 (365 + 183)
+            return "🟡 1.5년 이상", diff_days
+        else:
+            return "🟢 2년 이상", diff_days
+    except:
+        return "⚪ 형식오류", 9999
+
+# 유효기간 등급 부여
+if not df.empty and 'expiration_date' in df.columns:
+    df[['exp_status', 'rem_days']] = df.apply(lambda r: pd.Series(analyze_expiration(r)), axis=1)
+else:
+    df['exp_status'] = "⚪ 정보없음"
+    df['rem_days'] = 9999
+
+# -------------------------------------------------------------
+# 3. 상단 요약 지표 (KPI Dashboard)
 # -------------------------------------------------------------
 total_asset = df['inventory_cost'].sum()
 available_asset = df[df['is_available'] == True]['inventory_cost'].sum()
-unavailable_asset = df[df['is_available'] == False]['inventory_cost'].sum()
 
-# 지표용 합산 데이터 (품목 기준)
-agg_df = df.groupby(['item_code', 'category']).agg({
+# 💡 유효기간 임박(1년 미만) 건수 및 금액
+urgent_df = df[df['exp_status'] == "🔴 1년 미만"]
+urgent_count = len(urgent_df)
+urgent_asset = urgent_df['inventory_cost'].sum()
+
+# 지표용 합산 데이터 (품목/유효기간 기준)
+agg_df = df.groupby(['item_code', 'category', 'exp_status']).agg({
     'stock_qty': 'sum',
     'safety_stock': 'max',
     'excess_threshold': 'max'
@@ -93,13 +133,20 @@ sold_out_count = len(agg_df[agg_df['status'] == "❌ 품절"])
 low_stock_count = len(agg_df[agg_df['status'] == "⚠️ 부족"])
 excess_stock_count = len(agg_df[agg_df['status'] == "📈 과잉"])
 
+# 비가용 자산 변수 복구 (에러 방지)
+unavailable_asset = df[df['is_available'] == False]['inventory_cost'].sum()
+
 c1, c2, c3, c4 = st.columns(4)
 with c1:
     st.metric("📦 총 재고 자산", f"₩{total_asset:,.0f}")
     st.caption(f"가용: ₩{available_asset:,.0f} / 비가용: ₩{unavailable_asset:,.0f}")
-with c2: st.metric("❌ 품절 품목", f"{sold_out_count} 건")
-with c3: st.metric("⚠️ 재고 부족", f"{low_stock_count} 건")
-with c4: st.metric("📈 과잉 재고", f"{excess_stock_count} 건")
+with c2:
+    # 🔴 유효기간 1년 미만 (가장 중요)
+    st.metric("🔴 유효기간 1년 미만", f"₩{urgent_asset:,.0f}", f"{urgent_count}건", delta_color="inverse")
+with c3:
+    st.metric("❌ 품절/⚠️ 부족", f"{sold_out_count + low_stock_count} 건")
+with c4:
+    st.metric("📈 과잉 재고", f"{excess_stock_count} 건")
 
 st.divider()
 
@@ -118,8 +165,9 @@ def display_inventory_table(target_df, key_suffix=""):
     if sel_wh != "전체":
         res_df = res_df[res_df['warehouse_name'] == sel_wh]
     else:
-        # 전체일 경우 품목별 합산
-        res_df = res_df.groupby(['item_code', 'item_name_spec', 'category']).agg({
+        # 💡 전체 합계 뷰에서도 유효기간별로 데이터를 나누어 보여줌 (유효기간 분석 필수)
+        group_cols = ['item_code', 'item_name_spec', 'category', 'expiration_date', 'exp_status']
+        res_df = res_df.groupby(group_cols).agg({
             'stock_qty': 'sum',
             'safety_stock': 'max',
             'inventory_cost': 'sum'
@@ -137,21 +185,27 @@ def display_inventory_table(target_df, key_suffix=""):
         res_df = res_df[res_df['item_name_spec'].str.contains(q, case=False) | res_df['item_code'].str.contains(q, case=False)]
     
     st.dataframe(
-        res_df[['status', 'warehouse_name', 'item_code', 'item_name_spec', 'category', 'stock_qty', 'safety_stock', 'inventory_cost']],
+        res_df[['status', 'exp_status', 'warehouse_name', 'item_code', 'item_name_spec', 'category', 'stock_qty', 'expiration_date', 'inventory_cost']],
         column_config={
-            "status": "상태", "warehouse_name": "창고명", "item_code": "품목코드",
+            "status": "상태", "exp_status": "유효기간 등급", "warehouse_name": "창고명", "item_code": "품목코드",
             "item_name_spec": "품목명[규격]", "category": "분류",
             "stock_qty": st.column_config.NumberColumn("현재고", format="%d"),
-            "safety_stock": st.column_config.NumberColumn("안전재고", format="%d"),
+            "expiration_date": "유효기간",
             "inventory_cost": st.column_config.NumberColumn("재고비용", format="₩%d")
         },
         use_container_width=True, hide_index=True
     )
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 전체 현황", "🛠️ 부자재", "📦 무형상품", "🔥 이슈(품절/부족)", "📈 과잉재고"])
+tab1, tab_exp, tab2, tab3, tab4, tab5 = st.tabs(["📊 전체 현황", "🗓️ 유효기간 분석", "🛠️ 부자재", "📦 무형상품", "🔥 이슈(품절/부족)", "📈 과잉재고"])
 
 with tab1:
     display_inventory_table(df, "all")
+with tab_exp:
+    st.subheader("🚨 유효기간별 재고 현황")
+    st.info("유효기간 1년 미만 재고를 우선적으로 관리해 주세요.")
+    # 유효기간 임박순 정렬
+    exp_sorted_df = df.sort_values(by="rem_days")
+    display_inventory_table(exp_sorted_df, "exp")
 with tab2:
     display_inventory_table(df[df['category'] == "부자재"], "sub")
 with tab3:

@@ -42,10 +42,17 @@ class EcountRPA:
         chrome_options.add_experimental_option('useAutomationExtension', False)
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
         
-        # 기본 설정들
+        # 헤드리스 모드 설정 (백그라운드 실행 필수)
+        if self.headless:
+            chrome_options.add_argument("--headless=new")
+        
+        # 기본 설정들 (안정화 강화)
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--disable-software-rasterizer")
+        chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument("--start-maximized")
         
         # 다운로드 경로 설정
         if not os.path.exists(self.download_path):
@@ -148,15 +155,13 @@ class EcountRPA:
                 search_box = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@placeholder='메뉴검색']")))
             
             search_box.clear()
-            # 한 글자씩 타이핑 (인식률 향상)
             for char in "창고별재고현황":
                 search_box.send_keys(char)
                 time.sleep(0.1)
-                
             time.sleep(0.5)
             search_box.send_keys(Keys.ENTER)
             
-            # 2. 프레임 로딩 대기 및 진입
+            # 2. 프레임 로딩 대기 및 진입 (안정성을 위해 5초 대기 복구)
             log("🚀 페이지 로딩 및 프레임 전환 중...")
             time.sleep(5) 
             
@@ -166,14 +171,14 @@ class EcountRPA:
                 log(f"📦 작업 프레임으로 진입합니다.")
                 self.driver.switch_to.frame(iframes[-1])
             
-            # 3. 키보드 매크로 실행
+            # 3. 키보드 매크로 실행 (원본 시퀀스: Tab 7 -> Right 1 -> F8)
             log("⌨️ 매크로 실행: Tab(7) -> Right(1) -> F8(조회)")
             body = wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
             
             # 탭 7번
             for i in range(7):
                 body.send_keys(Keys.TAB)
-                time.sleep(0.3)
+                time.sleep(0.2)
                 
             # 오른쪽 방향키 1번
             body.send_keys(Keys.RIGHT)
@@ -184,64 +189,14 @@ class EcountRPA:
             body.send_keys(Keys.F8)
             time.sleep(5) # 결과 로딩 대기
             
-            # 4. 엑셀 다운로드
-            log("📥 엑셀 다운로드 버튼('Excel') 찾는 중...")
+            # 4. 엑셀 다운로드 (안정적인 프레임 스캔 방식)
+            log("📥 모든 프레임을 스캔하여 'Excel' 버튼 탐색 및 다운로드 중...")
             before_files = set(os.listdir(self.download_path))
             
-            # 4. 엑셀 다운로드 (모든 프레임 스캔 방식)
-            log("📥 모든 프레임을 스캔하여 'Excel' 버튼 탐색 중...")
-            before_files = set(os.listdir(self.download_path))
-            
-            self.driver.switch_to.default_content() # 일단 전체 화면으로 나옴
-            
-            success_click = False
-            # 1단계: 메인 화면에서 시도
-            # 2단계: 모든 프레임 내부를 하나씩 검사
-            all_frames = self.driver.find_elements(By.TAG_NAME, "iframe")
-            log(f"🔎 총 {len(all_frames)}개의 프레임 탐색 시작...")
-            
-            # 메인 컨텐츠 + 모든 프레임 순회 함수
-            def try_click_in_current_context():
-                excel_selectors = [
-                    (By.XPATH, "//*[text()='Excel']"),
-                    (By.XPATH, "//button[contains(., 'Excel')]"),
-                    (By.XPATH, "//a[contains(., 'Excel')]"),
-                    (By.ID, "btnExcel"),
-                    (By.ID, "Excel")
-                ]
-                for selector in excel_selectors:
-                    try:
-                        btn = self.driver.find_element(*selector)
-                        if btn.is_displayed():
-                            try:
-                                btn.click()
-                            except:
-                                self.driver.execute_script("arguments[0].click();", btn)
-                            return True
-                    except: continue
-                return False
-
-            # 먼저 메인에서 시도
-            if try_click_in_current_context():
-                success_click = True
-            else:
-                # 각 프레임 진입 후 시도
-                for i, frame in enumerate(all_frames):
-                    try:
-                        self.driver.switch_to.default_content()
-                        # 다시 요소를 찾아야 함 (프레임 이동 시 기존 참조가 깨질 수 있음)
-                        target_frame = self.driver.find_elements(By.TAG_NAME, "iframe")[i]
-                        self.driver.switch_to.frame(target_frame)
-                        if try_click_in_current_context():
-                            log(f"✅ {i+1}번째 프레임에서 Excel 버튼 발견 및 클릭 성공!")
-                            success_click = True
-                            break
-                    except:
-                        continue
-            
-            if success_click:
+            if self._click_excel_button():
                 downloaded_file = self._wait_for_download(before_files)
                 if downloaded_file:
+                    # 파일명 변경 및 이동 (MMDD_창고별재고현황(1).xlsx)
                     mmdd = datetime.now().strftime("%m%d")
                     new_name = f"{mmdd}_창고별재고현황(1).xlsx"
                     old_path = os.path.join(self.download_path, downloaded_file)
@@ -283,6 +238,7 @@ class EcountRPA:
                 search_box = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@placeholder='메뉴검색']")))
             
             search_box.clear()
+            search_box.clear()
             for char in "관리항목별재고현황":
                 search_box.send_keys(char)
                 time.sleep(0.1)
@@ -307,56 +263,50 @@ class EcountRPA:
 
                 if i == 0:
                     # --- 첫 번째 창고 처리 ---
-                    log("  ⌨️ 첫 번째 창고 입력 시퀀스 실행")
-                    # Tab 4회 입력하여 창고 입력칸으로 이동
+                    log("  ⌨️ 첫 번째 창고 입력 시퀀스 실행 (Tab 4 -> wh_code -> Tab 7 -> Right -> F8)")
                     for _ in range(4):
                         body.send_keys(Keys.TAB)
                         time.sleep(0.2)
                     
-                    # 창고코드 입력
                     body.send_keys(wh_code)
                     time.sleep(0.5)
                     body.send_keys(Keys.ENTER)
                     time.sleep(0.5)
 
-                    # Tab 7회 입력 후 오른쪽 방향키 1회
+                    # 검색 버튼 이동 매크로 (Tab 7 -> Right -> F8)
                     for _ in range(7):
                         body.send_keys(Keys.TAB)
-                        time.sleep(0.2)
+                        time.sleep(0.1)
+                    
                     body.send_keys(Keys.RIGHT)
                     time.sleep(0.5)
-
-                    # F8로 검색
+                    
                     log("  🔍 F8 검색 실행")
                     body.send_keys(Keys.F8)
                 
                 else:
                     # --- 두 번째 창고부터 루프 처리 ---
-                    log("  ⌨️ 다음 창고 검색 시퀀스 실행 (F3)")
-                    # F3 눌러 검색 창 열기
+                    log("  ⌨️ 다음 창고 검색 시퀀스 실행 (F3 -> Tab 3 -> Space -> Shift+Tab -> Tab -> wh_code -> F8)")
                     body.send_keys(Keys.F3)
                     time.sleep(2)
 
-                    # Tab 3회 입력 후 Spacebar (기존 창고 삭제)
+                    # Tab 3회 후 Space (기존 코드 삭제)
                     for _ in range(3):
                         body.send_keys(Keys.TAB)
                         time.sleep(0.2)
                     body.send_keys(Keys.SPACE)
                     time.sleep(0.5)
 
-                    # Shift+Tab 1회, Tab 1회 (다시 입력창 이동)
+                    # Shift+Tab 1회, Tab 1회 후 신규 코드 입력
                     body.send_keys(Keys.SHIFT + Keys.TAB)
                     time.sleep(0.2)
                     body.send_keys(Keys.TAB)
-                    time.sleep(0.5)
-
-                    # 신규 창고코드 입력
+                    time.sleep(0.2)
                     body.send_keys(wh_code)
                     time.sleep(0.5)
                     body.send_keys(Keys.ENTER)
-                    time.sleep(0.5)
+                    time.sleep(1)
 
-                    # F8로 다시 검색
                     log("  🔍 F8 검색 실행")
                     body.send_keys(Keys.F8)
 

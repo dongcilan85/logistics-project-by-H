@@ -491,7 +491,7 @@ def show_admin_dashboard():
             st.markdown("### 📈 실적 분석 리포트")
             d_col1, d_col2 = st.columns([3, 1])
             with d_col1: st.write(f"기준: **{view_option}** | 시급: **{hourly_wage:,}원**")
-            with d_col2: st.download_button(label="📥 리포트 다운로드", data=output.getvalue(), file_name=f"IWP_Report_{datetime.now().strftime('%Y%m%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+            with d_col2: st.download_button(label="📥 리포트 다운로드", data=output.getvalue(), file_name=f"IWP_Report_{datetime.now(KST).strftime('%Y%m%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
             k1, k2, k3, k4 = st.columns(4)
             with k1: st.metric("누적 총 건수", f"{int(df['quantity'].sum()):,} 건")
