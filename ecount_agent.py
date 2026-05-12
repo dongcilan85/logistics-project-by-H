@@ -309,19 +309,20 @@ def process_inventory_excel(dl_path):
     except Exception as e:
         log(f"❌ 엑셀 처리 오류: {e}", level="error")
 
-    except Exception as e:
-        log(f"❌ 엑셀 처리 중 오류 발생: {e}", level="error")
-
 def process_item_master_excel(dl_path):
     """품목 마스터 엑셀을 읽어 DB 동기화"""
     try:
-        mmdd = datetime.now().strftime("%m%d")
-        target_file = os.path.join(dl_path, f"{mmdd}_품목마스터(1).xlsx")
-        
-        if not os.path.exists(target_file):
-            log(f"⚠️ 품목 마스터 파일이 없습니다: {target_file}")
+        # 0. 가장 최근에 생성된 '품목' 관련 엑셀 파일 찾기
+        import glob
+        files = glob.glob(os.path.join(dl_path, "*품목*.xlsx"))
+        if not files:
+            log(f"⚠️ 동기화할 '품목마스터' 엑셀 파일이 폴더에 없습니다: {dl_path}", level="warning")
             return
+        
+        target_file = max(files, key=os.path.getmtime)
+        log(f"📄 최신 품목 엑셀 탐색 완료: {os.path.basename(target_file)}")
 
+        # 1. 헤더 탐색
         df_raw = pd.read_excel(target_file, header=None)
         header_row_idx = -1
         for i, row in df_raw.iterrows():
@@ -330,29 +331,28 @@ def process_item_master_excel(dl_path):
                 break
         
         if header_row_idx == -1:
-            log("❌ 품목 마스터 헤더를 찾을 수 없습니다.")
+            log(f"❌ 품목 엑셀 헤더 탐색 실패: {target_file}", level="error")
             return
 
         df = pd.read_excel(target_file, header=header_row_idx)
         df.columns = [str(c).strip() for c in df.columns]
-        
-        # 컬럼 유연 매칭
+
+        # 2. 컬럼 매칭
         def find_col(keywords, default):
             for col in df.columns:
                 c_clean = str(col).replace(' ', '').replace('\n', '')
-                if any(k.replace(' ', '') in c_clean for k in keywords):
-                    return col
+                if any(k in c_clean for k in keywords): return col
             return default
 
         code_col = find_col(['품목코드', 'ItemCode'], '품목코드')
         name_col = find_col(['품목명', 'ItemName'], '품목명')
-        spec_col = find_col(['규격'], '규격')
-        cat_col = find_col(['구분', '카테고리'], '품목구분')
+        spec_col = find_col(['규격', 'Spec'], '규격')
+        cat_col = find_col(['구분', '카테고리', '분류'], '품목구분')
         
         upload_data = []
         for _, row in df.iterrows():
             code = str(row.get(code_col, '')).strip()
-            if not code or code.lower() in ('nan', 'none'): continue
+            if not code or code.lower() in ('nan', 'none', '합계', '계'): continue
             
             raw_cat = str(row.get(cat_col, '일반')).strip()
             clean_cat = raw_cat.replace('[', '').replace(']', '')
