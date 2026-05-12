@@ -361,7 +361,7 @@ def main():
             db_set("agent_heartbeat", datetime.now(KST).isoformat())
             
             trigger = db_get("rpa_trigger")
-            if trigger == "pending":
+            if trigger not in ("idle", "NULL", "ERROR", ""):
                 log("?? [?몃━嫄? ??쒕낫?쒖뿉???섏쭛 ?붿껌???ㅼ뼱?붿뒿?덈떎.")
                 execute_rpa()
             
