@@ -1,4 +1,4 @@
-﻿"""
+"""
 =============================================================
  IWP Ecount RPA Agent v4 (?곸꽭 ?붾쾭洹?紐⑤뱶)
  - ?④퀎蹂??ㅽ뻾 濡쒓렇瑜??곸꽭??異쒕젰
@@ -11,6 +11,10 @@ import requests
 import pandas as pd
 import logging
 from datetime import datetime, timezone, timedelta
+
+# Fix CP949 encoding issue on Windows console
+sys.stdout.reconfigure(encoding='utf-8')
+sys.stderr.reconfigure(encoding='utf-8')
 
 # --- ?쒓컙? ?ㅼ젙 (?쒖슱/KST) ---
 KST = timezone(timedelta(hours=9))
@@ -119,18 +123,17 @@ def execute_rpa():
             # 5-2. 愿由ы빆紐⑸퀎?ш퀬?꾪솴 (?쒗쉶 ?섏쭛)
             log("?봽 [6?④퀎] 愿由ы빆紐⑸퀎?ш퀬?꾪솴 ?쒗쉶 ?섏쭛 ?쒖옉...")
             db_set("rpa_message", "李쎄퀬蹂??쒗쉶 ?섏쭛 以?..")
+            # 5-2. 관리항목별재고현황 (조회 수집)
+            log("📊 [6단계] 관리항목별재고현황 조회 수집 시작...")
+            db_set("rpa_message", "창고별 조회 수집 중..")
             
             wh_url = f"{SUPABASE_URL}/rest/v1/warehouse_codes?select=warehouse_code,warehouse_name"
             wh_resp = requests.get(wh_url, headers=HEADERS, timeout=5)
             warehouses = wh_resp.json()
             
             if warehouses:
-                log(f"   - ???李쎄퀬: {len(warehouses)}媛?)
+                log(f"   - 대상 창고: {len(warehouses)}개")
                 success_iter, msg_iter = rpa.get_item_inventory_by_warehouse(warehouses)
-                log(f"   - 寃곌낵: {msg_iter}")
-            else:
-                log("?좑툘 ?깅줉??李쎄퀬 肄붾뱶媛 ?놁뼱 ?쒗쉶 ?섏쭛??嫄대꼫?곷땲??")
-
             # 5-3. ?덈ぉ 留덉뒪???섏쭛 諛??숆린??            log("?벀 [7?④퀎] ?덈ぉ 留덉뒪???덈ぉ?깅줉) ?섏쭛 ?쒖옉...")
             db_set("rpa_message", "?덈ぉ 留덉뒪???섏쭛 以?..")
             success_item, item_file = rpa.get_item_master_excel()
@@ -158,7 +161,7 @@ def execute_rpa():
         db_set("rpa_updated_at", datetime.now(KST).isoformat())
 
 def process_inventory_excel(dl_path):
-    """?섏쭛???묒? ?뚯씪???쎌뼱 DB(warehouse_inventory_details)???낅줈??""
+    """수집된 엑셀 파일을 읽어 DB에 업로드"""
     mmdd = datetime.now().strftime("%m%d")
     target_file = os.path.join(dl_path, f"{mmdd}_李쎄퀬蹂꾩옱怨좏쁽??1).xlsx")
     
@@ -190,11 +193,11 @@ def process_inventory_excel(dl_path):
                     return col
             return default
 
-        code_col = find_col(['?덈ぉ肄붾뱶', 'ItemCode', '?곹뭹肄붾뱶'], '?덈ぉ肄붾뱶')
-        name_col = find_col(['?덈ぉ紐?, 'ItemName', '?곹뭹紐?, '洹쒓꺽'], '?덈ぉ紐?洹쒓꺽]')
-        wh_col = find_col(['李쎄퀬紐?, 'Warehouse', '李쎄퀬'], '李쎄퀬紐?)
-        qty_col = find_col(['?ш퀬?섎웾', '?꾩옱怨?, 'Qty', '?섎웾'], '?ш퀬?섎웾')
-        price_col = find_col(['?낃퀬?④?', '?④?', 'Price', '?먭?'], '?낃퀬?④?')
+        code_col = find_col(['품목코드', 'ItemCode', '상품코드'], '품목코드')
+        name_col = find_col(['품목명', 'ItemName', '상품명', '규격'], '품목명[규격]')
+        wh_col = find_col(['창고명', 'Warehouse', '창고'], '창고명')
+        qty_col = find_col(['재고수량', '현재고', 'Qty', '수량'], '재고수량')
+        price_col = find_col(['입고단가', '단가', 'Price', '원가'], '입고단가')
 
         # 3. ?곗씠???뺤젣 (?좊졊 ?곗씠??諛??⑷퀎 ???쒓굅)
         def is_valid(val):
@@ -289,7 +292,7 @@ def process_inventory_excel(dl_path):
         log(f"???묒? 泥섎━ 以??ㅻ쪟 諛쒖깮: {e}", level="error")
 
 def process_item_master_excel(dl_path):
-    """?덈ぉ 留덉뒪???묒????쎌뼱 DB ?숆린??""
+    """품목 마스터 엑셀을 읽어 DB 동기화"""
     try:
         mmdd = datetime.now().strftime("%m%d")
         target_file = os.path.join(dl_path, f"{mmdd}_?덈ぉ留덉뒪??1).xlsx")
@@ -320,10 +323,10 @@ def process_item_master_excel(dl_path):
                     return col
             return default
 
-        code_col = find_col(['?덈ぉ肄붾뱶', 'ItemCode'], '?덈ぉ肄붾뱶')
-        name_col = find_col(['?덈ぉ紐?, 'ItemName'], '?덈ぉ紐?)
-        spec_col = find_col(['洹쒓꺽'], '洹쒓꺽')
-        cat_col = find_col(['援щ텇', '移댄뀒怨좊━'], '?덈ぉ援щ텇')
+        code_col = find_col(['품목코드', 'ItemCode'], '품목코드')
+        name_col = find_col(['품목명', 'ItemName'], '품목명')
+        spec_col = find_col(['규격'], '규격')
+        cat_col = find_col(['구분', '카테고리'], '품목구분')
         
         upload_data = []
         for _, row in df.iterrows():

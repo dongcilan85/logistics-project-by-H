@@ -773,6 +773,19 @@ else:
             set_config("rpa_trigger", "idle")
             set_config("rpa_status", "idle"); st.rerun()
 
+    with st.sidebar.expander("📜 RPA 진행 로그", expanded=False):
+        try:
+            with open("agent_log.txt", "r", encoding="utf-8") as f:
+                logs = f.readlines()
+            if logs:
+                st.code("".join(logs[-15:]), language="log")
+            else:
+                st.info("로그가 없습니다.")
+        except Exception as e:
+            st.error("로그 파일을 읽을 수 없습니다.")
+        if st.button("🔄 로그 새로고침", key="refresh_log", use_container_width=True):
+            st.rerun()
+
     st.sidebar.divider()
     sc1, sc2 = st.sidebar.columns(2)
     if sc1.button("🔓 로그아웃", use_container_width=True): st.session_state.role = None; st.rerun()

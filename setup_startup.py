@@ -4,7 +4,7 @@ import getpass
 
 def setup_startup():
     # 1. 원본 파일 경로
-    source_file = r"c:\Users\admin\Desktop\antigravity\IWP\agent_launcher.vbs"
+    source_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agent_launcher.vbs")
     
     # 2. 시작 프로그램 폴더 경로
     username = getpass.getuser()
