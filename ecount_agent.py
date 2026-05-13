@@ -569,16 +569,29 @@ def process_item_master_excel(dl_path):
         cat_col = find_col(['구분', '카테고리'], '품목구분')
         
         upload_data = []
+        import re as _re
+        # footer/시간 stamp 패턴: 2026/05/13 오후 12:27:14 같은 날짜시간 행 제외
+        footer_pat = _re.compile(r'^\d{4}[-/]\d{1,2}[-/]\d{1,2}')
         for _, row in df.iterrows():
             code = str(row.get(code_col, '')).strip()
             if not code or code.lower() in ('nan', 'none'): continue
-            
-            cat_val = str(row.get(cat_col, '일반')).strip()
-            cat_val = cat_val.replace('[', '').replace(']', '').strip()
-            
+            # 날짜 형태 footer 행 제외
+            if footer_pat.match(code): continue
+            # 합계/소계 행 제외
+            if _re.search(r'합계|총계|소계|Total', code, _re.IGNORECASE): continue
+
+            item_name = str(row.get(name_col, '')).strip()
+            # item_name 이 NaN/빈값이면 의미없는 행
+            if not item_name or item_name.lower() in ('nan', 'none'): continue
+
+            cat_raw = str(row.get(cat_col, '일반')).strip()
+            cat_val = cat_raw.replace('[', '').replace(']', '').strip()
+            if not cat_val or cat_val.lower() in ('nan', 'none'):
+                cat_val = '일반'
+
             upload_data.append({
                 "item_code": code,
-                "item_name": str(row.get(name_col, '')).strip(),
+                "item_name": item_name,
                 "category": cat_val
             })
         
