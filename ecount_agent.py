@@ -324,20 +324,77 @@ def process_inventory_excel(dl_path):
     except Exception as e:
         log(f"❌ 엑셀 처리 중 오류 발생: {e}", level="error")
 
+def _build_price_map(dl_path):
+    """통합 창고별재고현황 파일에서 (창고코드, 품목코드) → 입고단가 맵 생성
+
+    통합 파일과 개별 파일의 창고명 표기가 다르므로(예: '본사 A급 창고' vs '본사A급')
+    안정적인 키인 창고코드(W001 등)를 기준으로 매핑한다.
+    """
+    mmdd = datetime.now().strftime("%m%d")
+    combined = os.path.join(dl_path, f"{mmdd}_창고별재고현황(1).xlsx")
+    price_map = {}
+    if not os.path.exists(combined):
+        log(f"  ℹ️ 단가 참조용 통합 파일 없음 (단가 0으로 기록): {combined}")
+        return price_map
+    try:
+        df_raw = pd.read_excel(combined, header=None)
+        hdr = -1
+        for i, row in df_raw.iterrows():
+            if any('품목코드' in str(v) for v in row.values if pd.notna(v)):
+                hdr = i; break
+        if hdr < 0:
+            return price_map
+        df = pd.read_excel(combined, header=hdr)
+        df.columns = [str(c).strip() for c in df.columns]
+
+        def fc(keywords):
+            cols_clean = {col: str(col).replace(' ', '').replace('\n', '') for col in df.columns}
+            for kw in keywords:
+                k = kw.replace(' ', '')
+                for col, c in cols_clean.items():
+                    if c == k: return col
+                for col, c in cols_clean.items():
+                    if k in c: return col
+            return None
+
+        code_c = fc(['품목코드', 'ItemCode'])
+        whcode_c = fc(['창고코드', 'WarehouseCode'])
+        price_c = fc(['입고단가', '단가', 'Price'])
+        if not (code_c and whcode_c and price_c):
+            log(f"  ⚠️ 단가 맵 컬럼 누락: code={code_c}, wh_code={whcode_c}, price={price_c}", level="warning")
+            return price_map
+
+        for _, r in df.iterrows():
+            code = str(r.get(code_c, '')).strip()
+            whcode = str(r.get(whcode_c, '')).strip()
+            if not code or not whcode or code.lower() in ('nan', 'none') or whcode.lower() in ('nan', 'none'):
+                continue
+            p = pd.to_numeric(r.get(price_c, 0), errors='coerce')
+            if pd.notna(p) and p > 0:
+                price_map[(whcode, code)] = float(p)
+        log(f"  📋 단가 맵 로드: {len(price_map)}건")
+    except Exception as e:
+        log(f"  ⚠️ 단가 맵 생성 실패: {e}", level="warning")
+    return price_map
+
+
 def process_warehouse_inventory_files(dl_path, warehouses):
     """창고별 관리항목 상세 파일들을 읽어 유효기간 포함 DB 동기화
 
     파일명 패턴: {MMDD}_{창고명}(1).xlsx (creator: get_item_inventory_by_warehouse)
     파일 컬럼: 품목코드 / 품목명 / 유효기간코드(YYYYMMDD) / 유효기간일 / 수량
+    단가/재고비용은 통합 창고별재고현황 파일에서 (창고, 품목) 매핑으로 보강.
     """
     import re, urllib.parse
     mmdd = datetime.now().strftime("%m%d")
 
+    price_map = _build_price_map(dl_path)
     all_upload_data = []
     processed_warehouses = []
 
     for wh in warehouses:
         wh_name = str(wh.get('warehouse_name', '')).strip()
+        wh_code = str(wh.get('warehouse_code', '')).strip()
         if not wh_name:
             continue
         target_file = os.path.join(dl_path, f"{mmdd}_{wh_name}(1).xlsx")
@@ -408,12 +465,16 @@ def process_warehouse_inventory_files(dl_path, warehouses):
                 if pd.isna(qty_val):
                     qty_val = 0
 
+                unit_price = price_map.get((wh_code, code), 0.0)
+                stock_qty_f = float(qty_val)
                 all_upload_data.append({
                     "warehouse_name": wh_name,
                     "item_code": code,
                     "item_name_spec": str(row.get(name_col, '')).strip() if name_col else '',
                     "expiration_date": exp_date,
-                    "stock_qty": float(qty_val),
+                    "stock_qty": stock_qty_f,
+                    "unit_price": unit_price,
+                    "inventory_cost": stock_qty_f * unit_price,
                 })
                 row_count += 1
 
