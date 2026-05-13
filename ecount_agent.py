@@ -151,6 +151,10 @@ def execute_rpa(task="all"):
                     log(f"   - 대상 창고: {len(warehouses)}개")
                     success_iter, msg_iter = rpa.get_item_inventory_by_warehouse(warehouses)
                     log(f"   - 결과: {msg_iter}")
+
+                    log("📊 [동기화] 창고별 유효기간 상세 → DB 업로드 중...")
+                    db_set("rpa_message", "유효기간 데이터 DB 동기화 중...")
+                    process_warehouse_inventory_files(dl_path, warehouses)
                 else:
                     log("⚠️ 등록된 창고 코드가 없어 순회 수집을 건너뜁니다.")
 
@@ -312,6 +316,119 @@ def process_inventory_excel(dl_path):
 
     except Exception as e:
         log(f"❌ 엑셀 처리 중 오류 발생: {e}", level="error")
+
+def process_warehouse_inventory_files(dl_path, warehouses):
+    """창고별 관리항목 상세 파일들을 읽어 유효기간 포함 DB 동기화
+
+    파일명 패턴: {MMDD}_{창고명}(1).xlsx (creator: get_item_inventory_by_warehouse)
+    파일 컬럼: 품목코드 / 품목명 / 유효기간코드(YYYYMMDD) / 유효기간일 / 수량
+    """
+    import re, urllib.parse
+    mmdd = datetime.now().strftime("%m%d")
+
+    all_upload_data = []
+    processed_warehouses = []
+
+    for wh in warehouses:
+        wh_name = str(wh.get('warehouse_name', '')).strip()
+        if not wh_name:
+            continue
+        target_file = os.path.join(dl_path, f"{mmdd}_{wh_name}(1).xlsx")
+
+        if not os.path.exists(target_file):
+            log(f"  ⚠️ 건너뜀 (파일 없음): {wh_name}", level="warning")
+            continue
+
+        try:
+            df_raw = pd.read_excel(target_file, header=None)
+            header_idx = -1
+            for i, row in df_raw.iterrows():
+                if any('품목코드' in str(v) for v in row.values if pd.notna(v)):
+                    header_idx = i
+                    break
+            if header_idx == -1:
+                log(f"  ⚠️ 헤더 찾기 실패: {wh_name}", level="warning")
+                continue
+
+            df = pd.read_excel(target_file, header=header_idx)
+            df.columns = [str(c).strip() for c in df.columns]
+
+            def find_col(keywords):
+                for col in df.columns:
+                    c_clean = str(col).replace(' ', '').replace('\n', '')
+                    if any(k.replace(' ', '') in c_clean for k in keywords):
+                        return col
+                return None
+
+            code_col = find_col(['품목코드', 'ItemCode'])
+            name_col = find_col(['품목명', 'ItemName'])
+            exp_code_col = find_col(['유효기간코드'])
+            qty_col = find_col(['수량', '재고수량', 'Qty'])
+
+            if not code_col or not qty_col:
+                log(f"  ⚠️ 필수 컬럼 없음 (품목코드/수량): {wh_name}", level="warning")
+                continue
+
+            df = df[df[code_col].notna()]
+            df = df[~df[code_col].astype(str).str.contains('합계|총계|소계|Total', na=False)]
+
+            row_count = 0
+            for _, row in df.iterrows():
+                code = str(row.get(code_col, '')).strip()
+                if not code or code.lower() in ('nan', 'none', ''):
+                    continue
+
+                exp_date = None
+                if exp_code_col:
+                    exp_raw = str(row.get(exp_code_col, '')).strip()
+                    if exp_raw and exp_raw.lower() not in ('nan', 'none', ''):
+                        nums = re.sub(r'[^0-9]', '', exp_raw)
+                        if len(nums) == 8:
+                            exp_date = f"{nums[:4]}-{nums[4:6]}-{nums[6:8]}"
+
+                qty_val = pd.to_numeric(row.get(qty_col, 0), errors='coerce')
+                if pd.isna(qty_val):
+                    qty_val = 0
+
+                all_upload_data.append({
+                    "warehouse_name": wh_name,
+                    "item_code": code,
+                    "item_name_spec": str(row.get(name_col, '')).strip() if name_col else '',
+                    "expiration_date": exp_date,
+                    "stock_qty": float(qty_val),
+                })
+                row_count += 1
+
+            processed_warehouses.append(wh_name)
+            log(f"  ✅ {wh_name}: {row_count}행 파싱 완료")
+
+        except Exception as e:
+            log(f"  ❌ {wh_name} 처리 실패: {e}", level="error")
+
+    if not all_upload_data:
+        log("⚠️ 업로드할 유효기간 데이터가 없습니다.")
+        return
+
+    # 처리한 창고들의 기존 데이터 삭제 후 재삽입
+    for wh_name in processed_warehouses:
+        safe_wh = urllib.parse.quote(wh_name)
+        requests.delete(
+            f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details?warehouse_name=eq.{safe_wh}",
+            headers=HEADERS
+        )
+
+    insert_headers = {**HEADERS, "Prefer": "resolution=merge-duplicates"}
+    total = len(all_upload_data)
+    for i in range(0, total, 1000):
+        chunk = all_upload_data[i:i+1000]
+        requests.post(
+            f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details",
+            headers=insert_headers,
+            json=chunk
+        )
+
+    log(f"📤 유효기간 DB 동기화 완료: {len(processed_warehouses)}개 창고 / {total}건")
+
 
 def process_item_master_excel(dl_path):
     """품목 마스터 엑셀을 읽어 DB 동기화"""
