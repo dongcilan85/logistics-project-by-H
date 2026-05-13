@@ -211,18 +211,25 @@ def process_inventory_excel(dl_path):
         df = pd.read_excel(target_file, header=header_row_idx)
         df.columns = [str(c).strip() for c in df.columns]
 
-        # 컬럼 유연 매칭 (공백 무시 및 키워드 포함 여부로 탐색)
+        # 컬럼 유연 매칭: 키워드 우선순위 순으로 스캔 (먼저 들어온 키워드가 우선)
         def find_col(keywords, default):
-            for col in df.columns:
-                c_clean = str(col).replace(' ', '').replace('\n', '')
-                if any(k.replace(' ', '') in c_clean for k in keywords):
-                    return col
+            cols_clean = {col: str(col).replace(' ', '').replace('\n', '') for col in df.columns}
+            for kw in keywords:
+                k_clean = kw.replace(' ', '')
+                # 1차: 완전일치
+                for col, c_clean in cols_clean.items():
+                    if c_clean == k_clean:
+                        return col
+                # 2차: 부분일치
+                for col, c_clean in cols_clean.items():
+                    if k_clean in c_clean:
+                        return col
             return default
 
         code_col = find_col(['품목코드', 'ItemCode', '상품코드'], '품목코드')
-        name_col = find_col(['품목명', 'ItemName', '상품명', '규격'], '품목명[규격]')
-        wh_col = find_col(['창고명', 'Warehouse', '창고'], '창고명')
-        qty_col = find_col(['재고수량', '현재고', 'Qty', '수량'], '재고수량')
+        name_col = find_col(['품목명', 'ItemName', '상품명'], '품목명[규격]')
+        wh_col = find_col(['창고명', 'WarehouseName', 'Warehouse'], '창고명')
+        qty_col = find_col(['재고수량', '현재고', 'Qty'], '재고수량')
         price_col = find_col(['입고단가', '단가', 'Price', '원가'], '입고단가')
 
         # 3. 데이터 정제 (유령 데이터 및 합계 행 제거)
