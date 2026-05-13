@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta, timezone
 import time
 import io
+import os
 from utils.style import apply_premium_style, get_chart_colors
 
 # 1. 페이지 설정 (최상단 고정)
@@ -774,16 +775,19 @@ else:
             set_config("rpa_status", "idle"); st.rerun()
 
     with st.sidebar.expander("📜 RPA 진행 로그", expanded=False):
+        log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agent_log.txt")
         try:
-            with open("agent_log.txt", "r", encoding="utf-8") as f:
+            with open(log_path, "r", encoding="utf-8") as f:
                 logs = f.readlines()
             if logs:
                 st.code("".join(logs[-15:]), language="log")
             else:
                 st.info("로그가 없습니다.")
-        except Exception as e:
+        except FileNotFoundError:
+            st.info("로그 파일이 없습니다.")
+        except Exception:
             st.error("로그 파일을 읽을 수 없습니다.")
-        if st.button("🔄 로그 새로고침", key="refresh_log", use_container_width=True):
+        if st.sidebar.button("🔄 로그 새로고침", key="refresh_log", use_container_width=True):
             st.rerun()
 
     st.sidebar.divider()
