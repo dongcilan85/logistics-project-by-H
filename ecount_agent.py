@@ -232,8 +232,27 @@ def process_inventory_excel(dl_path):
         code_col = find_col(['품목코드', 'ItemCode', '상품코드'], '품목코드')
         name_col = find_col(['품목명', 'ItemName', '상품명'], '품목명[규격]')
         wh_col = find_col(['창고명', 'WarehouseName', 'Warehouse'], '창고명')
+        wh_code_col = find_col(['창고코드', 'WarehouseCode'], None)
         qty_col = find_col(['재고수량', '현재고', 'Qty'], '재고수량')
         price_col = find_col(['입고단가', '단가', 'Price', '원가'], '입고단가')
+
+        # warehouse_codes 에서 정식 창고명 매핑 로드
+        # 통합 파일의 '본사 A급 창고' 같은 표기를 정식명 '본사A급' 으로 통일
+        wh_name_map = {}
+        try:
+            wh_res = requests.get(
+                f"{SUPABASE_URL}/rest/v1/warehouse_codes?select=warehouse_code,warehouse_name",
+                headers=HEADERS, timeout=10
+            )
+            if wh_res.status_code == 200:
+                for w in wh_res.json():
+                    code = str(w.get('warehouse_code', '')).strip()
+                    name = str(w.get('warehouse_name', '')).strip()
+                    if code and name:
+                        wh_name_map[code] = name
+                log(f"   - 정식 창고명 매핑: {len(wh_name_map)}건")
+        except Exception as e:
+            log(f"   - 정식 창고명 매핑 로드 실패: {e}", level="warning")
 
         # 3. 데이터 정제 (유령 데이터 및 합계 행 제거)
         def is_valid(val):
@@ -273,8 +292,16 @@ def process_inventory_excel(dl_path):
                 elif len(nums) == 6: exp_date = f"20{nums[:2]}-{nums[2:4]}-{nums[4:6]}"
                 else: exp_date = exp_raw
 
+            # 창고코드 → 정식명 변환. 없으면 엑셀의 창고명 그대로
+            raw_wh_name = str(row.get(wh_col, '')).strip()
+            wh_name_final = raw_wh_name
+            if wh_code_col:
+                wh_code_val = str(row.get(wh_code_col, '')).strip()
+                if wh_code_val and wh_code_val in wh_name_map:
+                    wh_name_final = wh_name_map[wh_code_val]
+
             upload_data.append({
-                "warehouse_name": str(row.get(wh_col, '')).strip(),
+                "warehouse_name": wh_name_final,
                 "item_code": str(row.get(code_col, '')).strip(),
                 "item_name_spec": str(row.get(name_col, '')).strip(),
                 "category": clean_cat,
