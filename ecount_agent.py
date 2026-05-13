@@ -23,7 +23,7 @@ KST = timezone(timedelta(hours=9))
 
 # --- 濡쒓렇 ?ㅼ젙 ---
 LOG_FILE = os.path.join(os.path.dirname(__file__), "agent_log.txt")
-_handlers = [logging.FileHandler(LOG_FILE, encoding='utf-8')]
+_handlers = [logging.FileHandler(LOG_FILE, encoding='utf-8-sig')]
 if sys.stdout is not None:
     _stream_handler = logging.StreamHandler(sys.stdout)
     _stream_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))

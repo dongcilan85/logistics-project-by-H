@@ -778,7 +778,7 @@ else:
         with st.sidebar.expander("📜 RPA 진행 로그", expanded=False):
             log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agent_log.txt")
             try:
-                with open(log_path, "r", encoding="utf-8") as f:
+                with open(log_path, "r", encoding="utf-8-sig") as f:
                     logs = f.readlines()
                 if logs:
                     st.code("".join(logs[-15:]), language="log")
