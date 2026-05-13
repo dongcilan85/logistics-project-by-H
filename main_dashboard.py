@@ -732,15 +732,15 @@ def login_screen():
 
 
 if st.session_state.role is None:
-    st.navigation([st.Page(login_screen, title="로그인", icon="🔒")]).run()
+    st.navigation([st.Page(login_screen, title="로그인", icon="🔒", url_path="login")]).run()
 else:
     # 💡 메뉴 통합: 생산 예측과 계획 관리를 하나로 합침
-    admin_main = st.Page(show_admin_dashboard, title="통합 대시보드", icon="📊")
-    plan_mgmt_page = st.Page("pages/planning_mgmt.py", title="생산 계획 관리", icon="📅") 
-    cat_page = st.Page("pages/category_mgmt.py", title="카테고리 관리", icon="📁")
-    site_page = st.Page("pages/field_input.py", title="현장 기록", icon="🚩")
-    warehouse_page = st.Page("pages/warehouse_mgmt.py", title="창고 현황", icon="📦")
-    warehouse_settings_page = st.Page("pages/warehouse_settings.py", title="창고 환경설정", icon="⚙️")
+    admin_main = st.Page(show_admin_dashboard, title="통합 대시보드", icon="📊", url_path="dashboard")
+    plan_mgmt_page = st.Page("pages/planning_mgmt.py", title="생산 계획 관리", icon="📅", url_path="planning")
+    cat_page = st.Page("pages/category_mgmt.py", title="카테고리 관리", icon="📁", url_path="category")
+    site_page = st.Page("pages/field_input.py", title="현장 기록", icon="🚩", url_path="field")
+    warehouse_page = st.Page("pages/warehouse_mgmt.py", title="창고 현황", icon="📦", url_path="warehouse")
+    warehouse_settings_page = st.Page("pages/warehouse_settings.py", title="창고 환경설정", icon="⚙️", url_path="warehouse_settings")
     
     # --- [사이드바: RPA 제어 섹션 - Admin 전용] ---
     if st.session_state.role == "Admin":
