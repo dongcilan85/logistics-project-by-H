@@ -742,53 +742,54 @@ else:
     warehouse_page = st.Page("pages/warehouse_mgmt.py", title="창고 현황", icon="📦")
     warehouse_settings_page = st.Page("pages/warehouse_settings.py", title="창고 환경설정", icon="⚙️")
     
-    # --- [사이드바: RPA 제어 섹션 복구] ---
-    st.sidebar.divider()
-    st.sidebar.subheader("🤖 RPA 에이전트 제어")
-    
-    rpa_status = get_config("rpa_status", "idle")
-    rpa_msg = get_config("rpa_message", "대기 중")
-    status_icon = "🟢" if rpa_status == "idle" else "🟡" if rpa_status == "pending" else "🔵" if rpa_status == "running" else "🔴"
-    st.sidebar.info(f"{status_icon} **상태**: {rpa_msg}")
-    
-    if rpa_status in ("idle", "completed", "failed"):
-        if st.sidebar.button("🚀 전체 데이터 수집", use_container_width=True, type="primary"):
-            set_config("rpa_trigger", "all")
-            set_config("rpa_status", "pending")
-            st.sidebar.success("전체 수집 명령 전달됨!"); time.sleep(1); st.rerun()
-            
-        st.sidebar.write("**개별 작업 선택:**")
-        sc1, sc2 = st.sidebar.columns(2)
-        if sc1.button("📦 품목 Master", use_container_width=True):
-            set_config("rpa_trigger", "item_master")
-            set_config("rpa_status", "pending"); st.rerun()
-        if sc2.button("📊 창고재고", use_container_width=True):
-            set_config("rpa_trigger", "inventory_balance")
-            set_config("rpa_status", "pending"); st.rerun()
-            
-        if st.sidebar.button("🔄 유효기간(순회) 수집", use_container_width=True):
-            set_config("rpa_trigger", "warehouse_inventory")
-            set_config("rpa_status", "pending"); st.rerun()
-    else:
-        if st.sidebar.button("🛑 수집 중단 요청", use_container_width=True):
-            set_config("rpa_trigger", "idle")
-            set_config("rpa_status", "idle"); st.rerun()
+    # --- [사이드바: RPA 제어 섹션 - Admin 전용] ---
+    if st.session_state.role == "Admin":
+        st.sidebar.divider()
+        st.sidebar.subheader("🤖 RPA 에이전트 제어")
 
-    with st.sidebar.expander("📜 RPA 진행 로그", expanded=False):
-        log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agent_log.txt")
-        try:
-            with open(log_path, "r", encoding="utf-8") as f:
-                logs = f.readlines()
-            if logs:
-                st.code("".join(logs[-15:]), language="log")
-            else:
-                st.info("로그가 없습니다.")
-        except FileNotFoundError:
-            st.info("로그 파일이 없습니다.")
-        except Exception:
-            st.error("로그 파일을 읽을 수 없습니다.")
-        if st.sidebar.button("🔄 로그 새로고침", key="refresh_log", use_container_width=True):
-            st.rerun()
+        rpa_status = get_config("rpa_status", "idle")
+        rpa_msg = get_config("rpa_message", "대기 중")
+        status_icon = "🟢" if rpa_status == "idle" else "🟡" if rpa_status == "pending" else "🔵" if rpa_status == "running" else "🔴"
+        st.sidebar.info(f"{status_icon} **상태**: {rpa_msg}")
+
+        if rpa_status in ("idle", "completed", "failed"):
+            if st.sidebar.button("🚀 전체 데이터 수집", use_container_width=True, type="primary"):
+                set_config("rpa_trigger", "all")
+                set_config("rpa_status", "pending")
+                st.sidebar.success("전체 수집 명령 전달됨!"); time.sleep(1); st.rerun()
+
+            st.sidebar.write("**개별 작업 선택:**")
+            sc1, sc2 = st.sidebar.columns(2)
+            if sc1.button("📦 품목 Master", use_container_width=True):
+                set_config("rpa_trigger", "item_master")
+                set_config("rpa_status", "pending"); st.rerun()
+            if sc2.button("📊 창고재고", use_container_width=True):
+                set_config("rpa_trigger", "inventory_balance")
+                set_config("rpa_status", "pending"); st.rerun()
+
+            if st.sidebar.button("🔄 유효기간(순회) 수집", use_container_width=True):
+                set_config("rpa_trigger", "warehouse_inventory")
+                set_config("rpa_status", "pending"); st.rerun()
+        else:
+            if st.sidebar.button("🛑 수집 중단 요청", use_container_width=True):
+                set_config("rpa_trigger", "idle")
+                set_config("rpa_status", "idle"); st.rerun()
+
+        with st.sidebar.expander("📜 RPA 진행 로그", expanded=False):
+            log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agent_log.txt")
+            try:
+                with open(log_path, "r", encoding="utf-8") as f:
+                    logs = f.readlines()
+                if logs:
+                    st.code("".join(logs[-15:]), language="log")
+                else:
+                    st.info("로그가 없습니다.")
+            except FileNotFoundError:
+                st.info("로그 파일이 없습니다.")
+            except Exception:
+                st.error("로그 파일을 읽을 수 없습니다.")
+            if st.sidebar.button("🔄 로그 새로고침", key="refresh_log", use_container_width=True):
+                st.rerun()
 
     st.sidebar.divider()
     sc1, sc2 = st.sidebar.columns(2)
