@@ -370,7 +370,8 @@ def process_warehouse_inventory_files(dl_path, warehouses):
                 continue
 
             df = df[df[code_col].notna()]
-            df = df[~df[code_col].astype(str).str.contains('합계|총계|소계|Total', na=False)]
+            # 품목코드가 영문/숫자 식별자가 아닌 소계 행 제외 ('합계', '소계', '... 계' 등)
+            df = df[~df[code_col].astype(str).str.contains(r'합계|총계|소계|Total|\s계$', na=False, regex=True)]
 
             row_count = 0
             for _, row in df.iterrows():
@@ -380,11 +381,21 @@ def process_warehouse_inventory_files(dl_path, warehouses):
 
                 exp_date = None
                 if exp_code_col:
-                    exp_raw = str(row.get(exp_code_col, '')).strip()
-                    if exp_raw and exp_raw.lower() not in ('nan', 'none', ''):
+                    exp_val = row.get(exp_code_col)
+                    if pd.notna(exp_val):
+                        # float이면 정수 변환 후 문자열화 (20281202.0 → '20281202')
+                        if isinstance(exp_val, float):
+                            try:
+                                exp_raw = str(int(exp_val))
+                            except (ValueError, OverflowError):
+                                exp_raw = ''
+                        else:
+                            exp_raw = str(exp_val).strip()
                         nums = re.sub(r'[^0-9]', '', exp_raw)
                         if len(nums) == 8:
                             exp_date = f"{nums[:4]}-{nums[4:6]}-{nums[6:8]}"
+                        elif len(nums) == 6:
+                            exp_date = f"20{nums[:2]}-{nums[2:4]}-{nums[4:6]}"
 
                 qty_val = pd.to_numeric(row.get(qty_col, 0), errors='coerce')
                 if pd.isna(qty_val):
