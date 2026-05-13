@@ -74,35 +74,46 @@ def db_set(key, value):
     except: pass
 
 # --- 핵심 RPA 실행 ---
-def execute_rpa():
-    log("🚀 [RPA 시작] 트리거 감지되었습니다. (업데이트 시각: 17:23)")
+TASK_LABELS = {
+    "all": "전체 데이터 수집",
+    "inventory_balance": "창고별재고현황 수집",
+    "warehouse_inventory": "관리항목별재고현황(유효기간) 순회 수집",
+    "item_master": "품목 마스터 수집",
+}
+
+def execute_rpa(task="all"):
+    if task not in TASK_LABELS:
+        task = "all"
+    task_label = TASK_LABELS[task]
+
+    log(f"🚀 [RPA 시작] '{task_label}' 작업을 시작합니다.")
     db_set("rpa_status", "running")
-    db_set("rpa_message", "작업 준비 중...")
+    db_set("rpa_message", f"{task_label} 준비 중...")
 
     try:
         log("🔍 [1단계] 이카운트 설정값 읽는 중...")
         com_code  = db_get("ecount_com_code")
         user_id   = db_get("ecount_user_id")
         user_pw   = db_get("ecount_user_pw")
-        
+
         log(f"   - 회사코드: {com_code[:2]}***")
         log(f"   - 아이디: {user_id[:2]}***")
-        
+
         if com_code in ("NULL", "ERROR") or user_id in ("NULL", "ERROR"):
             raise Exception("이카운트 계정 정보가 DB에 없습니다. 환경설정에서 입력해 주세요.")
 
         log("🌐 [2단계] 브라우저 드라이버 설정 중...")
         from utils.ecount_rpa import EcountRPA
-        
+
         # 다운로드 경로 및 브라우저 모드 설정 (DB에서 읽기)
         dl_path = db_get("ecount_download_path")
         headless_val = db_get("ecount_headless")
         is_headless = True if str(headless_val).lower() == 'true' else False
-        
+
         if dl_path in ("NULL", "ERROR", ""):
-            dl_path = r"C:\Users\admin\Desktop\Ecount_Exports" 
-            
-        if not os.path.exists(dl_path): 
+            dl_path = r"C:\Users\admin\Desktop\Ecount_Exports"
+
+        if not os.path.exists(dl_path):
             try: os.makedirs(dl_path, exist_ok=True)
             except: pass
 
@@ -113,48 +124,50 @@ def execute_rpa():
             db_set("rpa_message", "이카운트 로그인 시도 중...")
             log("[4단계] 이카운트 로그인 시도 중...")
             success, msg = rpa.login()
-            
+
             if not success:
                 raise Exception(f"로그인 실패: {msg}")
-            
-            log("[5단계] 로그인 성공! 데이터 수집을 시작합니다.")
-            
-            # 5-1. 창고별재고현황
-            db_set("rpa_message", "창고별재고현황 수집 중...")
-            rpa.get_inventory_balance()
-            
-            # 수집된 엑셀 데이터를 DB에 실시간 반영
-            log("📊 [5-1-1] 수집된 엑셀 데이터를 DB에 동기화 중...")
-            process_inventory_excel(dl_path)
 
-            # 5-2. 관리항목별재고현황 (순회 수집)
-            log("🔄 [6단계] 관리항목별재고현황 순회 수집 시작...")
-            db_set("rpa_message", "창고별 순회 수집 중...")
-            
-            wh_url = f"{SUPABASE_URL}/rest/v1/warehouse_codes?select=warehouse_code,warehouse_name"
-            wh_resp = requests.get(wh_url, headers=HEADERS, timeout=5)
-            warehouses = wh_resp.json()
-            
-            if warehouses:
-                log(f"   - 대상 창고: {len(warehouses)}개")
-                success_iter, msg_iter = rpa.get_item_inventory_by_warehouse(warehouses)
-                log(f"   - 결과: {msg_iter}")
-            else:
-                log("⚠️ 등록된 창고 코드가 없어 순회 수집을 건너뜁니다.")
+            log(f"[5단계] 로그인 성공! '{task_label}'을(를) 시작합니다.")
 
-            # 5-3. 품목 마스터 수집 및 동기화
-            log("📦 [7단계] 품목 마스터(품목등록) 수집 시작...")
-            db_set("rpa_message", "품목 마스터 수집 중...")
-            success_item, item_file = rpa.get_item_master_excel()
-            if success_item:
-                log("📊 [7-1] 품목 마스터 DB 동기화 중...")
-                process_item_master_excel(dl_path)
-            else:
-                log(f"⚠️ 품목 마스터 수집 건너뜀: {item_file}")
+            # 작업 1: 창고별재고현황 (inventory_balance)
+            if task in ("all", "inventory_balance"):
+                log("📊 [작업] 창고별재고현황 수집 시작...")
+                db_set("rpa_message", "창고별재고현황 수집 중...")
+                rpa.get_inventory_balance()
+                log("📊 [동기화] 창고별재고현황 엑셀 → DB 업로드 중...")
+                process_inventory_excel(dl_path)
+
+            # 작업 2: 관리항목별재고현황 (warehouse_inventory) — 유효기간 순회
+            if task in ("all", "warehouse_inventory"):
+                log("🔄 [작업] 관리항목별재고현황(유효기간) 순회 수집 시작...")
+                db_set("rpa_message", "창고별 순회 수집 중...")
+
+                wh_url = f"{SUPABASE_URL}/rest/v1/warehouse_codes?select=warehouse_code,warehouse_name"
+                wh_resp = requests.get(wh_url, headers=HEADERS, timeout=5)
+                warehouses = wh_resp.json()
+
+                if warehouses:
+                    log(f"   - 대상 창고: {len(warehouses)}개")
+                    success_iter, msg_iter = rpa.get_item_inventory_by_warehouse(warehouses)
+                    log(f"   - 결과: {msg_iter}")
+                else:
+                    log("⚠️ 등록된 창고 코드가 없어 순회 수집을 건너뜁니다.")
+
+            # 작업 3: 품목 마스터 (item_master)
+            if task in ("all", "item_master"):
+                log("📦 [작업] 품목 마스터(품목등록) 수집 시작...")
+                db_set("rpa_message", "품목 마스터 수집 중...")
+                success_item, item_file = rpa.get_item_master_excel()
+                if success_item:
+                    log("📊 [동기화] 품목 마스터 → DB 업로드 중...")
+                    process_item_master_excel(dl_path)
+                else:
+                    log(f"⚠️ 품목 마스터 수집 건너뜀: {item_file}")
 
             db_set("rpa_status", "completed")
-            db_set("rpa_message", "모든 데이터 수집 완료")
-            log("[완료] 모든 작업이 성공적으로 끝났습니다.")
+            db_set("rpa_message", f"{task_label} 완료")
+            log(f"[완료] '{task_label}' 작업이 성공적으로 끝났습니다.")
 
         finally:
             log("브라우저를 종료합니다.")
@@ -373,8 +386,8 @@ def main():
             
             trigger = db_get("rpa_trigger")
             if trigger not in ("idle", "NULL", "ERROR", ""):
-                log("🚀 [트리거] 대시보드에서 수집 요청이 들어왔습니다.")
-                execute_rpa()
+                log(f"🚀 [트리거] 대시보드에서 수집 요청이 들어왔습니다. (작업: {trigger})")
+                execute_rpa(task=trigger)
             
             now = datetime.now(KST)
             current_minute = now.strftime("%H:%M")
@@ -387,7 +400,7 @@ def main():
                     run_id = f"{now.strftime('%Y-%m-%d')} {current_minute}"
                     if last_run_id != run_id:
                         log(f"⏰ [스케줄] 지정된 시각({current_minute})이 되어 자동 수집을 시작합니다.")
-                        execute_rpa()
+                        execute_rpa(task="all")
                         last_run_id = run_id
             
             time.sleep(10) 
