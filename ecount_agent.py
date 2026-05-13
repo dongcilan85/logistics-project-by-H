@@ -134,9 +134,12 @@ def execute_rpa(task="all"):
             if task in ("all", "inventory_balance"):
                 log("📊 [작업] 창고별재고현황 수집 시작...")
                 db_set("rpa_message", "창고별재고현황 수집 중...")
-                rpa.get_inventory_balance()
-                log("📊 [동기화] 창고별재고현황 엑셀 → DB 업로드 중...")
-                process_inventory_excel(dl_path)
+                ok_inv, msg_inv = rpa.get_inventory_balance()
+                if ok_inv:
+                    log("📊 [동기화] 창고별재고현황 엑셀 → DB 업로드 중...")
+                    process_inventory_excel(dl_path)
+                else:
+                    log(f"⚠️ 창고별재고현황 수집 실패 - DB 동기화 건너뜀: {msg_inv}", level="warning")
 
             # 작업 2: 관리항목별재고현황 (warehouse_inventory) — 유효기간 순회
             if task in ("all", "warehouse_inventory"):

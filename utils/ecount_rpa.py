@@ -6,6 +6,7 @@ Selenium 버전은 utils/ecount_rpa_selenium.py 에 백업되어 있음.
 """
 import os
 import time
+import logging
 from datetime import datetime
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
@@ -24,7 +25,11 @@ class EcountRPA:
     # ----- 내부 유틸 -----
 
     def _log(self, msg):
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+        # 에이전트의 logging 시스템과 통합 (agent_log.txt 에도 기록)
+        try:
+            logging.info(msg)
+        except Exception:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
 
     def _setup_browser(self):
         base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -74,29 +79,25 @@ class EcountRPA:
     def _click_excel_button(self):
         """모든 프레임에서 Excel 버튼 탐색·클릭"""
         selectors = [
-            "text=Excel",
-            "button:has-text('Excel')",
             "#btnExcel",
+            "button:has-text('Excel')",
+            "a:has-text('Excel')",
+            "img[alt*='Excel' i]",
+            "text=/^Excel$/",
         ]
-        # 메인 페이지 먼저
-        for sel in selectors:
-            try:
-                loc = self.page.locator(sel).first
-                if loc.is_visible(timeout=500):
-                    loc.click()
-                    return True
-            except Exception:
-                continue
-        # 모든 frame 순회
-        for f in self.page.frames:
+        # 메인 페이지 + 모든 frame 순회 (메인이 가장 먼저)
+        targets = [("main", self.page)] + [(f.name or f.url[-40:], f) for f in self.page.frames if f is not self.page.main_frame]
+        for tag, target in targets:
             for sel in selectors:
                 try:
-                    loc = f.locator(sel).first
-                    if loc.is_visible(timeout=500):
-                        loc.click()
+                    loc = target.locator(sel).first
+                    if loc.count() > 0 and loc.is_visible(timeout=200):
+                        self._log(f"  🎯 Excel 버튼 발견: frame={tag}, selector={sel}")
+                        loc.click(timeout=3000)
                         return True
                 except Exception:
                     continue
+        self._log(f"  ❌ Excel 버튼을 어떤 frame에서도 찾지 못함 (총 frame: {len(self.page.frames)})")
         return False
 
     def _download_excel(self, target_filename):
@@ -198,6 +199,7 @@ class EcountRPA:
             if ok:
                 self._log(f"✅ 수집 성공: {msg}")
                 return True, f"수집 완료: {msg}"
+            self._log(f"❌ 다운로드 실패: {msg}")
             return False, msg
 
         except Exception as e:
@@ -286,6 +288,7 @@ class EcountRPA:
             if ok:
                 self._log(f"✅ 품목 마스터 다운로드 완료: {msg}")
                 return True, msg
+            self._log(f"❌ 다운로드 실패: {msg}")
             return False, msg
 
         except Exception as e:
