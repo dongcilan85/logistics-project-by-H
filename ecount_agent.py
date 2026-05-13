@@ -13,21 +13,30 @@ import logging
 from datetime import datetime, timezone, timedelta
 
 # Fix CP949 encoding issue on Windows console
-sys.stdout.reconfigure(encoding='utf-8')
-sys.stderr.reconfigure(encoding='utf-8')
+try:
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+except Exception:
+    pass
 
 # --- ?쒓컙? ?ㅼ젙 (?쒖슱/KST) ---
 KST = timezone(timedelta(hours=9))
 
 # --- 濡쒓렇 ?ㅼ젙 ---
 LOG_FILE = os.path.join(os.path.dirname(__file__), "agent_log.txt")
+_handlers = [logging.FileHandler(LOG_FILE, encoding='utf-8')]
+if sys.stdout is not None:
+    _stream_handler = logging.StreamHandler(sys.stdout)
+    _stream_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+    try:
+        # Windows CP949 콘솔에서 이모지/한글 깨짐 방지
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+    _handlers.append(_stream_handler)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
-    handlers=[
-        logging.FileHandler(LOG_FILE, encoding='utf-8'),
-        logging.StreamHandler(sys.stdout)
-    ]
+    handlers=_handlers
 )
 
 def log(msg, level="info"):
