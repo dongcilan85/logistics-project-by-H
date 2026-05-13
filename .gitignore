@@ -3,6 +3,7 @@ logistics_logs.db
 .streamlit/secrets.toml
 agent_log.txt
 chrome_profile/
+chrome_profile_pw/
 __pycache__/
 *.pyc
 Ecount_stocks/

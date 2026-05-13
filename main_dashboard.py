@@ -749,6 +749,29 @@ else:
 
         rpa_status = get_config("rpa_status", "idle")
         rpa_msg = get_config("rpa_message", "대기 중")
+
+        # 하트비트 기반 자동 복구: 에이전트가 2분 이상 무응답이면 상태 리셋
+        if rpa_status in ("running", "pending"):
+            heartbeat = get_config("agent_heartbeat", "")
+            if heartbeat:
+                try:
+                    hb_time = datetime.fromisoformat(heartbeat)
+                    now = datetime.now(KST)
+                    if (now - hb_time).total_seconds() > 120:
+                        set_config("rpa_status", "failed")
+                        set_config("rpa_trigger", "idle")
+                        rpa_status = "failed"
+                        rpa_msg = "⚠️ 에이전트 응답 없음 (자동 복구)"
+                except Exception:
+                    pass
+
+        # 완료/실패 상태면 idle로 자동 복귀 (트리거 버튼 즉시 활성화)
+        if rpa_status in ("completed", "failed"):
+            last_msg = rpa_msg  # 마지막 메시지 보존
+            set_config("rpa_status", "idle")
+            rpa_status = "idle"
+            rpa_msg = f"✅ {last_msg}" if "실패" not in last_msg and "에러" not in last_msg else f"⚠️ {last_msg}"
+
         status_icon = "🟢" if rpa_status == "idle" else "🟡" if rpa_status == "pending" else "🔵" if rpa_status == "running" else "🔴"
         st.sidebar.info(f"{status_icon} **상태**: {rpa_msg}")
 

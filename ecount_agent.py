@@ -11,6 +11,7 @@ import requests
 import pandas as pd
 import logging
 from datetime import datetime, timezone, timedelta
+from utils.ecount_rpa import EcountRPA
 
 # Windows CP949 콘솔에서 이모지/한글 출력 시 크래시 방지
 try:
@@ -103,7 +104,6 @@ def execute_rpa(task="all"):
             raise Exception("이카운트 계정 정보가 DB에 없습니다. 환경설정에서 입력해 주세요.")
 
         log("🌐 [2단계] 브라우저 드라이버 설정 중...")
-        from utils.ecount_rpa import EcountRPA
 
         # 다운로드 경로 및 브라우저 모드 설정 (DB에서 읽기)
         dl_path = db_get("ecount_download_path")
@@ -111,7 +111,7 @@ def execute_rpa(task="all"):
         is_headless = True if str(headless_val).lower() == 'true' else False
 
         if dl_path in ("NULL", "ERROR", ""):
-            dl_path = r"C:\Users\admin\Desktop\Ecount_Exports"
+            dl_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Ecount_stocks")
 
         if not os.path.exists(dl_path):
             try: os.makedirs(dl_path, exist_ok=True)
@@ -573,10 +573,13 @@ def process_item_master_excel(dl_path):
             code = str(row.get(code_col, '')).strip()
             if not code or code.lower() in ('nan', 'none'): continue
             
+            cat_val = str(row.get(cat_col, '일반')).strip()
+            cat_val = cat_val.replace('[', '').replace(']', '').strip()
+            
             upload_data.append({
                 "item_code": code,
                 "item_name": str(row.get(name_col, '')).strip(),
-                "category": str(row.get(cat_col, '일반')).strip()
+                "category": cat_val
             })
         
         if upload_data:
@@ -621,12 +624,12 @@ def main():
                         execute_rpa(task="all")
                         last_run_id = run_id
             
-            time.sleep(10) 
+            time.sleep(2) 
         except KeyboardInterrupt:
             break
         except Exception as e:
             log(f"⚠️ 루프 오류: {e}")
-            time.sleep(10)
+            time.sleep(2)
 
 if __name__ == "__main__":
     main()

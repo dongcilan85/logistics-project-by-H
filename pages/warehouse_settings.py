@@ -156,7 +156,7 @@ try:
         column_config={
             "item_code": st.column_config.TextColumn("품목 코드", required=True),
             "item_name": st.column_config.TextColumn("품목 명칭"),
-            "category": st.column_config.SelectboxColumn("카테고리", options=["일반", "부자재", "무형상품"]),
+            "category": st.column_config.TextColumn("카테고리"),
             "safety_stock": st.column_config.NumberColumn("안전재고"),
             "excess_threshold": st.column_config.NumberColumn("과잉기준")
         },
