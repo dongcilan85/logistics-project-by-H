@@ -389,6 +389,24 @@ def process_warehouse_inventory_files(dl_path, warehouses):
     mmdd = datetime.now().strftime("%m%d")
 
     price_map = _build_price_map(dl_path)
+
+    # item_master에서 (품목코드 → 카테고리) 맵 로드
+    category_map = {}
+    try:
+        r = requests.get(
+            f"{SUPABASE_URL}/rest/v1/item_master?select=item_code,category",
+            headers=HEADERS, timeout=10
+        )
+        if r.status_code == 200:
+            for row in r.json():
+                code = row.get('item_code')
+                cat = row.get('category')
+                if code and cat:
+                    category_map[str(code).strip()] = str(cat).strip()
+            log(f"  📋 카테고리 맵 로드: {len(category_map)}건")
+    except Exception as e:
+        log(f"  ⚠️ 카테고리 맵 로드 실패: {e}", level="warning")
+
     all_upload_data = []
     processed_warehouses = []
 
@@ -471,6 +489,7 @@ def process_warehouse_inventory_files(dl_path, warehouses):
                     "warehouse_name": wh_name,
                     "item_code": code,
                     "item_name_spec": str(row.get(name_col, '')).strip() if name_col else '',
+                    "category": category_map.get(code),
                     "expiration_date": exp_date,
                     "stock_qty": stock_qty_f,
                     "unit_price": unit_price,
