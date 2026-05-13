@@ -138,65 +138,70 @@ class EcountRPA:
 
     # ───────── Playwright 네이티브: Excel 다운로드 ─────────
 
-    def _click_excel_button(self):
-        """작업 iframe부터 Excel 버튼 탐색·클릭.
+    def _collect_excel_candidates(self):
+        """모든 frame에서 Excel 버튼 후보 수집 (iframe 우선, 메인 최후).
 
-        주의: page 전역에서 get_by_role 검색하면 메인 페이지의 잘못된 'Excel' 텍스트
-        (사이드 메뉴 등)를 잡아 다운로드가 트리거되지 않음.
-        반드시 iframe 우선, 메인은 최후 fallback.
+        각 후보는 (label, locator) 튜플. 호출자가 차례로 클릭 시도하여 다운로드 이벤트
+        발생하는 것을 찾는다.
         """
         selectors = [
-            "#btnExcel",
-            "button:has-text('Excel')",
-            "a:has-text('Excel')",
-            "input[value*='Excel' i]",
-            "img[alt*='Excel' i]",
-            "img[src*='excel' i]",
+            ("role:Excel", lambda f: f.get_by_role("button", name="Excel")),
+            ("#btnExcel", lambda f: f.locator("#btnExcel")),
+            ("button:has-text('Excel')", lambda f: f.locator("button:has-text('Excel')")),
+            ("a:has-text('Excel')", lambda f: f.locator("a:has-text('Excel')")),
+            ("input[value*='Excel']", lambda f: f.locator("input[value*='Excel' i]")),
+            ("img[alt*='Excel']", lambda f: f.locator("img[alt*='Excel' i]")),
+            ("img[src*='excel']", lambda f: f.locator("img[src*='excel' i]")),
         ]
-        # iframe(역순: 마지막 = 가장 깊은) 우선, 메인 frame 마지막
         non_main = [f for f in self.page.frames
                     if f is not self.page.main_frame and not f.is_detached()]
         ordered = list(reversed(non_main)) + [self.page.main_frame]
 
+        candidates = []
         for frame in ordered:
             tag = frame.name or ("main" if frame is self.page.main_frame else "iframe")
-            # 1차: role 기반 (Playwright 권장)
-            try:
-                btn = frame.get_by_role("button", name="Excel")
-                if btn.count() > 0:
-                    self._log(f"  🎯 Excel 버튼 발견 (role, frame={tag})")
-                    btn.first.click(timeout=3000, force=True)
-                    return True
-            except Exception:
-                pass
-            # 2차: CSS selectors
-            for sel in selectors:
+            for sel_name, sel_fn in selectors:
                 try:
-                    loc = frame.locator(sel).first
+                    loc = sel_fn(frame).first
                     if loc.count() > 0:
-                        self._log(f"  🎯 Excel 버튼 발견 (frame={tag}, selector={sel})")
-                        loc.click(timeout=3000, force=True)
-                        return True
+                        candidates.append((f"frame={tag}, {sel_name}", loc))
                 except Exception:
                     continue
-        self._log(f"  ❌ Excel 버튼을 어떤 frame에서도 찾지 못함 (iframe: {len(non_main)}개)")
-        return False
+        return candidates
 
     def _download_excel(self, target_filename):
-        """엑셀 버튼 클릭 → 다운로드 완료 후 지정 파일명으로 저장.
-        
-        1차: page.expect_download() (Playwright 공식 패턴)
-        2차: 다운로드 폴더 파일 감시 (폴백)
+        """모든 Excel 버튼 후보를 순차 클릭하며 다운로드 이벤트 발생하는 것을 찾는다.
+
+        각 후보를 6초 타임아웃으로 시도 - 가짜 버튼이면 빠르게 다음 후보로 넘어감.
+        후보 모두 실패 시 폴더 감시 폴백.
         """
         target_path = os.path.abspath(os.path.join(self.download_path, target_filename))
         before_files = set(glob.glob(os.path.join(self.download_path, "*.xlsx")))
 
-        # 1차: Playwright expect_download
-        try:
-            with self.page.expect_download(timeout=30000) as dl_info:
-                if not self._click_excel_button():
-                    return False, "Excel 버튼 탐색 실패"
-            download = dl_info.value
+        candidates = self._collect_excel_candidates()
+        if not candidates:
+            self._log("  ❌ Excel 버튼 후보를 어떤 frame에서도 찾지 못함")
+            return False, "Excel 버튼 탐색 실패"
+
+        self._log(f"  🔍 Excel 버튼 후보 {len(candidates)}개 발견 - 순차 클릭 시도")
+
+        download = None
+        for idx, (label, loc) in enumerate(candidates, 1):
+            try:
+                with self.page.expect_download(timeout=6000) as dl_info:
+                    self._log(f"  🎯 [{idx}/{len(candidates)}] {label} 클릭 시도")
+                    loc.click(timeout=3000, force=True)
+                download = dl_info.value
+                self._log(f"  ✅ 다운로드 이벤트 수신 ({label})")
+                break
+            except PWTimeout:
+                self._log(f"  ⏭️ [{idx}/{len(candidates)}] {label} - 다운로드 미발생, 다음 후보")
+                continue
+            except Exception as e:
+                self._log(f"  ⏭️ [{idx}/{len(candidates)}] {label} - 클릭 실패({e}), 다음 후보")
+                continue
+
+        if download is not None:
             self._log(f"  ⬇️ 다운로드 수신: '{download.suggested_filename}'")
             if os.path.exists(target_path):
                 os.remove(target_path)
@@ -206,13 +211,9 @@ class EcountRPA:
                 return True, target_filename
             return False, f"저장 실패: {target_path}"
 
-        except PWTimeout:
-            self._log("  ⚠️ expect_download 타임아웃 - 폴백 시도")
-        except Exception as e:
-            self._log(f"  ⚠️ expect_download 실패({e}) - 폴백 시도")
-
-        # 2차 폴백: 다운로드 폴더 감시
-        for _ in range(15):
+        # 모든 후보 실패 → 폴더 감시 폴백 (마지막 클릭이 비동기로 떨어졌을 수 있음)
+        self._log("  ⚠️ 모든 후보에서 다운로드 미발생 - 폴더 감시 폴백")
+        for _ in range(10):
             time.sleep(2)
             new_files = set(glob.glob(os.path.join(self.download_path, "*.xlsx"))) - before_files
             if new_files:
@@ -225,7 +226,7 @@ class EcountRPA:
                 if os.path.exists(target_path) and os.path.getsize(target_path) > 0:
                     self._log(f"  💾 저장 완료: {os.path.getsize(target_path):,} bytes")
                     return True, target_filename
-        return False, "다운로드 타임아웃 (이벤트 미수신 + 폴백 실패)"
+        return False, "모든 후보 클릭했으나 다운로드 미발생"
     # ───────── 출력구분 클릭 ─────────
 
     def _click_output_type(self, frame, label="(종)"):
