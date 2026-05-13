@@ -67,9 +67,8 @@ class EcountRPA:
             box.wait_for(state="visible", timeout=10000)
         box.click()
         box.fill("")
-        for ch in keyword:
-            box.type(ch, delay=80)
-        time.sleep(0.4)
+        # 한 번에 입력 (한 글자씩 타이핑 불필요)
+        box.type(keyword, delay=20)
         box.press("Enter")
 
     def _click_excel_button(self):
@@ -101,20 +100,27 @@ class EcountRPA:
         return False
 
     def _download_excel(self, target_filename):
-        """엑셀 버튼 클릭 → 다운로드 완료 후 지정 파일명으로 저장"""
+        """엑셀 버튼 클릭 → 다운로드 완료 후 지정 파일명으로 저장.
+
+        iframe 내부 다운로드도 잡기 위해 context 레벨의 expect_event('download') 사용.
+        """
         try:
-            with self.page.expect_download(timeout=30000) as dl_info:
+            with self._context.expect_event("download", timeout=30000) as dl_info:
                 if not self._click_excel_button():
-                    self._log("❌ Excel 버튼을 찾지 못함")
+                    self._log("  ❌ Excel 버튼을 찾지 못함")
                     return False, "Excel 버튼 탐색 실패"
             download = dl_info.value
-            target_path = os.path.join(self.download_path, target_filename)
+            target_path = os.path.abspath(os.path.join(self.download_path, target_filename))
+            self._log(f"  ⬇️ 다운로드 수신: '{download.suggested_filename}' → '{target_path}'")
             if os.path.exists(target_path):
                 os.remove(target_path)
             download.save_as(target_path)
-            return True, target_filename
+            if os.path.exists(target_path) and os.path.getsize(target_path) > 0:
+                self._log(f"  💾 저장 완료: {os.path.getsize(target_path):,} bytes")
+                return True, target_filename
+            return False, f"저장 실패 (파일 없음 또는 0바이트): {target_path}"
         except PWTimeout:
-            return False, "다운로드 타임아웃"
+            return False, "다운로드 타임아웃 (이벤트 미수신)"
         except Exception as e:
             return False, f"다운로드 오류: {e}"
 
@@ -169,7 +175,7 @@ class EcountRPA:
             self._log("🔍 '창고별재고현황' 메뉴 검색 및 이동...")
             self._search_menu("창고별재고현황")
             self._log("🚀 페이지 로딩 대기...")
-            time.sleep(5)
+            time.sleep(3)
 
             frame = self._work_frame()
             body = frame.locator("body")
@@ -205,7 +211,7 @@ class EcountRPA:
             self._log("🔍 '관리항목별재고현황' 메뉴 검색 및 이동...")
             self._search_menu("관리항목별재고현황")
             self._log("🚀 페이지 로딩 대기...")
-            time.sleep(5)
+            time.sleep(3)
 
             for i, wh in enumerate(warehouses):
                 wh_code = str(wh['warehouse_code']).strip()
@@ -250,14 +256,14 @@ class EcountRPA:
                     time.sleep(1)
                     body.press("F8")
 
-                time.sleep(5)
+                time.sleep(3)
                 self._log(f"  📥 Excel 다운로드 시도...")
                 ok, msg = self._download_excel(f"{mmdd}_{wh_name}(1).xlsx")
                 if ok:
                     self._log(f"  ✅ 완료: {msg}")
                 else:
                     self._log(f"  ⚠️ {wh_name}: {msg}")
-                time.sleep(1.5)
+                time.sleep(1)
 
             self._log("🎉 모든 창고 수집 완료")
             return True, f"{len(warehouses)}개 창고 수집 완료"
@@ -273,7 +279,7 @@ class EcountRPA:
             self._log("🔍 '품목등록' 메뉴 검색 및 이동...")
             self._search_menu("품목등록")
             self._log("🚀 페이지 로딩 대기...")
-            time.sleep(5)
+            time.sleep(3)
 
             self._log("📥 Excel 다운로드 중...")
             ok, msg = self._download_excel(f"{mmdd}_품목마스터(1).xlsx")
