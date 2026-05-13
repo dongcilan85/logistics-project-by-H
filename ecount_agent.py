@@ -1,7 +1,7 @@
 """
 =============================================================
- IWP Ecount RPA Agent v4 (?곸꽭 ?붾쾭洹?紐⑤뱶)
- - ?④퀎蹂??ㅽ뻾 濡쒓렇瑜??곸꽭??異쒕젰
+ IWP Ecount RPA Agent v4 (상세 디버그 모드)
+ - 단계별 실행 로그를 상세히 출력
 =============================================================
 """
 import os
@@ -12,27 +12,24 @@ import pandas as pd
 import logging
 from datetime import datetime, timezone, timedelta
 
-# Fix CP949 encoding issue on Windows console
+# Windows CP949 콘솔에서 이모지/한글 출력 시 크래시 방지
 try:
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 except Exception:
     pass
 
-# --- ?쒓컙? ?ㅼ젙 (?쒖슱/KST) ---
+# --- 시간대 설정 (서울/KST) ---
 KST = timezone(timedelta(hours=9))
 
-# --- 濡쒓렇 ?ㅼ젙 ---
+# --- 로그 설정 ---
 LOG_FILE = os.path.join(os.path.dirname(__file__), "agent_log.txt")
 _handlers = [logging.FileHandler(LOG_FILE, encoding='utf-8-sig')]
 if sys.stdout is not None:
-    _stream_handler = logging.StreamHandler(sys.stdout)
-    _stream_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
     try:
-        # Windows CP949 콘솔에서 이모지/한글 깨짐 방지
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     except Exception:
         pass
-    _handlers.append(_stream_handler)
+    _handlers.append(logging.StreamHandler(sys.stdout))
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
@@ -44,7 +41,7 @@ def log(msg, level="info"):
     elif level == "error": logging.error(msg)
     elif level == "warning": logging.warning(msg)
 
-# --- ?ㅼ젙 濡쒕뱶 ---
+# --- 설정 로드 ---
 try:
     import toml
     secrets_path = os.path.join(os.path.dirname(__file__), ".streamlit", "secrets.toml")
@@ -52,7 +49,7 @@ try:
     SUPABASE_URL = secrets["supabase"]["url"]
     SUPABASE_KEY = secrets["supabase"]["key"]
 except Exception as e:
-    print(f"???ㅼ젙 濡쒕뱶 ?ㅽ뙣: {e}")
+    print(f"❌ 설정 로드 실패: {e}")
     sys.exit(1)
 
 HEADERS = {
@@ -76,28 +73,28 @@ def db_set(key, value):
                       json={"key": key, "value": str(value)}, timeout=5)
     except: pass
 
-# --- ?듭떖 RPA ?ㅽ뻾 ---
+# --- 핵심 RPA 실행 ---
 def execute_rpa():
-    log("?? [RPA ?쒖옉] ?몃━嫄?媛먯??섏뿀?듬땲?? (?낅뜲?댄듃 ?쒓컖: 17:23)")
+    log("🚀 [RPA 시작] 트리거 감지되었습니다. (업데이트 시각: 17:23)")
     db_set("rpa_status", "running")
-    db_set("rpa_message", "?묒뾽 以鍮?以?..")
+    db_set("rpa_message", "작업 준비 중...")
 
     try:
-        log("?뵇 [1?④퀎] ?댁뭅?댄듃 ?ㅼ젙媛??쎈뒗 以?..")
+        log("🔍 [1단계] 이카운트 설정값 읽는 중...")
         com_code  = db_get("ecount_com_code")
         user_id   = db_get("ecount_user_id")
         user_pw   = db_get("ecount_user_pw")
         
-        log(f"   - ?뚯궗肄붾뱶: {com_code[:2]}***")
-        log(f"   - ?꾩씠?? {user_id[:2]}***")
+        log(f"   - 회사코드: {com_code[:2]}***")
+        log(f"   - 아이디: {user_id[:2]}***")
         
         if com_code in ("NULL", "ERROR") or user_id in ("NULL", "ERROR"):
-            raise Exception("?댁뭅?댄듃 怨꾩젙 ?뺣낫媛 DB???놁뒿?덈떎. ?섍꼍?ㅼ젙?먯꽌 ?낅젰??二쇱꽭??")
+            raise Exception("이카운트 계정 정보가 DB에 없습니다. 환경설정에서 입력해 주세요.")
 
-        log("?뙋 [2?④퀎] 釉뚮씪?곗? ?쒕씪?대쾭 ?ㅼ젙 以?..")
+        log("🌐 [2단계] 브라우저 드라이버 설정 중...")
         from utils.ecount_rpa import EcountRPA
         
-        # ?ㅼ슫濡쒕뱶 寃쎈줈 諛?釉뚮씪?곗? 紐⑤뱶 ?ㅼ젙 (DB?먯꽌 ?쎄린)
+        # 다운로드 경로 및 브라우저 모드 설정 (DB에서 읽기)
         dl_path = db_get("ecount_download_path")
         headless_val = db_get("ecount_headless")
         is_headless = True if str(headless_val).lower() == 'true' else False
@@ -109,32 +106,30 @@ def execute_rpa():
             try: os.makedirs(dl_path, exist_ok=True)
             except: pass
 
-        log("?뼢截?[3?④퀎] ?щ＼ 釉뚮씪?곗?瑜??ㅽ뻾?⑸땲??.. (?좎떆留?湲곕떎??二쇱꽭??")
+        log("🖥️ [3단계] 크롬 브라우저를 실행합니다... (잠시만 기다려 주세요)")
         rpa = EcountRPA(com_code, user_id, user_pw, dl_path, headless=is_headless)
 
         try:
-            db_set("rpa_message", "?댁뭅?댄듃 濡쒓렇???쒕룄 以?..")
-            log("[4?④퀎] ?댁뭅?댄듃 濡쒓렇???쒕룄 以?..")
+            db_set("rpa_message", "이카운트 로그인 시도 중...")
+            log("[4단계] 이카운트 로그인 시도 중...")
             success, msg = rpa.login()
             
             if not success:
-                raise Exception(f"濡쒓렇???ㅽ뙣: {msg}")
+                raise Exception(f"로그인 실패: {msg}")
             
-            log("[5?④퀎] 濡쒓렇???깃났! ?곗씠???섏쭛???쒖옉?⑸땲??")
+            log("[5단계] 로그인 성공! 데이터 수집을 시작합니다.")
             
-            # 5-1. 李쎄퀬蹂꾩옱怨좏쁽??            db_set("rpa_message", "李쎄퀬蹂꾩옱怨좏쁽???섏쭛 以?..")
+            # 5-1. 창고별재고현황
+            db_set("rpa_message", "창고별재고현황 수집 중...")
             rpa.get_inventory_balance()
             
-            # ?섏쭛???묒? ?곗씠?곕? DB???ㅼ떆媛?諛섏쁺
-            log("?뱤 [5-1-1] ?섏쭛???묒? ?곗씠?곕? DB???숆린??以?..")
+            # 수집된 엑셀 데이터를 DB에 실시간 반영
+            log("📊 [5-1-1] 수집된 엑셀 데이터를 DB에 동기화 중...")
             process_inventory_excel(dl_path)
 
-            # 5-2. 愿由ы빆紐⑸퀎?ш퀬?꾪솴 (?쒗쉶 ?섏쭛)
-            log("?봽 [6?④퀎] 愿由ы빆紐⑸퀎?ш퀬?꾪솴 ?쒗쉶 ?섏쭛 ?쒖옉...")
-            db_set("rpa_message", "李쎄퀬蹂??쒗쉶 ?섏쭛 以?..")
-            # 5-2. 관리항목별재고현황 (조회 수집)
-            log("📊 [6단계] 관리항목별재고현황 조회 수집 시작...")
-            db_set("rpa_message", "창고별 조회 수집 중..")
+            # 5-2. 관리항목별재고현황 (순회 수집)
+            log("🔄 [6단계] 관리항목별재고현황 순회 수집 시작...")
+            db_set("rpa_message", "창고별 순회 수집 중...")
             
             wh_url = f"{SUPABASE_URL}/rest/v1/warehouse_codes?select=warehouse_code,warehouse_name"
             wh_resp = requests.get(wh_url, headers=HEADERS, timeout=5)
@@ -143,39 +138,44 @@ def execute_rpa():
             if warehouses:
                 log(f"   - 대상 창고: {len(warehouses)}개")
                 success_iter, msg_iter = rpa.get_item_inventory_by_warehouse(warehouses)
-            # 5-3. ?덈ぉ 留덉뒪???섏쭛 諛??숆린??            log("?벀 [7?④퀎] ?덈ぉ 留덉뒪???덈ぉ?깅줉) ?섏쭛 ?쒖옉...")
-            db_set("rpa_message", "?덈ぉ 留덉뒪???섏쭛 以?..")
+                log(f"   - 결과: {msg_iter}")
+            else:
+                log("⚠️ 등록된 창고 코드가 없어 순회 수집을 건너뜁니다.")
+
+            # 5-3. 품목 마스터 수집 및 동기화
+            log("📦 [7단계] 품목 마스터(품목등록) 수집 시작...")
+            db_set("rpa_message", "품목 마스터 수집 중...")
             success_item, item_file = rpa.get_item_master_excel()
             if success_item:
-                log("?뱤 [7-1] ?덈ぉ 留덉뒪??DB ?숆린??以?..")
+                log("📊 [7-1] 품목 마스터 DB 동기화 중...")
                 process_item_master_excel(dl_path)
             else:
-                log(f"?좑툘 ?덈ぉ 留덉뒪???섏쭛 嫄대꼫?: {item_file}")
+                log(f"⚠️ 품목 마스터 수집 건너뜀: {item_file}")
 
             db_set("rpa_status", "completed")
-            db_set("rpa_message", "紐⑤뱺 ?곗씠???섏쭛 ?꾨즺")
-            log("[?꾨즺] 紐⑤뱺 ?묒뾽???깃났?곸쑝濡??앸궗?듬땲??")
+            db_set("rpa_message", "모든 데이터 수집 완료")
+            log("[완료] 모든 작업이 성공적으로 끝났습니다.")
 
         finally:
-            log("釉뚮씪?곗?瑜?醫낅즺?⑸땲??")
+            log("브라우저를 종료합니다.")
             rpa.close()
 
     except Exception as e:
         error_msg = str(e)
         db_set("rpa_status", "failed")
-        db_set("rpa_message", f"??{error_msg}")
-        log(f"??[?먮윭] {error_msg}", level="error")
+        db_set("rpa_message", f"❌ {error_msg}")
+        log(f"❌ [에러] {error_msg}", level="error")
     finally:
         db_set("rpa_trigger", "idle")
         db_set("rpa_updated_at", datetime.now(KST).isoformat())
 
 def process_inventory_excel(dl_path):
-    """수집된 엑셀 파일을 읽어 DB에 업로드"""
+    """수집된 엑셀 파일을 읽어 DB(warehouse_inventory_details)에 업로드"""
     mmdd = datetime.now().strftime("%m%d")
-    target_file = os.path.join(dl_path, f"{mmdd}_李쎄퀬蹂꾩옱怨좏쁽??1).xlsx")
+    target_file = os.path.join(dl_path, f"{mmdd}_창고별재고현황(1).xlsx")
     
     if not os.path.exists(target_file):
-        log(f"?좑툘 ?숆린?뷀븷 ?묒? ?뚯씪???놁뒿?덈떎: {target_file}", level="warning")
+        log(f"⚠️ 동기화할 엑셀 파일이 없습니다: {target_file}", level="warning")
         return
 
     try:
@@ -183,18 +183,18 @@ def process_inventory_excel(dl_path):
         
         header_row_idx = -1
         for i, row in df_raw.iterrows():
-            if any('?덈ぉ肄붾뱶' in str(v) for v in row.values if pd.notna(v)):
+            if any('품목코드' in str(v) for v in row.values if pd.notna(v)):
                 header_row_idx = i
                 break
         
         if header_row_idx == -1:
-            log(f"???묒? ?댁뿉??'?덈ぉ肄붾뱶' ?ㅻ뜑瑜?李얠쓣 ???놁뒿?덈떎: {target_file}", level="error")
+            log(f"❌ 엑셀 내에서 '품목코드' 헤더를 찾을 수 없습니다: {target_file}", level="error")
             return
 
         df = pd.read_excel(target_file, header=header_row_idx)
         df.columns = [str(c).strip() for c in df.columns]
 
-        # 而щ읆 ?좎뿰 留ㅼ묶 (怨듬갚 臾댁떆 諛??ㅼ썙???ы븿 ?щ?濡??먯깋)
+        # 컬럼 유연 매칭 (공백 무시 및 키워드 포함 여부로 탐색)
         def find_col(keywords, default):
             for col in df.columns:
                 c_clean = str(col).replace(' ', '').replace('\n', '')
@@ -208,12 +208,12 @@ def process_inventory_excel(dl_path):
         qty_col = find_col(['재고수량', '현재고', 'Qty', '수량'], '재고수량')
         price_col = find_col(['입고단가', '단가', 'Price', '원가'], '입고단가')
 
-        # 3. ?곗씠???뺤젣 (?좊졊 ?곗씠??諛??⑷퀎 ???쒓굅)
+        # 3. 데이터 정제 (유령 데이터 및 합계 행 제거)
         def is_valid(val):
             v = str(val).strip().lower()
             return v not in ('nan', 'none', 'null', '', 'undefined', 'nan', '0', '0.0')
 
-        # ?꾩닔 而щ읆(肄붾뱶, 李쎄퀬紐? ?좏슚??寃??- 李쎄퀬紐낆씠???덈ぉ紐낆씠 鍮꾩뼱?덉쑝硫???젣
+        # 필수 컬럼(코드, 창고명) 유효성 검사 - 창고명이나 품목명이 비어있으면 삭제
         if code_col in df.columns:
             df = df[df[code_col].apply(lambda x: is_valid(x))]
         if wh_col in df.columns:
@@ -221,7 +221,7 @@ def process_inventory_excel(dl_path):
         if name_col in df.columns:
             df = df[df[name_col].apply(lambda x: is_valid(x))]
 
-        exclude_keywords = '怨??⑷퀎|?뚭퀎|珥앷퀎|Total'
+        exclude_keywords = '계|합계|소계|총계|Total'
         df = df[~df[code_col].astype(str).str.contains(exclude_keywords, na=False)]
         
         df['calc_qty'] = pd.to_numeric(df[qty_col], errors='coerce').fillna(0)
@@ -230,13 +230,13 @@ def process_inventory_excel(dl_path):
 
         upload_data = []
         for _, row in df.iterrows():
-            cat_col = next((c for c in row.index if '援щ텇' in str(c)), None)
-            raw_cat = str(row.get(cat_col, '?쇰컲')).strip() if cat_col else '?쇰컲'
+            cat_col = next((c for c in row.index if '구분' in str(c)), None)
+            raw_cat = str(row.get(cat_col, '일반')).strip() if cat_col else '일반'
             clean_cat = raw_cat.replace('[', '').replace(']', '')
-            if not clean_cat or clean_cat.lower() in ('nan', 'none', '?쇰컲', 'undefined'): clean_cat = '?쇰컲'
+            if not clean_cat or clean_cat.lower() in ('nan', 'none', '일반', 'undefined'): clean_cat = '일반'
             
-            exp_raw = str(row.get('愿由ы빆紐⑸챸', '')).strip()
-            if not exp_raw or exp_raw.lower() == 'nan': exp_raw = str(row.get('?좏슚湲곌컙', '')).strip()
+            exp_raw = str(row.get('관리항목명', '')).strip()
+            if not exp_raw or exp_raw.lower() == 'nan': exp_raw = str(row.get('유효기간', '')).strip()
             
             exp_date = None
             if exp_raw and exp_raw.lower() not in ('nan', 'none', ''):
@@ -261,7 +261,7 @@ def process_inventory_excel(dl_path):
             old_res = requests.get(f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details?select=*", headers=HEADERS)
             old_data = {f"{r['warehouse_name']}_{r['item_code']}": r['stock_qty'] for r in old_res.json()} if old_res.status_code == 200 else {}
 
-            # 癒쇱? ?꾩옱 ?묒????덈뒗 李쎄퀬??湲곗〈 ?곗씠?곕쭔 ??젣 (?ㅻⅨ 李쎄퀬 ?곗씠?곕뒗 ?좎?)
+            # 먼저 현재 엑셀에 있는 창고의 기존 데이터만 삭제 (다른 창고 데이터는 유지)
             current_warehouses = list(set([item['warehouse_name'] for item in upload_data]))
             import urllib.parse
             for wh in current_warehouses:
@@ -295,36 +295,36 @@ def process_inventory_excel(dl_path):
                 for i in range(0, len(history_entries), 1000):
                     requests.post(f"{SUPABASE_URL}/rest/v1/inventory_history", headers=HEADERS, json=history_entries[i:i+1000])
             
-            log(f"??{len(upload_data)}嫄댁쓽 ?ш퀬 ?곗씠???숆린???꾨즺")
+            log(f"✅ {len(upload_data)}건의 재고 데이터 동기화 완료")
 
     except Exception as e:
-        log(f"???묒? 泥섎━ 以??ㅻ쪟 諛쒖깮: {e}", level="error")
+        log(f"❌ 엑셀 처리 중 오류 발생: {e}", level="error")
 
 def process_item_master_excel(dl_path):
     """품목 마스터 엑셀을 읽어 DB 동기화"""
     try:
         mmdd = datetime.now().strftime("%m%d")
-        target_file = os.path.join(dl_path, f"{mmdd}_?덈ぉ留덉뒪??1).xlsx")
+        target_file = os.path.join(dl_path, f"{mmdd}_품목마스터(1).xlsx")
         
         if not os.path.exists(target_file):
-            log(f"?좑툘 ?덈ぉ 留덉뒪???뚯씪???놁뒿?덈떎: {target_file}")
+            log(f"⚠️ 품목 마스터 파일이 없습니다: {target_file}")
             return
 
         df_raw = pd.read_excel(target_file, header=None)
         header_row_idx = -1
         for i, row in df_raw.iterrows():
-            if any('?덈ぉ肄붾뱶' in str(v) for v in row.values if pd.notna(v)):
+            if any('품목코드' in str(v) for v in row.values if pd.notna(v)):
                 header_row_idx = i
                 break
         
         if header_row_idx == -1:
-            log("???덈ぉ 留덉뒪???ㅻ뜑瑜?李얠쓣 ???놁뒿?덈떎.")
+            log("❌ 품목 마스터 헤더를 찾을 수 없습니다.")
             return
 
         df = pd.read_excel(target_file, header=header_row_idx)
         df.columns = [str(c).strip() for c in df.columns]
         
-        # 而щ읆 ?좎뿰 留ㅼ묶
+        # 컬럼 유연 매칭
         def find_col(keywords, default):
             for col in df.columns:
                 c_clean = str(col).replace(' ', '').replace('\n', '')
@@ -345,17 +345,17 @@ def process_item_master_excel(dl_path):
             upload_data.append({
                 "item_code": code,
                 "item_name": str(row.get(name_col, '')).strip(),
-                "category": str(row.get(cat_col, '?쇰컲')).strip()
+                "category": str(row.get(cat_col, '일반')).strip()
             })
         
         if upload_data:
             headers = {**HEADERS, "Prefer": "resolution=merge-duplicates"}
             for i in range(0, len(upload_data), 1000):
                 requests.post(f"{SUPABASE_URL}/rest/v1/item_master", headers=headers, json=upload_data[i:i+1000])
-            log(f"???덈ぉ 留덉뒪??{len(upload_data)}嫄??숆린???꾨즺")
+            log(f"✅ 품목 마스터 {len(upload_data)}건 동기화 완료")
 
     except Exception as e:
-        log(f"???덈ぉ 留덉뒪??泥섎━ ?ㅻ쪟: {e}", level="error")
+        log(f"❌ 품목 마스터 처리 오류: {e}", level="error")
 
 def main():
     print("=" * 60)
@@ -363,7 +363,7 @@ def main():
     print(f"  [DB] Target: {SUPABASE_URL}")
     print("=" * 60)
     
-    log("Supabase ?곌껐 ?뺤씤 ?깃났")
+    log("Supabase 연결 확인 성공")
     
     last_run_id = "" 
 
@@ -373,7 +373,7 @@ def main():
             
             trigger = db_get("rpa_trigger")
             if trigger not in ("idle", "NULL", "ERROR", ""):
-                log("?? [?몃━嫄? ??쒕낫?쒖뿉???섏쭛 ?붿껌???ㅼ뼱?붿뒿?덈떎.")
+                log("🚀 [트리거] 대시보드에서 수집 요청이 들어왔습니다.")
                 execute_rpa()
             
             now = datetime.now(KST)
@@ -386,7 +386,7 @@ def main():
                 if current_minute in scheduled_times:
                     run_id = f"{now.strftime('%Y-%m-%d')} {current_minute}"
                     if last_run_id != run_id:
-                        log(f"??[?ㅼ?以? 吏?뺣맂 ?쒓컖({current_minute})???섏뼱 ?먮룞 ?섏쭛???쒖옉?⑸땲??")
+                        log(f"⏰ [스케줄] 지정된 시각({current_minute})이 되어 자동 수집을 시작합니다.")
                         execute_rpa()
                         last_run_id = run_id
             
@@ -394,7 +394,7 @@ def main():
         except KeyboardInterrupt:
             break
         except Exception as e:
-            log(f"?좑툘 猷⑦봽 ?ㅻ쪟: {e}")
+            log(f"⚠️ 루프 오류: {e}")
             time.sleep(10)
 
 if __name__ == "__main__":
