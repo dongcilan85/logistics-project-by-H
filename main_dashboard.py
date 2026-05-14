@@ -745,7 +745,7 @@ else:
     # --- [사이드바: RPA 제어 섹션 - Admin 전용] ---
     if st.session_state.role == "Admin":
         st.sidebar.divider()
-        st.sidebar.subheader("🤖 RPA 에이전트 제어")
+        st.sidebar.subheader("🔄 ERP 동기화")
 
         @st.fragment(run_every=1)
         def show_rpa_controls():
@@ -783,12 +783,10 @@ else:
                     set_config("rpa_status", "pending")
                     st.success("전체 수집 명령 전달됨!"); time.sleep(1); st.rerun()
 
-                st.write("**개별 작업 선택:**")
-                sc1, sc2 = st.columns(2)
-                if sc1.button("📦 품목마스터", use_container_width=True):
+                if st.button("📦 품목마스터", use_container_width=True):
                     set_config("rpa_trigger", "item_master")
                     set_config("rpa_status", "pending"); st.rerun()
-                if sc2.button("🔄 관리항목별 수집", use_container_width=True):
+                if st.button("🔄 관리항목별 수집", use_container_width=True):
                     set_config("rpa_trigger", "warehouse_inventory")
                     set_config("rpa_status", "pending"); st.rerun()
             else:
@@ -798,23 +796,6 @@ else:
 
         with st.sidebar:
             show_rpa_controls()
-
-
-        with st.sidebar.expander("📜 RPA 진행 로그", expanded=False):
-            log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agent_log.txt")
-            try:
-                with open(log_path, "r", encoding="utf-8-sig") as f:
-                    logs = f.readlines()
-                if logs:
-                    st.code("".join(logs[-15:]), language="log")
-                else:
-                    st.info("로그가 없습니다.")
-            except FileNotFoundError:
-                st.info("로그 파일이 없습니다.")
-            except Exception:
-                st.error("로그 파일을 읽을 수 없습니다.")
-            if st.sidebar.button("🔄 로그 새로고침", key="refresh_log", use_container_width=True):
-                st.rerun()
 
     st.sidebar.divider()
     sc1, sc2 = st.sidebar.columns(2)
