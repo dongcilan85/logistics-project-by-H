@@ -497,7 +497,7 @@ def process_warehouse_inventory_files(dl_path, warehouses):
                 if not code or code.lower() in ('nan', 'none', ''):
                     continue
 
-                exp_date = None
+                exp_date = None  # 유효기간 없는 품목 → NULL 저장 → 대시보드에서 '해당없음' 표시
                 if exp_code_col:
                     exp_val = row.get(exp_code_col)
                     if pd.notna(exp_val):
@@ -514,6 +514,8 @@ def process_warehouse_inventory_files(dl_path, warehouses):
                             exp_date = f"{nums[:4]}-{nums[4:6]}-{nums[6:8]}"
                         elif len(nums) == 6:
                             exp_date = f"20{nums[:2]}-{nums[2:4]}-{nums[4:6]}"
+                        # 유효기간 코드가 00 등 날짜 형식이 아닌 경우
+                        # exp_date는 None 유지 → DB에 NULL로 저장됨
 
                 qty_val = pd.to_numeric(row.get(qty_col, 0), errors='coerce')
                 if pd.isna(qty_val):

@@ -82,7 +82,7 @@ today = datetime.now(KST).date()
 
 def analyze_expiration(row):
     if pd.isna(row.get('expiration_date')) or not row['expiration_date']:
-        return "⚪ 정보없음", 9999
+        return "⭕ 해당없음", 9999
     
     try:
         exp_date = pd.to_datetime(row['expiration_date']).date()
@@ -99,9 +99,11 @@ def analyze_expiration(row):
 
 # 유효기간 등급 부여
 if not df.empty and 'expiration_date' in df.columns:
+    # NULL 유효기간을 '해당없음'으로 표시
+    df['expiration_date'] = df['expiration_date'].fillna('해당없음')
     df[['exp_status', 'rem_days']] = df.apply(lambda r: pd.Series(analyze_expiration(r)), axis=1)
 else:
-    df['exp_status'] = "⚪ 정보없음"
+    df['exp_status'] = "⭕ 해당없음"
     df['rem_days'] = 9999
 
 # -------------------------------------------------------------
