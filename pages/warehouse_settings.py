@@ -149,10 +149,10 @@ st.divider()
 st.subheader("📦 품목 마스터 및 안전재고 설정")
 try:
     item_res = supabase.table("item_master").select("*").order("item_code").execute()
-    item_df = pd.DataFrame(item_res.data) if item_res.data else pd.DataFrame(columns=["item_code", "item_name", "category", "unit_price", "safety_stock", "excess_threshold"])
+    item_df = pd.DataFrame(item_res.data) if item_res.data else pd.DataFrame(columns=["item_code", "item_name", "category", "date_type", "unit_price", "safety_stock", "excess_threshold"])
 
     # 표시 전에 dtype 정규화 — data_editor가 텍스트 컬럼에 NaN/혼합타입이 섞이면 셀을 빈칸으로 그리는 케이스가 있어 명시적으로 문자열로 캐스팅한다.
-    for _c in ("item_code", "item_name", "category"):
+    for _c in ("item_code", "item_name", "category", "date_type"):
         if _c in item_df.columns:
             item_df[_c] = item_df[_c].fillna("").astype(str)
     for _c in ("unit_price", "safety_stock", "excess_threshold"):
@@ -171,18 +171,26 @@ try:
     if "category" in item_df.columns:
         item_df["category"] = pd.Categorical(item_df["category"], categories=valid_categories)
 
+    # 날짜유형 드롭다운 (기본: 유효기간)
+    valid_date_types = ["유효기간", "제조일자"]
+    if "date_type" not in item_df.columns:
+        item_df["date_type"] = "유효기간"
+    item_df["date_type"] = item_df["date_type"].replace("", "유효기간")
+    item_df["date_type"] = pd.Categorical(item_df["date_type"], categories=valid_date_types)
+
     edited_item_df = st.data_editor(
         item_df,
         column_config={
             "item_code": st.column_config.TextColumn("품목 코드", required=True),
             "item_name": st.column_config.TextColumn("품목 명칭"),
             "category": st.column_config.SelectboxColumn("카테고리"),
+            "date_type": st.column_config.SelectboxColumn("날짜유형"),
             "unit_price": st.column_config.NumberColumn("입고단가", format="%d"),
             "safety_stock": st.column_config.NumberColumn("안전재고", format="%d"),
             "excess_threshold": st.column_config.NumberColumn("과잉기준", format="%d"),
             "updated_at": None,
         },
-        column_order=["item_code", "item_name", "category", "unit_price", "safety_stock", "excess_threshold"],
+        column_order=["item_code", "item_name", "category", "date_type", "unit_price", "safety_stock", "excess_threshold"],
         num_rows="dynamic",
         use_container_width=True,
         key="item_editor_final",
@@ -204,6 +212,7 @@ try:
                         "item_code": str(row['item_code']).strip(),
                         "item_name": str(row.get('item_name', '')).strip(),
                         "category": str(row.get('category', '일반')),
+                        "date_type": str(row.get('date_type', '유효기간')),
                         "unit_price": int(float(row.get('unit_price', 0))),
                         "safety_stock": int(float(row.get('safety_stock', 0))),
                         "excess_threshold": int(float(row.get('excess_threshold', 1000)))
