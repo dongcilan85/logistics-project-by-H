@@ -178,8 +178,21 @@ try:
     item_df["date_type"] = item_df["date_type"].replace("", "유효기간")
     item_df["date_type"] = pd.Categorical(item_df["date_type"], categories=valid_date_types)
 
+    # 필터 UI
+    fc1, fc2 = st.columns([1, 3])
+    with fc1:
+        filter_col = st.selectbox("🔍 검색 기준", ["품목코드", "품목명", "카테고리", "날짜유형"], key="item_filter_col")
+    with fc2:
+        filter_q = st.text_input("검색어 입력", key="item_filter_q")
+
+    col_map = {"품목코드": "item_code", "품목명": "item_name", "카테고리": "category", "날짜유형": "date_type"}
+    display_df = item_df.copy()
+    if filter_q:
+        target_col = col_map[filter_col]
+        display_df = display_df[display_df[target_col].astype(str).str.contains(filter_q, case=False, na=False)]
+
     edited_item_df = st.data_editor(
-        item_df,
+        display_df,
         column_config={
             "item_code": st.column_config.TextColumn("품목 코드", required=True),
             "item_name": st.column_config.TextColumn("품목 명칭"),
