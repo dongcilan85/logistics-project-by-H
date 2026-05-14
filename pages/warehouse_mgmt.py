@@ -204,7 +204,7 @@ def display_inventory_table(target_df, key_suffix=""):
         use_container_width=True, hide_index=True
     )
 
-tab1, tab_exp, tab2, tab3, tab4, tab5 = st.tabs(["📊 전체 현황", "🗓️ 유효기간 분석", "🛠️ 부자재", "📦 무형상품", "🔥 이슈(품절/부족)", "📈 과잉재고"])
+tab1, tab_exp, tab2, tab4, tab5 = st.tabs(["📊 전체 현황", "🗓️ 유효기간 분석", "🛠️ 부재료", "🔥 이슈(품절/부족)", "📈 과잉재고"])
 
 with tab1:
     display_inventory_table(df, "all")
@@ -216,8 +216,6 @@ with tab_exp:
     display_inventory_table(exp_sorted_df, "exp")
 with tab2:
     display_inventory_table(df[df['category'] == "부재료"], "sub")
-with tab3:
-    display_inventory_table(df[df['category'] == "무형상품"], "non")
 with tab4:
     issue_df = df[df['item_code'].isin(agg_df[agg_df['status'].isin(["❌ 품절", "⚠️ 부족"])]['item_code'])]
     display_inventory_table(issue_df, "issue")
