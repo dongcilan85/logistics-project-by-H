@@ -150,16 +150,38 @@ st.subheader("📦 품목 마스터 및 안전재고 설정")
 try:
     item_res = supabase.table("item_master").select("*").order("item_code").execute()
     item_df = pd.DataFrame(item_res.data) if item_res.data else pd.DataFrame(columns=["item_code", "item_name", "category", "safety_stock", "excess_threshold"])
+
+    # 표시 전에 dtype 정규화 — data_editor가 텍스트 컬럼에 NaN/혼합타입이 섞이면 셀을 빈칸으로 그리는 케이스가 있어 명시적으로 문자열로 캐스팅한다.
+    for _c in ("item_code", "item_name", "category"):
+        if _c in item_df.columns:
+            item_df[_c] = item_df[_c].fillna("").astype(str)
+    for _c in ("safety_stock", "excess_threshold"):
+        if _c in item_df.columns:
+            item_df[_c] = pd.to_numeric(item_df[_c], errors="coerce").fillna(0)
+
+    # 카테고리를 pd.Categorical로 명시적 변환하면 Streamlit이 옵션 매핑 오류 없이 정확하게 Selectbox로 렌더링함
+    valid_categories = ["상품", "제품", "부재료", "원재료", "반제품", "무형상품", "일반"]
     
+    # DB에 존재하는 특이 카테고리도 옵션에 포함시켜서 빈칸 증발 방지
+    db_cats = [c for c in item_df["category"].unique().tolist() if c]
+    for c in db_cats:
+        if c not in valid_categories:
+            valid_categories.append(c)
+            
+    if "category" in item_df.columns:
+        item_df["category"] = pd.Categorical(item_df["category"], categories=valid_categories)
+
     edited_item_df = st.data_editor(
         item_df,
         column_config={
             "item_code": st.column_config.TextColumn("품목 코드", required=True),
             "item_name": st.column_config.TextColumn("품목 명칭"),
-            "category": st.column_config.TextColumn("카테고리"),
+            "category": st.column_config.SelectboxColumn("카테고리"),
             "safety_stock": st.column_config.NumberColumn("안전재고"),
-            "excess_threshold": st.column_config.NumberColumn("과잉기준")
+            "excess_threshold": st.column_config.NumberColumn("과잉기준"),
+            "updated_at": None,
         },
+        column_order=["item_code", "item_name", "category", "safety_stock", "excess_threshold"],
         num_rows="dynamic",
         use_container_width=True,
         key="item_editor_final",
