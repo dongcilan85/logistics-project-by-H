@@ -432,7 +432,7 @@ def process_warehouse_inventory_files(dl_path, warehouses):
             for row in r.json():
                 code = str(row.get('item_code', '')).strip()
                 cat = str(row.get('category', '')).strip()
-                unit_p = float(row.get('unit_price', 0) or 0)
+                unit_p = int(float(row.get('unit_price', 0) or 0))
                 if code:
                     if cat:
                         category_map[code] = cat
@@ -518,16 +518,16 @@ def process_warehouse_inventory_files(dl_path, warehouses):
                     qty_val = 0
 
                 unit_price = price_map.get(code, 0.0)
-                stock_qty_f = float(qty_val)
+                stock_qty_i = int(float(qty_val))
                 all_upload_data.append({
                     "warehouse_name": wh_name,
                     "item_code": code,
                     "item_name_spec": str(row.get(name_col, '')).strip() if name_col else '',
                     "category": category_map.get(code),
                     "expiration_date": exp_date,
-                    "stock_qty": stock_qty_f,
+                    "stock_qty": stock_qty_i,
                     "unit_price": unit_price,
-                    "inventory_cost": stock_qty_f * unit_price,
+                    "inventory_cost": stock_qty_i * unit_price,
                 })
                 row_count += 1
 
@@ -624,7 +624,7 @@ def process_item_master_excel(dl_path):
                 
             raw_price = str(row.get(price_col, 0)).replace(',', '').strip()
             unit_price_val = pd.to_numeric(raw_price, errors='coerce')
-            unit_price = float(unit_price_val) if pd.notna(unit_price_val) else 0.0
+            unit_price = int(float(unit_price_val)) if pd.notna(unit_price_val) else 0
 
             upload_data.append({
                 "item_code": code,

@@ -177,9 +177,9 @@ try:
             "item_code": st.column_config.TextColumn("품목 코드", required=True),
             "item_name": st.column_config.TextColumn("품목 명칭"),
             "category": st.column_config.SelectboxColumn("카테고리"),
-            "unit_price": st.column_config.NumberColumn("입고단가"),
-            "safety_stock": st.column_config.NumberColumn("안전재고"),
-            "excess_threshold": st.column_config.NumberColumn("과잉기준"),
+            "unit_price": st.column_config.NumberColumn("입고단가", format="%d"),
+            "safety_stock": st.column_config.NumberColumn("안전재고", format="%d"),
+            "excess_threshold": st.column_config.NumberColumn("과잉기준", format="%d"),
             "updated_at": None,
         },
         column_order=["item_code", "item_name", "category", "unit_price", "safety_stock", "excess_threshold"],
@@ -204,9 +204,9 @@ try:
                         "item_code": str(row['item_code']).strip(),
                         "item_name": str(row.get('item_name', '')).strip(),
                         "category": str(row.get('category', '일반')),
-                        "unit_price": float(row.get('unit_price', 0)),
-                        "safety_stock": float(row.get('safety_stock', 0)),
-                        "excess_threshold": float(row.get('excess_threshold', 1000))
+                        "unit_price": int(float(row.get('unit_price', 0))),
+                        "safety_stock": int(float(row.get('safety_stock', 0))),
+                        "excess_threshold": int(float(row.get('excess_threshold', 1000)))
                     })
             if upsert_items:
                 supabase.table("item_master").upsert(upsert_items).execute()
