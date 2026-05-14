@@ -490,6 +490,8 @@ def process_warehouse_inventory_files(dl_path, warehouses):
             df = df[df[code_col].notna()]
             # 품목코드가 영문/숫자 식별자가 아닌 소계 행 제외 ('합계', '소계', '... 계' 등)
             df = df[~df[code_col].astype(str).str.contains(r'합계|총계|소계|Total|\s계$', na=False, regex=True)]
+            # 품목코드가 영문+숫자 조합이 아닌 행 제외 (타임스탬프, 날짜 등 쓰레기 행 차단)
+            df = df[df[code_col].astype(str).str.match(r'^[A-Za-z0-9]+$', na=False)]
 
             row_count = 0
             for _, row in df.iterrows():
