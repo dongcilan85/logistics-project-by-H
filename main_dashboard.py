@@ -775,16 +775,16 @@ else:
                 rpa_msg = f"✅ {last_msg}" if "실패" not in last_msg and "에러" not in last_msg else f"⚠️ {last_msg}"
 
             status_icon = "🟢" if rpa_status == "idle" else "🟡" if rpa_status == "pending" else "🔵" if rpa_status == "running" else "🔴"
-            st.sidebar.info(f"{status_icon} **상태**: {rpa_msg}")
+            st.info(f"{status_icon} **상태**: {rpa_msg}")
 
             if rpa_status in ("idle", "completed", "failed"):
-                if st.sidebar.button("🚀 전체 데이터 수집", use_container_width=True, type="primary"):
+                if st.button("🚀 전체 데이터 수집", use_container_width=True, type="primary"):
                     set_config("rpa_trigger", "all")
                     set_config("rpa_status", "pending")
-                    st.sidebar.success("전체 수집 명령 전달됨!"); time.sleep(1); st.rerun()
+                    st.success("전체 수집 명령 전달됨!"); time.sleep(1); st.rerun()
 
-                st.sidebar.write("**개별 작업 선택:**")
-                sc1, sc2 = st.sidebar.columns(2)
+                st.write("**개별 작업 선택:**")
+                sc1, sc2 = st.columns(2)
                 if sc1.button("📦 품목마스터", use_container_width=True):
                     set_config("rpa_trigger", "item_master")
                     set_config("rpa_status", "pending"); st.rerun()
@@ -792,11 +792,12 @@ else:
                     set_config("rpa_trigger", "warehouse_inventory")
                     set_config("rpa_status", "pending"); st.rerun()
             else:
-                if st.sidebar.button("🛑 수집 중단 요청", use_container_width=True):
+                if st.button("🛑 수집 중단 요청", use_container_width=True):
                     set_config("rpa_trigger", "idle")
                     set_config("rpa_status", "idle"); st.rerun()
 
-        show_rpa_controls()
+        with st.sidebar:
+            show_rpa_controls()
 
 
         with st.sidebar.expander("📜 RPA 진행 로그", expanded=False):
