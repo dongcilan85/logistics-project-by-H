@@ -554,16 +554,18 @@ def process_warehouse_inventory_files(dl_path, warehouses):
             headers=HEADERS
         )
 
-    insert_headers = {**HEADERS, "Prefer": "resolution=merge-duplicates"}
+    insert_headers = {**HEADERS, "Prefer": "return=minimal"}
     total = len(all_upload_data)
     for i in range(0, total, 1000):
         chunk = all_upload_data[i:i+1000]
         db_set("rpa_message", f"유효기간 상세 DB 업로드 중... ({i}/{total}건)")
-        requests.post(
-            f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details?on_conflict=warehouse_name,item_code,expiration_date",
+        resp = requests.post(
+            f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details",
             headers=insert_headers,
             json=chunk
         )
+        if resp.status_code not in (200, 201):
+            log(f"⚠️ 업로드 실패 (chunk {i}): {resp.status_code} {resp.text[:200]}", level="error")
 
     log(f"📤 유효기간 DB 동기화 완료: {len(processed_warehouses)}개 창고 / {total}건")
 
