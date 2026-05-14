@@ -622,7 +622,8 @@ def process_item_master_excel(dl_path):
             if not cat_val or cat_val.lower() in ('nan', 'none'):
                 cat_val = '일반'
                 
-            unit_price_val = pd.to_numeric(row.get(price_col, 0), errors='coerce')
+            raw_price = str(row.get(price_col, 0)).replace(',', '').strip()
+            unit_price_val = pd.to_numeric(raw_price, errors='coerce')
             unit_price = float(unit_price_val) if pd.notna(unit_price_val) else 0.0
 
             upload_data.append({
