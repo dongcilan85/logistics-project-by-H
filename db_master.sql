@@ -131,6 +131,7 @@ ALTER TABLE public.active_tasks ADD COLUMN IF NOT EXISTS parent_id BIGINT REFERE
 ALTER TABLE public.active_tasks ADD COLUMN IF NOT EXISTS plan_id UUID REFERENCES public.production_plans(id);
 ALTER TABLE public.work_logs ADD COLUMN IF NOT EXISTS plan_id UUID REFERENCES public.production_plans(id);
 ALTER TABLE public.task_categories ADD COLUMN IF NOT EXISTS display_order INT DEFAULT 999;
+ALTER TABLE public.item_master ADD COLUMN IF NOT EXISTS unit_price NUMERIC DEFAULT 0;
 
 
 -- =========================================================================
