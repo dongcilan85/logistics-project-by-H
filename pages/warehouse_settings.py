@@ -149,13 +149,13 @@ st.divider()
 st.subheader("📦 품목 마스터 및 안전재고 설정")
 try:
     item_res = supabase.table("item_master").select("*").order("item_code").execute()
-    item_df = pd.DataFrame(item_res.data) if item_res.data else pd.DataFrame(columns=["item_code", "item_name", "category", "safety_stock", "excess_threshold"])
+    item_df = pd.DataFrame(item_res.data) if item_res.data else pd.DataFrame(columns=["item_code", "item_name", "category", "unit_price", "safety_stock", "excess_threshold"])
 
     # 표시 전에 dtype 정규화 — data_editor가 텍스트 컬럼에 NaN/혼합타입이 섞이면 셀을 빈칸으로 그리는 케이스가 있어 명시적으로 문자열로 캐스팅한다.
     for _c in ("item_code", "item_name", "category"):
         if _c in item_df.columns:
             item_df[_c] = item_df[_c].fillna("").astype(str)
-    for _c in ("safety_stock", "excess_threshold"):
+    for _c in ("unit_price", "safety_stock", "excess_threshold"):
         if _c in item_df.columns:
             item_df[_c] = pd.to_numeric(item_df[_c], errors="coerce").fillna(0)
 
@@ -177,11 +177,12 @@ try:
             "item_code": st.column_config.TextColumn("품목 코드", required=True),
             "item_name": st.column_config.TextColumn("품목 명칭"),
             "category": st.column_config.SelectboxColumn("카테고리"),
+            "unit_price": st.column_config.NumberColumn("입고단가"),
             "safety_stock": st.column_config.NumberColumn("안전재고"),
             "excess_threshold": st.column_config.NumberColumn("과잉기준"),
             "updated_at": None,
         },
-        column_order=["item_code", "item_name", "category", "safety_stock", "excess_threshold"],
+        column_order=["item_code", "item_name", "category", "unit_price", "safety_stock", "excess_threshold"],
         num_rows="dynamic",
         use_container_width=True,
         key="item_editor_final",
@@ -203,6 +204,7 @@ try:
                         "item_code": str(row['item_code']).strip(),
                         "item_name": str(row.get('item_name', '')).strip(),
                         "category": str(row.get('category', '일반')),
+                        "unit_price": float(row.get('unit_price', 0)),
                         "safety_stock": float(row.get('safety_stock', 0)),
                         "excess_threshold": float(row.get('excess_threshold', 1000))
                     })

@@ -27,7 +27,7 @@ st.write(f"최종 업데이트 (KST): {datetime.now(KST).strftime('%Y-%m-%d %H:%
 # -------------------------------------------------------------
 # 1. 데이터 로드 및 통합 (Join Logic)
 # -------------------------------------------------------------
-@st.cache_data(ttl=5)
+# @st.cache_data(ttl=5)  # 캐시를 제거하여 에이전트 업데이트가 즉시 반영되도록 함
 def load_comprehensive_data():
     try:
         inv_res = supabase.table("warehouse_inventory_details").select("*").execute()
@@ -155,24 +155,25 @@ st.divider()
 # -------------------------------------------------------------
 def display_inventory_table(target_df, key_suffix=""):
     wh_list = ["전체"] + sorted(target_df['warehouse_name'].unique().tolist())
-    f1, f2 = st.columns([1, 2])
+    f1, f2, f3 = st.columns([1, 1, 2])
     with f1:
         sel_wh = st.selectbox("🏢 창고 필터", wh_list, key=f"wh_{key_suffix}")
     with f2:
-        q = st.text_input("🔍 품목명/코드 검색", key=f"q_{key_suffix}")
+        search_col = st.selectbox("🔍 검색 기준", ["품목명", "품목코드", "창고명"], key=f"scol_{key_suffix}")
+    with f3:
+        q = st.text_input("검색어 입력", key=f"q_{key_suffix}")
     
     res_df = target_df.copy()
     if sel_wh != "전체":
         res_df = res_df[res_df['warehouse_name'] == sel_wh]
     else:
-        # 💡 전체 합계 뷰에서도 유효기간별로 데이터를 나누어 보여줌 (유효기간 분석 필수)
-        group_cols = ['item_code', 'item_name_spec', 'category', 'expiration_date', 'exp_status']
+        # 💡 전체 합계 뷰에서도 창고별/유효기간별로 데이터를 나누어 보여줌 (유효기간 분석 및 창고 파악 필수)
+        group_cols = ['warehouse_name', 'item_code', 'item_name_spec', 'category', 'expiration_date', 'exp_status']
         res_df = res_df.groupby(group_cols).agg({
             'stock_qty': 'sum',
             'safety_stock': 'max',
             'inventory_cost': 'sum'
         }).reset_index()
-        res_df['warehouse_name'] = "전체 합계"
     
     # 상태 재계산
     def get_row_status(row):
@@ -182,7 +183,12 @@ def display_inventory_table(target_df, key_suffix=""):
     res_df['status'] = res_df.apply(get_row_status, axis=1)
     
     if q:
-        res_df = res_df[res_df['item_name_spec'].str.contains(q, case=False) | res_df['item_code'].str.contains(q, case=False)]
+        if search_col == "품목명":
+            res_df = res_df[res_df['item_name_spec'].astype(str).str.contains(q, case=False, na=False)]
+        elif search_col == "품목코드":
+            res_df = res_df[res_df['item_code'].astype(str).str.contains(q, case=False, na=False)]
+        elif search_col == "창고명":
+            res_df = res_df[res_df['warehouse_name'].astype(str).str.contains(q, case=False, na=False)]
     
     st.dataframe(
         res_df[['status', 'exp_status', 'warehouse_name', 'item_code', 'item_name_spec', 'category', 'stock_qty', 'expiration_date', 'inventory_cost']],
@@ -207,7 +213,7 @@ with tab_exp:
     exp_sorted_df = df.sort_values(by="rem_days")
     display_inventory_table(exp_sorted_df, "exp")
 with tab2:
-    display_inventory_table(df[df['category'] == "부자재"], "sub")
+    display_inventory_table(df[df['category'] == "부재료"], "sub")
 with tab3:
     display_inventory_table(df[df['category'] == "무형상품"], "non")
 with tab4:

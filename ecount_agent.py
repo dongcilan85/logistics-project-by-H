@@ -130,16 +130,16 @@ def execute_rpa(task="all"):
 
             log(f"[5단계] 로그인 성공! '{task_label}'을(를) 시작합니다.")
 
-            # 작업 1: 창고별재고현황 (inventory_balance)
-            if task in ("all", "inventory_balance"):
-                log("📊 [작업] 창고별재고현황 수집 시작...")
-                db_set("rpa_message", "창고별재고현황 수집 중...")
-                ok_inv, msg_inv = rpa.get_inventory_balance()
-                if ok_inv:
-                    log("📊 [동기화] 창고별재고현황 엑셀 → DB 업로드 중...")
-                    process_inventory_excel(dl_path)
-                else:
-                    log(f"⚠️ 창고별재고현황 수집 실패 - DB 동기화 건너뜀: {msg_inv}", level="warning")
+            # [요청] 창고별재고현황 (inventory_balance) 수집 중단 (추후 사용을 위해 주석 처리)
+            # if task in ("all", "inventory_balance"):
+            #     log("📊 [작업] 창고별재고현황 수집 시작...")
+            #     db_set("rpa_message", "창고별재고현황 수집 중...")
+            #     ok_inv, msg_inv = rpa.get_inventory_balance()
+            #     if ok_inv:
+            #         log("📊 [동기화] 창고별재고현황 엑셀 → DB 업로드 중...")
+            #         process_inventory_excel(dl_path)
+            #     else:
+            #         log(f"⚠️ 창고별재고현황 수집 실패 - DB 동기화 건너뜀: {msg_inv}", level="warning")
 
             # 작업 2: 관리항목별재고현황 (warehouse_inventory) — 유효기간 순회
             if task in ("all", "warehouse_inventory"):
@@ -191,12 +191,14 @@ def execute_rpa(task="all"):
 
 def process_inventory_excel(dl_path):
     """수집된 엑셀 파일을 읽어 DB(warehouse_inventory_details)에 업로드"""
-    mmdd = datetime.now().strftime("%m%d")
-    target_file = os.path.join(dl_path, f"{mmdd}_창고별재고현황(1).xlsx")
-    
-    if not os.path.exists(target_file):
-        log(f"⚠️ 동기화할 엑셀 파일이 없습니다: {target_file}", level="warning")
+    import glob
+    files = glob.glob(os.path.join(dl_path, "*창고별재고현황*.xlsx"))
+    if not files:
+        log(f"⚠️ 동기화할 엑셀 파일이 없습니다: {dl_path}", level="warning")
         return
+    
+    target_file = max(files, key=os.path.getmtime)
+    log(f"📄 최신 창고별재고현황 탐색 완료: {os.path.basename(target_file)}")
 
     try:
         df_raw = pd.read_excel(target_file, header=None)
@@ -418,22 +420,24 @@ def process_warehouse_inventory_files(dl_path, warehouses):
     import re, urllib.parse
     mmdd = datetime.now().strftime("%m%d")
 
-    price_map = _build_price_map(dl_path)
-
-    # item_master에서 (품목코드 → 카테고리) 맵 로드
+    # item_master에서 (품목코드 → 카테고리/단가) 맵 로드
     category_map = {}
+    price_map = {}
     try:
         r = requests.get(
-            f"{SUPABASE_URL}/rest/v1/item_master?select=item_code,category",
+            f"{SUPABASE_URL}/rest/v1/item_master?select=item_code,category,unit_price",
             headers=HEADERS, timeout=10
         )
         if r.status_code == 200:
             for row in r.json():
-                code = row.get('item_code')
-                cat = row.get('category')
-                if code and cat:
-                    category_map[str(code).strip()] = str(cat).strip()
-            log(f"  📋 카테고리 맵 로드: {len(category_map)}건")
+                code = str(row.get('item_code', '')).strip()
+                cat = str(row.get('category', '')).strip()
+                unit_p = float(row.get('unit_price', 0) or 0)
+                if code:
+                    if cat:
+                        category_map[code] = cat
+                    price_map[code] = unit_p
+            log(f"  📋 카테고리/단가 맵 로드: {len(category_map)}건")
     except Exception as e:
         log(f"  ⚠️ 카테고리 맵 로드 실패: {e}", level="warning")
 
@@ -513,7 +517,7 @@ def process_warehouse_inventory_files(dl_path, warehouses):
                 if pd.isna(qty_val):
                     qty_val = 0
 
-                unit_price = price_map.get((wh_code, code), 0.0)
+                unit_price = price_map.get(code, 0.0)
                 stock_qty_f = float(qty_val)
                 all_upload_data.append({
                     "warehouse_name": wh_name,
@@ -561,12 +565,13 @@ def process_warehouse_inventory_files(dl_path, warehouses):
 def process_item_master_excel(dl_path):
     """품목 마스터 엑셀을 읽어 DB 동기화"""
     try:
-        mmdd = datetime.now().strftime("%m%d")
-        target_file = os.path.join(dl_path, f"{mmdd}_품목마스터(1).xlsx")
-        
-        if not os.path.exists(target_file):
-            log(f"⚠️ 품목 마스터 파일이 없습니다: {target_file}")
+        import glob
+        files = glob.glob(os.path.join(dl_path, "*품목*.xlsx"))
+        if not files:
+            log(f"⚠️ 품목 마스터 파일이 없습니다: {dl_path}", level="warning")
             return
+        target_file = max(files, key=os.path.getmtime)
+        log(f"📄 최신 품목 엑셀 탐색 완료: {os.path.basename(target_file)}")
 
         df_raw = pd.read_excel(target_file, header=None)
         header_row_idx = -1
@@ -594,6 +599,7 @@ def process_item_master_excel(dl_path):
         name_col = find_col(['품목명', 'ItemName'], '품목명')
         spec_col = find_col(['규격'], '규격')
         cat_col = find_col(['구분', '카테고리'], '품목구분')
+        price_col = find_col(['입고단가', '단가', '원가'], '입고단가')
         
         upload_data = []
         import re as _re
@@ -615,18 +621,28 @@ def process_item_master_excel(dl_path):
             cat_val = cat_raw.replace('[', '').replace(']', '').strip()
             if not cat_val or cat_val.lower() in ('nan', 'none'):
                 cat_val = '일반'
+                
+            unit_price_val = pd.to_numeric(row.get(price_col, 0), errors='coerce')
+            unit_price = float(unit_price_val) if pd.notna(unit_price_val) else 0.0
 
             upload_data.append({
                 "item_code": code,
                 "item_name": item_name,
-                "category": cat_val
+                "category": cat_val,
+                "unit_price": unit_price
             })
         
         if upload_data:
-            headers = {**HEADERS, "Prefer": "resolution=merge-duplicates"}
+            headers = {**HEADERS, "Prefer": "resolution=merge-duplicates,return=representation"}
+            success_count = 0
             for i in range(0, len(upload_data), 1000):
-                requests.post(f"{SUPABASE_URL}/rest/v1/item_master", headers=headers, json=upload_data[i:i+1000])
-            log(f"✅ 품목 마스터 {len(upload_data)}건 동기화 완료")
+                chunk = upload_data[i:i+1000]
+                resp = requests.post(f"{SUPABASE_URL}/rest/v1/item_master?on_conflict=item_code", headers=headers, json=chunk)
+                if resp.status_code in (200, 201):
+                    success_count += len(chunk)
+                else:
+                    log(f"❌ 품목 업로드 오류: {resp.status_code} {resp.text[:200]}", level="error")
+            log(f"✅ 품목 마스터 {success_count}건 동기화 완료")
 
     except Exception as e:
         log(f"❌ 품목 마스터 처리 오류: {e}", level="error")
