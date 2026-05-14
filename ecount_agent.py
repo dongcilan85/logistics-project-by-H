@@ -118,7 +118,7 @@ def execute_rpa(task="all"):
             except: pass
 
         log("🖥️ [3단계] 크롬 브라우저를 실행합니다... (잠시만 기다려 주세요)")
-        rpa = EcountRPA(com_code, user_id, user_pw, dl_path, headless=is_headless)
+        rpa = EcountRPA(com_code, user_id, user_pw, dl_path, headless=is_headless, status_cb=lambda m: db_set("rpa_message", m[:100]))
 
         try:
             db_set("rpa_message", "이카운트 로그인 시도 중...")
@@ -330,6 +330,7 @@ def process_inventory_excel(dl_path):
             
             for i in range(0, len(upload_data), 1000):
                 chunk = upload_data[i:i+1000]
+                db_set("rpa_message", f"창고별재고현황 업로드 중... ({i}/{len(upload_data)}건)")
                 requests.post(f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details", headers=headers, json=chunk)
                 
                 for item in chunk:
@@ -417,6 +418,7 @@ def process_warehouse_inventory_files(dl_path, warehouses):
     파일 컬럼: 품목코드 / 품목명 / 유효기간코드(YYYYMMDD) / 유효기간일 / 수량
     단가/재고비용은 통합 창고별재고현황 파일에서 (창고, 품목) 매핑으로 보강.
     """
+    db_set("rpa_message", "유효기간 상세 데이터 파싱 준비 중...")
     import re, urllib.parse
     mmdd = datetime.now().strftime("%m%d")
 
@@ -530,6 +532,9 @@ def process_warehouse_inventory_files(dl_path, warehouses):
                     "inventory_cost": stock_qty_i * unit_price,
                 })
                 row_count += 1
+                
+                if row_count % 500 == 0:
+                    db_set("rpa_message", f"{wh_name} 창고 파싱 중... ({row_count}건)")
 
             processed_warehouses.append(wh_name)
             log(f"  ✅ {wh_name}: {row_count}행 파싱 완료")
@@ -553,8 +558,9 @@ def process_warehouse_inventory_files(dl_path, warehouses):
     total = len(all_upload_data)
     for i in range(0, total, 1000):
         chunk = all_upload_data[i:i+1000]
+        db_set("rpa_message", f"유효기간 상세 DB 업로드 중... ({i}/{total}건)")
         requests.post(
-            f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details",
+            f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details?on_conflict=warehouse_name,item_code,expiration_date",
             headers=insert_headers,
             json=chunk
         )
@@ -564,6 +570,7 @@ def process_warehouse_inventory_files(dl_path, warehouses):
 
 def process_item_master_excel(dl_path):
     """품목 마스터 엑셀을 읽어 DB 동기화"""
+    db_set("rpa_message", "품목 마스터 엑셀 파싱 중...")
     try:
         import glob
         files = glob.glob(os.path.join(dl_path, "*품목*.xlsx"))
@@ -632,12 +639,17 @@ def process_item_master_excel(dl_path):
                 "category": cat_val,
                 "unit_price": unit_price
             })
+            
+            if len(upload_data) % 500 == 0:
+                db_set("rpa_message", f"품목 데이터 파싱 중... ({len(upload_data)}건)")
         
         if upload_data:
             headers = {**HEADERS, "Prefer": "resolution=merge-duplicates,return=representation"}
             success_count = 0
-            for i in range(0, len(upload_data), 1000):
+            total_cnt = len(upload_data)
+            for i in range(0, total_cnt, 1000):
                 chunk = upload_data[i:i+1000]
+                db_set("rpa_message", f"품목 마스터 업로드 중... ({i}/{total_cnt}건)")
                 resp = requests.post(f"{SUPABASE_URL}/rest/v1/item_master?on_conflict=item_code", headers=headers, json=chunk)
                 if resp.status_code in (200, 201):
                     success_count += len(chunk)

@@ -18,12 +18,13 @@ from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
 
 class EcountRPA:
-    def __init__(self, com_code, user_id, user_pw, download_path, headless=True):
+    def __init__(self, com_code, user_id, user_pw, download_path, headless=True, status_cb=None):
         self.com_code = com_code
         self.user_id = user_id
         self.user_pw = user_pw
         self.download_path = download_path
         self.headless = headless
+        self.status_cb = status_cb
         self._pw = None
         self._browser = None
         self._context = None
@@ -41,6 +42,15 @@ class EcountRPA:
             logging.info(msg)
         except Exception:
             print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+            
+        if self.status_cb:
+            try:
+                # 불필요하게 긴 특수기호 제거 후 상태 전달
+                clean_msg = msg.replace('✅', '').replace('❌', '').replace('⏳', '').replace('📥', '').replace('🚀', '').replace('🎯', '').replace('📂', '').replace('🔍', '').strip()
+                if clean_msg:
+                    self.status_cb(clean_msg)
+            except:
+                pass
 
     def _setup_browser(self):
         """브라우저 실행 + 컨텍스트 생성."""

@@ -747,56 +747,57 @@ else:
         st.sidebar.divider()
         st.sidebar.subheader("🤖 RPA 에이전트 제어")
 
-        rpa_status = get_config("rpa_status", "idle")
-        rpa_msg = get_config("rpa_message", "대기 중")
+        @st.fragment(run_every=1)
+        def show_rpa_controls():
+            rpa_status = get_config("rpa_status", "idle")
+            rpa_msg = get_config("rpa_message", "대기 중")
 
-        # 하트비트 기반 자동 복구: 에이전트가 2분 이상 무응답이면 상태 리셋
-        if rpa_status in ("running", "pending"):
-            heartbeat = get_config("agent_heartbeat", "")
-            if heartbeat:
-                try:
-                    hb_time = datetime.fromisoformat(heartbeat)
-                    now = datetime.now(KST)
-                    if (now - hb_time).total_seconds() > 120:
-                        set_config("rpa_status", "failed")
-                        set_config("rpa_trigger", "idle")
-                        rpa_status = "failed"
-                        rpa_msg = "⚠️ 에이전트 응답 없음 (자동 복구)"
-                except Exception:
-                    pass
+            # 하트비트 기반 자동 복구: 에이전트가 2분 이상 무응답이면 상태 리셋
+            if rpa_status in ("running", "pending"):
+                heartbeat = get_config("agent_heartbeat", "")
+                if heartbeat:
+                    try:
+                        hb_time = datetime.fromisoformat(heartbeat)
+                        now = datetime.now(KST)
+                        if (now - hb_time).total_seconds() > 120:
+                            set_config("rpa_status", "failed")
+                            set_config("rpa_trigger", "idle")
+                            rpa_status = "failed"
+                            rpa_msg = "⚠️ 에이전트 응답 없음 (자동 복구)"
+                    except Exception:
+                        pass
 
-        # 완료/실패 상태면 idle로 자동 복귀 (트리거 버튼 즉시 활성화)
-        if rpa_status in ("completed", "failed"):
-            last_msg = rpa_msg  # 마지막 메시지 보존
-            set_config("rpa_status", "idle")
-            rpa_status = "idle"
-            rpa_msg = f"✅ {last_msg}" if "실패" not in last_msg and "에러" not in last_msg else f"⚠️ {last_msg}"
+            # 완료/실패 상태면 idle로 자동 복귀 (트리거 버튼 즉시 활성화)
+            if rpa_status in ("completed", "failed"):
+                last_msg = rpa_msg  # 마지막 메시지 보존
+                set_config("rpa_status", "idle")
+                rpa_status = "idle"
+                rpa_msg = f"✅ {last_msg}" if "실패" not in last_msg and "에러" not in last_msg else f"⚠️ {last_msg}"
 
-        status_icon = "🟢" if rpa_status == "idle" else "🟡" if rpa_status == "pending" else "🔵" if rpa_status == "running" else "🔴"
-        st.sidebar.info(f"{status_icon} **상태**: {rpa_msg}")
+            status_icon = "🟢" if rpa_status == "idle" else "🟡" if rpa_status == "pending" else "🔵" if rpa_status == "running" else "🔴"
+            st.sidebar.info(f"{status_icon} **상태**: {rpa_msg}")
 
-        if rpa_status in ("idle", "completed", "failed"):
-            if st.sidebar.button("🚀 전체 데이터 수집", use_container_width=True, type="primary"):
-                set_config("rpa_trigger", "all")
-                set_config("rpa_status", "pending")
-                st.sidebar.success("전체 수집 명령 전달됨!"); time.sleep(1); st.rerun()
+            if rpa_status in ("idle", "completed", "failed"):
+                if st.sidebar.button("🚀 전체 데이터 수집", use_container_width=True, type="primary"):
+                    set_config("rpa_trigger", "all")
+                    set_config("rpa_status", "pending")
+                    st.sidebar.success("전체 수집 명령 전달됨!"); time.sleep(1); st.rerun()
 
-            st.sidebar.write("**개별 작업 선택:**")
-            sc1, sc2 = st.sidebar.columns(2)
-            if sc1.button("📦 품목 Master", use_container_width=True):
-                set_config("rpa_trigger", "item_master")
-                set_config("rpa_status", "pending"); st.rerun()
-            if sc2.button("📊 창고재고", use_container_width=True):
-                set_config("rpa_trigger", "inventory_balance")
-                set_config("rpa_status", "pending"); st.rerun()
+                st.sidebar.write("**개별 작업 선택:**")
+                sc1, sc2 = st.sidebar.columns(2)
+                if sc1.button("📦 품목마스터", use_container_width=True):
+                    set_config("rpa_trigger", "item_master")
+                    set_config("rpa_status", "pending"); st.rerun()
+                if sc2.button("🔄 관리항목별 수집", use_container_width=True):
+                    set_config("rpa_trigger", "warehouse_inventory")
+                    set_config("rpa_status", "pending"); st.rerun()
+            else:
+                if st.sidebar.button("🛑 수집 중단 요청", use_container_width=True):
+                    set_config("rpa_trigger", "idle")
+                    set_config("rpa_status", "idle"); st.rerun()
 
-            if st.sidebar.button("🔄 유효기간(순회) 수집", use_container_width=True):
-                set_config("rpa_trigger", "warehouse_inventory")
-                set_config("rpa_status", "pending"); st.rerun()
-        else:
-            if st.sidebar.button("🛑 수집 중단 요청", use_container_width=True):
-                set_config("rpa_trigger", "idle")
-                set_config("rpa_status", "idle"); st.rerun()
+        show_rpa_controls()
+
 
         with st.sidebar.expander("📜 RPA 진행 로그", expanded=False):
             log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agent_log.txt")
