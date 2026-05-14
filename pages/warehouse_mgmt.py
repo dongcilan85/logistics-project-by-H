@@ -210,10 +210,14 @@ with tab1:
     display_inventory_table(df, "all")
 with tab_exp:
     st.subheader("🚨 유효기간별 재고 현황")
-    st.info("유효기간 1년 미만 재고를 우선적으로 관리해 주세요.")
-    # 유효기간 임박순 정렬
-    exp_sorted_df = df.sort_values(by="rem_days")
-    display_inventory_table(exp_sorted_df, "exp")
+    st.info("유효기간 1.5년 미만 재고를 우선적으로 관리해 주세요.")
+    # 상품/제품만 필터 + 해당없음 제외 + 2년 이상 제외
+    exp_filtered_df = df[
+        (df['category'].isin(['상품', '제품'])) &
+        (df['expiration_date'] != '해당없음') &
+        (df['exp_status'] != '🟢 2년 이상')
+    ].sort_values(by="rem_days")
+    display_inventory_table(exp_filtered_df, "exp")
 with tab2:
     display_inventory_table(df[df['category'] == "부재료"], "sub")
 with tab4:
