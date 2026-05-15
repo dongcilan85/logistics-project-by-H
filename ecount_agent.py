@@ -641,8 +641,8 @@ def process_item_master_excel(dl_path):
             cat_val = cat_raw.replace('[', '').replace(']', '').strip()
             if not cat_val or cat_val.lower() in ('nan', 'none'):
                 cat_val = '일반'
-            # 무형상품은 재고관리 불필요 → 제외
-            if cat_val == '무형상품':
+            # 상품 카테고리만 유지 (제품/부재료/원재료/무형상품 등 제외)
+            if cat_val != '상품':
                 continue
                 
             raw_price = str(row.get(price_col, 0)).replace(',', '').strip()
@@ -673,16 +673,16 @@ def process_item_master_excel(dl_path):
                     log(f"❌ 품목 업로드 오류: {resp.status_code} {resp.text[:200]}", level="error")
             log(f"✅ 품목 마스터 {success_count}건 동기화 완료")
 
-            # 무형상품 DB에서 제거
-            db_set("rpa_message", "무형상품 정리 중...")
+            # 상품 외 카테고리 DB에서 제거 (상품만 관리 대상)
+            db_set("rpa_message", "비상품 카테고리 정리 중...")
             del_resp = requests.delete(
-                f"{SUPABASE_URL}/rest/v1/item_master?category=eq.무형상품",
+                f"{SUPABASE_URL}/rest/v1/item_master?category=neq.상품",
                 headers=HEADERS
             )
             if del_resp.status_code in (200, 204):
-                log("🗑️ 무형상품 카테고리 DB에서 제거 완료")
+                log("🗑️ 상품 외 카테고리 DB에서 제거 완료")
             else:
-                log(f"⚠️ 무형상품 삭제 실패: {del_resp.status_code}", level="warning")
+                log(f"⚠️ 비상품 삭제 실패: {del_resp.status_code}", level="warning")
 
     except Exception as e:
         log(f"❌ 품목 마스터 처리 오류: {e}", level="error")
@@ -736,13 +736,14 @@ def process_inventory_movement_excel(dl_path):
 
         code_col = find_col(['품목코드', 'ItemCode'])
         date_col = find_col(['일자', 'Date'])
+        in_col = find_col(['입고수량', '입고'])
         out_col = find_col(['출고수량', '출고'])
 
         if not code_col or not date_col or not out_col:
             log(f"❌ 필수 컨럼 없음: code={code_col}, date={date_col}, out={out_col}")
             return
 
-        log(f"  컨럼 매핑: 품목코드={code_col}, 일자={date_col}, 출고수량={out_col}")
+        log(f"  컨럼 매핑: 품목코드={code_col}, 일자={date_col}, 입고={in_col}, 출고={out_col}")
 
         # 최근 3개월 기준 산정 (이번 달 제외, 지난 3개월)
         now = datetime.now(KST)
@@ -752,8 +753,9 @@ def process_inventory_movement_excel(dl_path):
             recent_months.add(dt.strftime("%Y/%m"))
         log(f"  기준 3개월: {sorted(recent_months)}")
 
-        # 품목별 출고수량 집계
+        # 품목별 입출고 수량 집계
         item_outgoing = defaultdict(int)
+        item_activity = set()  # 3개월간 입고 or 출고가 있는 품목
         date_pattern = _re.compile(r'^\d{4}/\d{2}$')  # YYYY/MM 형식만
 
         for _, row in df.iterrows():
@@ -766,11 +768,37 @@ def process_inventory_movement_excel(dl_path):
                 continue
 
             if date_val in recent_months:
+                in_qty = pd.to_numeric(row.get(in_col, 0), errors='coerce') if in_col else 0
                 out_qty = pd.to_numeric(row.get(out_col, 0), errors='coerce')
+                if pd.notna(in_qty) and in_qty > 0:
+                    item_activity.add(code)
                 if pd.notna(out_qty) and out_qty > 0:
                     item_outgoing[code] += int(out_qty)
+                    item_activity.add(code)
 
-        log(f"  품목별 3개월 출고 집계: {len(item_outgoing)}건")
+        log(f"  3개월 활동 품목: {len(item_activity)}건 / 출고 있는 품목: {len(item_outgoing)}건")
+
+        # 3개월간 입출고 없는 품목 DB에서 제거
+        db_set("rpa_message", "비활동 품목 정리 중...")
+        try:
+            r = requests.get(
+                f"{SUPABASE_URL}/rest/v1/item_master?select=item_code",
+                headers=HEADERS, timeout=10
+            )
+            if r.status_code == 200:
+                all_db_codes = {item['item_code'] for item in r.json()}
+                inactive_codes = all_db_codes - item_activity
+                if inactive_codes:
+                    # URL 파라미터로 다건 삭제
+                    import urllib.parse
+                    for code in inactive_codes:
+                        requests.delete(
+                            f"{SUPABASE_URL}/rest/v1/item_master?item_code=eq.{urllib.parse.quote(code)}",
+                            headers=HEADERS
+                        )
+                    log(f"🗑️ 3개월간 비활동 품목 {len(inactive_codes)}건 제거 완료")
+        except Exception as e:
+            log(f"  ⚠️ 비활동 품목 정리 실패: {e}")
 
         if not item_outgoing:
             log("⚠️ 최근 3개월 출고 데이터가 없습니다.")
