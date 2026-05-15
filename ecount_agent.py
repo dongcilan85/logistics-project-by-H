@@ -641,8 +641,8 @@ def process_item_master_excel(dl_path):
             cat_val = cat_raw.replace('[', '').replace(']', '').strip()
             if not cat_val or cat_val.lower() in ('nan', 'none'):
                 cat_val = '일반'
-            # 상품 카테고리만 유지 (제품/부재료/원재료/무형상품 등 제외)
-            if cat_val != '상품':
+            # 무형상품은 재고관리 불필요 → 제외
+            if cat_val == '무형상품':
                 continue
                 
             raw_price = str(row.get(price_col, 0)).replace(',', '').strip()
@@ -673,16 +673,16 @@ def process_item_master_excel(dl_path):
                     log(f"❌ 품목 업로드 오류: {resp.status_code} {resp.text[:200]}", level="error")
             log(f"✅ 품목 마스터 {success_count}건 동기화 완료")
 
-            # 상품 외 카테고리 DB에서 제거 (상품만 관리 대상)
-            db_set("rpa_message", "비상품 카테고리 정리 중...")
+            # 무형상품 DB에서 제거
+            db_set("rpa_message", "무형상품 정리 중...")
             del_resp = requests.delete(
-                f"{SUPABASE_URL}/rest/v1/item_master?category=neq.상품",
+                f"{SUPABASE_URL}/rest/v1/item_master?category=eq.무형상품",
                 headers=HEADERS
             )
             if del_resp.status_code in (200, 204):
-                log("🗑️ 상품 외 카테고리 DB에서 제거 완료")
+                log("🗑️ 무형상품 카테고리 DB에서 제거 완료")
             else:
-                log(f"⚠️ 비상품 삭제 실패: {del_resp.status_code}", level="warning")
+                log(f"⚠️ 무형상품 삭제 실패: {del_resp.status_code}", level="warning")
 
     except Exception as e:
         log(f"❌ 품목 마스터 처리 오류: {e}", level="error")
