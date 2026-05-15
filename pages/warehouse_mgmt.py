@@ -107,18 +107,21 @@ else:
     df['rem_days'] = 9999
 
 # -------------------------------------------------------------
-# 3. 상단 요약 지표 (KPI Dashboard)
+# 3. 가용/비가용 데이터 분리 및 KPI
 # -------------------------------------------------------------
-total_asset = df['inventory_cost'].sum()
-available_asset = df[df['is_available'] == True]['inventory_cost'].sum()
+avail_df = df[df['is_available'] == True].copy()
+unavail_df = df[df['is_available'] == False].copy()
 
-# 💡 유효기간 임박(1년 미만) 건수 및 금액
-urgent_df = df[df['exp_status'] == "🔴 1년 미만"]
-urgent_count = len(urgent_df)
-urgent_asset = urgent_df['inventory_cost'].sum()
+avail_asset = avail_df['inventory_cost'].sum()
+unavail_asset = unavail_df['inventory_cost'].sum()
 
-# 지표용 합산 데이터 (품목/유효기간 기준)
-agg_df = df.groupby(['item_code', 'category', 'exp_status']).agg({
+# 유효기간 임박(1년 미만) - 가용 기준
+urgent_avail = avail_df[avail_df['exp_status'] == "🔴 1년 미만"]
+urgent_count = len(urgent_avail)
+urgent_asset = urgent_avail['inventory_cost'].sum()
+
+# 품절/부족/과잉 - 가용 기준
+agg_df = avail_df.groupby(['item_code', 'category', 'exp_status']).agg({
     'stock_qty': 'sum',
     'safety_stock': 'max',
     'excess_threshold': 'max'
@@ -134,21 +137,31 @@ agg_df['status'] = agg_df.apply(get_status, axis=1)
 sold_out_count = len(agg_df[agg_df['status'] == "❌ 품절"])
 low_stock_count = len(agg_df[agg_df['status'] == "⚠️ 부족"])
 excess_stock_count = len(agg_df[agg_df['status'] == "📈 과잉"])
+unavail_wh_count = unavail_df['warehouse_name'].nunique() if not unavail_df.empty else 0
 
-# 비가용 자산 변수 복구 (에러 방지)
-unavailable_asset = df[df['is_available'] == False]['inventory_cost'].sum()
-
+# --- KPI 1행: 가용 재고 ---
 c1, c2, c3, c4 = st.columns(4)
 with c1:
-    st.metric("📦 총 재고 자산", f"₩{total_asset:,.0f}")
-    st.caption(f"가용: ₩{available_asset:,.0f} / 비가용: ₩{unavailable_asset:,.0f}")
+    st.metric("🟢 가용 재고자산", f"₩{avail_asset:,.0f}")
 with c2:
-    # 🔴 유효기간 1년 미만 (가장 중요)
     st.metric("🔴 유효기간 1년 미만", f"₩{urgent_asset:,.0f}", f"{urgent_count}건", delta_color="inverse")
 with c3:
     st.metric("❌ 품절/⚠️ 부족", f"{sold_out_count + low_stock_count} 건")
 with c4:
     st.metric("📈 과잉 재고", f"{excess_stock_count} 건")
+
+# --- KPI 2행: 비가용 + 총합 ---
+c5, c6, c7, c8 = st.columns(4)
+with c5:
+    st.metric("🔒 비가용 재고자산", f"₩{unavail_asset:,.0f}")
+with c6:
+    st.metric("🏚️ 비가용 창고", f"{unavail_wh_count} 개")
+    if not unavail_df.empty:
+        st.caption(", ".join(sorted(unavail_df['warehouse_name'].unique())))
+with c7:
+    st.metric("📦 총 재고자산", f"₩{avail_asset + unavail_asset:,.0f}")
+with c8:
+    pass
 
 st.divider()
 
@@ -204,27 +217,33 @@ def display_inventory_table(target_df, key_suffix=""):
         use_container_width=True, hide_index=True
     )
 
-tab1, tab_exp, tab2, tab4, tab5 = st.tabs(["📊 전체 현황", "🗓️ 유효기간 분석", "🛠️ 부재료", "🔥 이슈(품절/부족)", "📈 과잉재고"])
+tab1, tab_exp, tab2, tab4, tab5, tab_unavail = st.tabs(["📊 전체(가용)", "🗓️ 유효기간 분석", "🛠️ 부재료", "🔥 이슈(품절/부족)", "📈 과잉재고", "🔒 비가용 재고"])
 
 with tab1:
-    display_inventory_table(df, "all")
+    display_inventory_table(avail_df, "all")
 with tab_exp:
     st.subheader("🚨 유효기간별 재고 현황")
     st.info("유효기간 1.5년 미만 재고를 우선적으로 관리해 주세요.")
-    # 상품/제품만 필터 + 해당없음 제외 + 2년 이상 제외 + 제조일자 표기 품목 제외
-    date_type_col = df['date_type'] if 'date_type' in df.columns else pd.Series('유효기간', index=df.index)
-    exp_filtered_df = df[
-        (df['category'].isin(['상품', '제품'])) &
-        (df['expiration_date'] != '해당없음') &
-        (df['exp_status'] != '🟢 2년 이상') &
+    date_type_col = avail_df['date_type'] if 'date_type' in avail_df.columns else pd.Series('유효기간', index=avail_df.index)
+    exp_filtered_df = avail_df[
+        (avail_df['category'].isin(['상품', '제품'])) &
+        (avail_df['expiration_date'] != '해당없음') &
+        (avail_df['exp_status'] != '🟢 2년 이상') &
         (date_type_col != '제조일자')
     ].sort_values(by="rem_days")
     display_inventory_table(exp_filtered_df, "exp")
 with tab2:
-    display_inventory_table(df[df['category'] == "부재료"], "sub")
+    display_inventory_table(avail_df[avail_df['category'] == "부재료"], "sub")
 with tab4:
-    issue_df = df[df['item_code'].isin(agg_df[agg_df['status'].isin(["❌ 품절", "⚠️ 부족"])]['item_code'])]
+    issue_df = avail_df[avail_df['item_code'].isin(agg_df[agg_df['status'].isin(["❌ 품절", "⚠️ 부족"])]['item_code'])]
     display_inventory_table(issue_df, "issue")
 with tab5:
-    excess_df = df[df['item_code'].isin(agg_df[agg_df['status'] == "📈 과잉"]['item_code'])]
+    excess_df = avail_df[avail_df['item_code'].isin(agg_df[agg_df['status'] == "📈 과잉"]['item_code'])]
     display_inventory_table(excess_df, "excess")
+with tab_unavail:
+    st.subheader("🔒 비가용 창고 재고")
+    if unavail_df.empty:
+        st.info("비가용 창고에 등록된 재고가 없습니다.")
+    else:
+        st.warning(f"비가용 창고 {unavail_wh_count}개 / 총 ₩{unavail_asset:,.0f} 상당의 재고가 보관 중입니다.")
+        display_inventory_table(unavail_df, "unavail")
