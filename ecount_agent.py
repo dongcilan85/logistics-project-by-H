@@ -634,6 +634,9 @@ def process_item_master_excel(dl_path):
             cat_val = cat_raw.replace('[', '').replace(']', '').strip()
             if not cat_val or cat_val.lower() in ('nan', 'none'):
                 cat_val = '일반'
+            # 무형상품은 재고관리 불필요 → 제외
+            if cat_val == '무형상품':
+                continue
                 
             raw_price = str(row.get(price_col, 0)).replace(',', '').strip()
             unit_price_val = pd.to_numeric(raw_price, errors='coerce')
