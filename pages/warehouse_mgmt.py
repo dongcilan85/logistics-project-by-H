@@ -120,8 +120,8 @@ urgent_avail = avail_df[avail_df['exp_status'] == "🔴 1년 미만"]
 urgent_count = len(urgent_avail)
 urgent_asset = urgent_avail['inventory_cost'].sum()
 
-# 품절/부족/과잉 - 가용 기준
-agg_df = avail_df.groupby(['item_code', 'category', 'exp_status']).agg({
+# 품절/부족/과잉 - 가용 기준 (유효기간 무관 품목별 합산)
+agg_df = avail_df.groupby(['item_code']).agg({
     'stock_qty': 'sum',
     'safety_stock': 'max',
     'excess_threshold': 'max'
@@ -133,6 +133,9 @@ def get_status(row):
     if row['stock_qty'] > row['excess_threshold']: return "📈 과잉"
     return "✅ 정상"
 agg_df['status'] = agg_df.apply(get_status, axis=1)
+
+# 품목별 상태 맵 (각 행에 매핑용)
+item_status_map = dict(zip(agg_df['item_code'], agg_df['status']))
 
 sold_out_count = len(agg_df[agg_df['status'] == "❌ 품절"])
 low_stock_count = len(agg_df[agg_df['status'] == "⚠️ 부족"])
@@ -166,7 +169,7 @@ with c8:
 st.divider()
 
 # -------------------------------------------------------------
-# 3. 데이터 필터링 및 테이블 출력 유틸리티
+# 4. 데이터 필터링 및 테이블 출력 유틸리티
 # -------------------------------------------------------------
 def display_inventory_table(target_df, key_suffix=""):
     wh_list = ["전체"] + sorted(target_df['warehouse_name'].unique().tolist())
@@ -182,7 +185,6 @@ def display_inventory_table(target_df, key_suffix=""):
     if sel_wh != "전체":
         res_df = res_df[res_df['warehouse_name'] == sel_wh]
     else:
-        # 💡 전체 합계 뷰에서도 창고별/유효기간별로 데이터를 나누어 보여줌 (유효기간 분석 및 창고 파악 필수)
         group_cols = ['warehouse_name', 'item_code', 'item_name_spec', 'category', 'expiration_date', 'exp_status']
         res_df = res_df.groupby(group_cols).agg({
             'stock_qty': 'sum',
@@ -190,12 +192,8 @@ def display_inventory_table(target_df, key_suffix=""):
             'inventory_cost': 'sum'
         }).reset_index()
     
-    # 상태 재계산
-    def get_row_status(row):
-        if row['stock_qty'] <= 0: return "❌ 품절"
-        if row['stock_qty'] < row['safety_stock']: return "⚠️ 부족"
-        return "✅ 정상"
-    res_df['status'] = res_df.apply(get_row_status, axis=1)
+    # 상태: 품목별 합산 기준 상태 매핑 (유효기간별 개별 판단 X)
+    res_df['status'] = res_df['item_code'].map(item_status_map).fillna("✅ 정상")
     
     if q:
         if search_col == "품목명":
