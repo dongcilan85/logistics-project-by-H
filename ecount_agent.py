@@ -666,6 +666,17 @@ def process_item_master_excel(dl_path):
                     log(f"❌ 품목 업로드 오류: {resp.status_code} {resp.text[:200]}", level="error")
             log(f"✅ 품목 마스터 {success_count}건 동기화 완료")
 
+            # 무형상품 DB에서 제거
+            db_set("rpa_message", "무형상품 정리 중...")
+            del_resp = requests.delete(
+                f"{SUPABASE_URL}/rest/v1/item_master?category=eq.무형상품",
+                headers=HEADERS
+            )
+            if del_resp.status_code in (200, 204):
+                log("🗑️ 무형상품 카테고리 DB에서 제거 완료")
+            else:
+                log(f"⚠️ 무형상품 삭제 실패: {del_resp.status_code}", level="warning")
+
     except Exception as e:
         log(f"❌ 품목 마스터 처리 오류: {e}", level="error")
 
