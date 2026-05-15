@@ -133,6 +133,8 @@ ALTER TABLE public.work_logs ADD COLUMN IF NOT EXISTS plan_id UUID REFERENCES pu
 ALTER TABLE public.task_categories ADD COLUMN IF NOT EXISTS display_order INT DEFAULT 999;
 ALTER TABLE public.item_master ADD COLUMN IF NOT EXISTS unit_price INT DEFAULT 0;
 ALTER TABLE public.item_master ADD COLUMN IF NOT EXISTS date_type TEXT DEFAULT '유효기간';
+ALTER TABLE public.item_master ADD COLUMN IF NOT EXISTS monthly_avg_usage INT DEFAULT 0;
+ALTER TABLE public.item_master ADD COLUMN IF NOT EXISTS safety_months INT DEFAULT 2;
 
 
 -- =========================================================================

@@ -497,6 +497,75 @@ class EcountRPA:
             self._log(f"❌ 품목 마스터 수집 오류: {e}")
             return False, str(e)
 
+    def get_inventory_movement(self):
+        """재고변동표 수집 - 월별/최근 1년 기준"""
+        try:
+            mmdd = datetime.now().strftime("%m%d")
+            self._log("⭐ '재고변동표' 즐겨찾기 메뉴 이동...")
+            self._click_favorite_menu("재고변동표")
+
+            frame = self._work_frame()
+            body = frame.locator("body")
+
+            # "월별" 출력구분 클릭
+            self._log("📅 출력구분 '월별' 클릭...")
+            clicked_monthly = False
+            for f in [frame, self.page.main_frame] + list(self.page.frames):
+                if f.is_detached():
+                    continue
+                try:
+                    loc = f.get_by_text("월별", exact=True).first
+                    if loc.count() > 0:
+                        loc.click(force=True)
+                        self._log("  ✅ '월별' 클릭 성공")
+                        clicked_monthly = True
+                        break
+                except Exception:
+                    continue
+            if not clicked_monthly:
+                self._log("  ⚠️ '월별' 텍스트 못 찾음 - 키보드 폴백")
+
+            time.sleep(0.5)
+
+            # "최근 1년" 기간 클릭
+            self._log("📅 기간 '최근 1년' 클릭...")
+            clicked_period = False
+            for f in [frame, self.page.main_frame] + list(self.page.frames):
+                if f.is_detached():
+                    continue
+                try:
+                    loc = f.get_by_text("최근 1년", exact=True).first
+                    if loc.count() > 0:
+                        loc.click(force=True)
+                        self._log("  ✅ '최근 1년' 클릭 성공")
+                        clicked_period = True
+                        break
+                except Exception:
+                    continue
+            if not clicked_period:
+                self._log("  ⚠️ '최근 1년' 텍스트 못 찾음")
+
+            time.sleep(0.5)
+
+            # F8 조회
+            self._log("🔍 F8 조회")
+            body.press("F8")
+            self._wait_page_ready()
+            time.sleep(2)  # 대량 데이터 로딩 추가 대기
+
+            # Excel 다운로드
+            self._log("📥 Excel 다운로드 중...")
+            ok, msg = self._download_excel(f"{mmdd}_재고변동표(1).xlsx")
+            if ok:
+                self._log(f"✅ 재고변동표 다운로드 완료: {msg}")
+                return True, msg
+            self._log(f"❌ 다운로드 실패: {msg}")
+            return False, msg
+
+        except Exception as e:
+            self._log(f"❌ 재고변동표 수집 오류: {e}")
+            return False, str(e)
+
     def close(self):
         try:
             if self._context:

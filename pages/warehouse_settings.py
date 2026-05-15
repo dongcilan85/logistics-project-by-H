@@ -149,15 +149,18 @@ st.divider()
 st.subheader("📦 품목 마스터 및 안전재고 설정")
 try:
     item_res = supabase.table("item_master").select("*").order("item_code").execute()
-    item_df = pd.DataFrame(item_res.data) if item_res.data else pd.DataFrame(columns=["item_code", "item_name", "category", "date_type", "unit_price", "safety_stock", "excess_threshold"])
+    item_df = pd.DataFrame(item_res.data) if item_res.data else pd.DataFrame(columns=["item_code", "item_name", "category", "date_type", "unit_price", "monthly_avg_usage", "safety_months", "safety_stock", "excess_threshold"])
 
     # 표시 전에 dtype 정규화 — data_editor가 텍스트 컬럼에 NaN/혼합타입이 섞이면 셀을 빈칸으로 그리는 케이스가 있어 명시적으로 문자열로 캐스팅한다.
     for _c in ("item_code", "item_name", "category", "date_type"):
         if _c in item_df.columns:
             item_df[_c] = item_df[_c].fillna("").astype(str)
-    for _c in ("unit_price", "safety_stock", "excess_threshold"):
+    for _c in ("unit_price", "monthly_avg_usage", "safety_months", "safety_stock", "excess_threshold"):
         if _c in item_df.columns:
             item_df[_c] = pd.to_numeric(item_df[_c], errors="coerce").fillna(0)
+    # safety_months 기본값 2
+    if "safety_months" in item_df.columns:
+        item_df["safety_months"] = item_df["safety_months"].replace(0, 2)
 
     # 카테고리를 pd.Categorical로 명시적 변환하면 Streamlit이 옵션 매핑 오류 없이 정확하게 Selectbox로 렌더링함
     valid_categories = ["상품", "제품", "부재료", "원재료", "반제품", "무형상품", "일반"]
@@ -199,16 +202,19 @@ try:
             "category": st.column_config.SelectboxColumn("카테고리"),
             "date_type": st.column_config.SelectboxColumn("날짜유형"),
             "unit_price": st.column_config.NumberColumn("입고단가", format="%d"),
-            "safety_stock": st.column_config.NumberColumn("안전재고", format="%d"),
-            "excess_threshold": st.column_config.NumberColumn("과잉기준", format="%d"),
+            "monthly_avg_usage": st.column_config.NumberColumn("월평균사용", format="%d", disabled=True),
+            "safety_months": st.column_config.NumberColumn("기준개월", format="%d"),
+            "safety_stock": st.column_config.NumberColumn("안전재고", format="%d", disabled=True),
+            "excess_threshold": st.column_config.NumberColumn("과잉기준", format="%d", disabled=True),
             "updated_at": None,
         },
-        column_order=["item_code", "item_name", "category", "date_type", "unit_price", "safety_stock", "excess_threshold"],
+        column_order=["item_code", "item_name", "category", "date_type", "unit_price", "monthly_avg_usage", "safety_months", "safety_stock", "excess_threshold"],
         num_rows="dynamic",
         use_container_width=True,
         key="item_editor_final",
         hide_index=True
     )
+    st.caption("💡 월평균사용 = 재고변동표 자동계산 / 안전재고 = 월평균 × 기준개월 / 과잉기준 = 안전재고 × 4 (0일 때 500)")
 
     if st.button("💾 품목 마스터 저장", use_container_width=True):
         with st.status("품목 데이터 저장 중...") as status:
@@ -221,14 +227,23 @@ try:
             upsert_items = []
             for _, row in edited_item_df.iterrows():
                 if pd.notnull(row['item_code']) and str(row['item_code']).strip():
+                    monthly_avg = int(float(row.get('monthly_avg_usage', 0)))
+                    safety_m = int(float(row.get('safety_months', 2)))
+                    if safety_m == 0:
+                        safety_m = 2
+                    safety_stock = monthly_avg * safety_m
+                    excess_threshold = safety_stock * 4 if safety_stock > 0 else 500
+
                     upsert_items.append({
                         "item_code": str(row['item_code']).strip(),
                         "item_name": str(row.get('item_name', '')).strip(),
                         "category": str(row.get('category', '일반')),
                         "date_type": str(row.get('date_type', '유효기간')),
                         "unit_price": int(float(row.get('unit_price', 0))),
-                        "safety_stock": int(float(row.get('safety_stock', 0))),
-                        "excess_threshold": int(float(row.get('excess_threshold', 1000)))
+                        "monthly_avg_usage": monthly_avg,
+                        "safety_months": safety_m,
+                        "safety_stock": safety_stock,
+                        "excess_threshold": excess_threshold
                     })
             if upsert_items:
                 supabase.table("item_master").upsert(upsert_items).execute()

@@ -138,9 +138,6 @@ def execute_rpa(task="all"):
             #     if ok_inv:
             #         log("📊 [동기화] 창고별재고현황 엑셀 → DB 업로드 중...")
             #         process_inventory_excel(dl_path)
-            #     else:
-            #         log(f"⚠️ 창고별재고현황 수집 실패 - DB 동기화 건너뜀: {msg_inv}", level="warning")
-
             # 작업 2: 관리항목별재고현황 (warehouse_inventory) — 유효기간 순회
             if task in ("all", "warehouse_inventory"):
                 log("🔄 [작업] 관리항목별재고현황(유효기간) 순회 수집 시작...")
@@ -161,7 +158,7 @@ def execute_rpa(task="all"):
                 else:
                     log("⚠️ 등록된 창고 코드가 없어 순회 수집을 건너뜁니다.")
 
-            # 작업 3: 품목 마스터 (item_master)
+            # 작업 3: 품목 마스터 + 재고변동표 (item_master 트리거에 포함)
             if task in ("all", "item_master"):
                 log("📦 [작업] 품목 마스터(품목등록) 수집 시작...")
                 db_set("rpa_message", "품목 마스터 수집 중...")
@@ -171,6 +168,16 @@ def execute_rpa(task="all"):
                     process_item_master_excel(dl_path)
                 else:
                     log(f"⚠️ 품목 마스터 수집 건너뜀: {item_file}")
+
+                # 재고변동표 수집 (품목마스터 트리거에 포함)
+                log("📊 [작업] 재고변동표 수집 시작...")
+                db_set("rpa_message", "재고변동표 수집 중...")
+                success_mv, mv_msg = rpa.get_inventory_movement()
+                if success_mv:
+                    log("📊 [동기화] 재고변동표 → 월평균 사용량 계산 중...")
+                    process_inventory_movement_excel(dl_path)
+                else:
+                    log(f"⚠️ 재고변동표 수집 건너뜀: {mv_msg}")
 
             db_set("rpa_status", "completed")
             db_set("rpa_message", f"{task_label} 완료")
@@ -679,6 +686,145 @@ def process_item_master_excel(dl_path):
 
     except Exception as e:
         log(f"❌ 품목 마스터 처리 오류: {e}", level="error")
+
+
+def process_inventory_movement_excel(dl_path):
+    """재고변동표 엑셀을 파싱하여 품목별 월평균 사용량 계산 후 item_master 업데이트
+    
+    엑셀 구조:
+    - 2행: 헤더 (품목코드, 품목명, 규격, 일자, 입고수량, 출고수량, 잔량)
+    - 품목별 월별 행 (YYYY/MM)
+    - '전일재고', 'XXX 계' 행 제외
+    - 최근 3개월 출고수량 합산 ÷ 3 = 월평균
+    """
+    db_set("rpa_message", "재고변동표 파싱 중...")
+    import glob, re as _re
+    from collections import defaultdict
+    from dateutil.relativedelta import relativedelta
+    
+    try:
+        files = glob.glob(os.path.join(dl_path, "*재고변동*.xlsx"))
+        if not files:
+            log("⚠️ 재고변동표 파일이 없습니다.", level="warning")
+            return
+        target_file = max(files, key=os.path.getmtime)
+        log(f"📄 재고변동표 파일: {os.path.basename(target_file)}")
+
+        # 헤더 탐색 (2행 기준)
+        df_raw = pd.read_excel(target_file, header=None)
+        header_row_idx = -1
+        for i, row in df_raw.iterrows():
+            vals = [str(v).strip() for v in row.values if pd.notna(v)]
+            if any('품목코드' in v for v in vals):
+                header_row_idx = i
+                break
+        if header_row_idx == -1:
+            log("❌ 재고변동표 헤더를 찾을 수 없습니다.")
+            return
+
+        df = pd.read_excel(target_file, header=header_row_idx)
+        df.columns = [str(c).strip() for c in df.columns]
+
+        # 컨럼 탐색
+        def find_col(keywords):
+            cols_clean = {col: str(col).replace(' ', '').replace('\n', '') for col in df.columns}
+            for kw in keywords:
+                k = kw.replace(' ', '')
+                for col, c in cols_clean.items():
+                    if k in c: return col
+            return None
+
+        code_col = find_col(['품목코드', 'ItemCode'])
+        date_col = find_col(['일자', 'Date'])
+        out_col = find_col(['출고수량', '출고'])
+
+        if not code_col or not date_col or not out_col:
+            log(f"❌ 필수 컨럼 없음: code={code_col}, date={date_col}, out={out_col}")
+            return
+
+        log(f"  컨럼 매핑: 품목코드={code_col}, 일자={date_col}, 출고수량={out_col}")
+
+        # 최근 3개월 기준 산정 (이번 달 제외, 지난 3개월)
+        now = datetime.now(KST)
+        recent_months = set()
+        for m in range(1, 4):  # 1, 2, 3개월 전
+            dt = now - relativedelta(months=m)
+            recent_months.add(dt.strftime("%Y/%m"))
+        log(f"  기준 3개월: {sorted(recent_months)}")
+
+        # 품목별 출고수량 집계
+        item_outgoing = defaultdict(int)
+        date_pattern = _re.compile(r'^\d{4}/\d{2}$')  # YYYY/MM 형식만
+
+        for _, row in df.iterrows():
+            code = str(row.get(code_col, '')).strip()
+            if not code or not _re.match(r'^[A-Za-z0-9]+$', code):
+                continue
+
+            date_val = str(row.get(date_col, '')).strip()
+            if not date_pattern.match(date_val):
+                continue
+
+            if date_val in recent_months:
+                out_qty = pd.to_numeric(row.get(out_col, 0), errors='coerce')
+                if pd.notna(out_qty) and out_qty > 0:
+                    item_outgoing[code] += int(out_qty)
+
+        log(f"  품목별 3개월 출고 집계: {len(item_outgoing)}건")
+
+        if not item_outgoing:
+            log("⚠️ 최근 3개월 출고 데이터가 없습니다.")
+            return
+
+        # DB에서 기존 safety_months 읽기
+        db_set("rpa_message", "월평균/안전재고 계산 중...")
+        safety_months_map = {}
+        try:
+            r = requests.get(
+                f"{SUPABASE_URL}/rest/v1/item_master?select=item_code,safety_months",
+                headers=HEADERS, timeout=10
+            )
+            if r.status_code == 200:
+                for item in r.json():
+                    sm = item.get('safety_months', 2)
+                    safety_months_map[item['item_code']] = int(sm) if sm else 2
+        except Exception as e:
+            log(f"  ⚠️ safety_months 읽기 실패: {e}")
+
+        # 월평균 계산 + 안전재고/과잉기준 자동산출
+        update_data = []
+        for code, total_out in item_outgoing.items():
+            monthly_avg = total_out // 3  # 정수
+            safety_m = safety_months_map.get(code, 2)
+            safety_stock = monthly_avg * safety_m
+            excess_threshold = safety_stock * 4 if safety_stock > 0 else 500
+
+            update_data.append({
+                "item_code": code,
+                "monthly_avg_usage": monthly_avg,
+                "safety_stock": safety_stock,
+                "excess_threshold": excess_threshold
+            })
+
+        # DB 업데이트 (upsert)
+        db_set("rpa_message", f"월평균 사용량 DB 업데이트 중... ({len(update_data)}건)")
+        headers = {**HEADERS, "Prefer": "resolution=merge-duplicates,return=representation"}
+        success_count = 0
+        for i in range(0, len(update_data), 500):
+            chunk = update_data[i:i+500]
+            resp = requests.post(
+                f"{SUPABASE_URL}/rest/v1/item_master?on_conflict=item_code",
+                headers=headers, json=chunk
+            )
+            if resp.status_code in (200, 201):
+                success_count += len(chunk)
+            else:
+                log(f"❌ 월평균 업데이트 오류: {resp.status_code} {resp.text[:200]}", level="error")
+
+        log(f"✅ 월평균 사용량 {success_count}건 업데이트 완료 (최근 3개월 기준)")
+
+    except Exception as e:
+        log(f"❌ 재고변동표 처리 오류: {e}", level="error")
 
 def main():
     print("=" * 60)
