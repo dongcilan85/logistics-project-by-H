@@ -130,7 +130,7 @@ class EcountRPA:
         time.sleep(2)
 
     def _search_menu(self, keyword):
-        """(백업용) 상단 메뉴 검색박스에 키워드 입력 후 Enter."""
+        """상단 메뉴 검색박스에 키워드 입력 후 Enter."""
         self.page.bring_to_front()
         box = self.page.locator("#txtSearch")
         try:
@@ -145,45 +145,6 @@ class EcountRPA:
         box.press("Enter", no_wait_after=True)
         # 메뉴 전환 후 iframe 로딩 대기
         self._wait_page_ready()
-
-    def _click_favorite_menu(self, menu_text):
-        """즐겨찾기 메뉴에서 해당 텍스트를 클릭하여 메뉴 이동.
-        
-        로그인 후 메인 화면의 즐겨찾기 영역에서 menu_text와 일치하는
-        링크/버튼을 찾아 클릭합니다.
-        """
-        self._log(f"⭐ 즐겨찾기 메뉴 '{menu_text}' 클릭 시도...")
-        self.page.bring_to_front()
-
-        # 전략 1: 메인 페이지에서 즐겨찾기 텍스트 클릭
-        for frame in [self.page.main_frame] + list(self.page.frames):
-            if frame.is_detached():
-                continue
-            try:
-                loc = frame.get_by_text(menu_text, exact=True).first
-                if loc.count() > 0:
-                    loc.click()
-                    self._log(f"  ✅ 즐겨찾기 '{menu_text}' 클릭 성공 (frame: {frame.name or 'main'})")
-                    self._wait_page_ready()
-                    return True
-            except Exception:
-                continue
-
-        # 전략 2: a 태그 title 속성으로 탐색
-        try:
-            loc = self.page.locator(f"a[title*='{menu_text}']")
-            if loc.count() > 0:
-                loc.first.click()
-                self._log(f"  ✅ 즐겨찾기 '{menu_text}' title 속성 클릭 성공")
-                self._wait_page_ready()
-                return True
-        except Exception:
-            pass
-
-        # 전략 3: 메뉴 검색 폴백
-        self._log(f"  ⚠️ 즐겨찾기에서 '{menu_text}' 못 찾음 - 메뉴 검색 폴백")
-        self._search_menu(menu_text)
-        return True
 
     # ───────── Playwright 네이티브: Excel 다운로드 ─────────
 
@@ -429,8 +390,8 @@ class EcountRPA:
         """관리항목별재고현황 - 창고별 순회 수집"""
         try:
             mmdd = datetime.now().strftime("%m%d")
-            self._log("⭐ '관리항목별재고현황' 즐겨찾기 메뉴 이동...")
-            self._click_favorite_menu("관리항목별재고현황")
+            self._log("🔍 '관리항목별재고현황' 메뉴 검색 및 이동...")
+            self._search_menu("관리항목별재고현황")
 
             for i, wh in enumerate(warehouses):
                 wh_code = str(wh['warehouse_code']).strip()
@@ -482,8 +443,8 @@ class EcountRPA:
         """품목등록 메뉴에서 품목 마스터 다운로드"""
         try:
             mmdd = datetime.now().strftime("%m%d")
-            self._log("⭐ '품목등록' 즐겨찾기 메뉴 이동...")
-            self._click_favorite_menu("품목등록")
+            self._log("🔍 '품목등록' 메뉴 검색 및 이동...")
+            self._search_menu("품목등록")
 
             self._log("📥 Excel 다운로드 중...")
             ok, msg = self._download_excel(f"{mmdd}_품목마스터(1).xlsx")
