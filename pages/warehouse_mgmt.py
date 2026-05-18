@@ -81,11 +81,12 @@ if df.empty:
 today = datetime.now(KST).date()
 
 def analyze_expiration(row):
-    if pd.isna(row.get('expiration_date')) or not row['expiration_date']:
-        return "⭕ 해당없음", 9999
+    val = row.get('expiration_date')
+    if pd.isna(val) or not val or str(val).strip() == '해당없음':
+        return "⭕ 유효기간 없음", 9999
     
     try:
-        exp_date = pd.to_datetime(row['expiration_date']).date()
+        exp_date = pd.to_datetime(val).date()
         diff_days = (exp_date - today).days
         
         if diff_days < 365:
@@ -95,7 +96,7 @@ def analyze_expiration(row):
         else:
             return "🟢 2년 이상", diff_days
     except:
-        return "⚪ 형식오류", 9999
+        return "⭕ 유효기간 없음", 9999
 
 # 유효기간 등급 부여
 if not df.empty and 'expiration_date' in df.columns:
@@ -204,21 +205,27 @@ def display_inventory_table(target_df, key_suffix=""):
             res_df = res_df[res_df['warehouse_name'].astype(str).str.contains(q, case=False, na=False)]
     
     st.dataframe(
-        res_df[['status', 'exp_status', 'warehouse_name', 'item_code', 'item_name_spec', 'category', 'stock_qty', 'expiration_date', 'inventory_cost']],
+        res_df[['status', 'exp_status', 'item_code', 'item_name_spec', 'stock_qty', 'warehouse_name', 'expiration_date', 'category', 'inventory_cost']],
         column_config={
-            "status": "상태", "exp_status": "유효기간 등급", "warehouse_name": "창고명", "item_code": "품목코드",
-            "item_name_spec": "품목명[규격]", "category": "분류",
+            "status": "상태", "exp_status": "유효기간 등급", "item_code": "품목코드", "item_name_spec": "품목명[규격]",
             "stock_qty": st.column_config.NumberColumn("현재고", format="%d"),
-            "expiration_date": "유효기간",
+            "warehouse_name": "창고명", "expiration_date": "유효기간", "category": "분류",
             "inventory_cost": st.column_config.NumberColumn("재고비용", format="₩%d")
         },
         use_container_width=True, hide_index=True
     )
 
-tab1, tab_exp, tab2, tab4, tab5, tab_unavail = st.tabs(["📊 전체(가용)", "🗓️ 유효기간 분석", "🛠️ 부재료", "🔥 이슈(품절/부족)", "📈 과잉재고", "🔒 비가용 재고"])
+tab1, tab_exp, tab2, tab4, tab5 = st.tabs(["📊 전체 재고", "🗓️ 유효기간 분석", "🛠️ 부재료", "🔥 이슈(품절/부족)", "📈 과잉재고"])
 
 with tab1:
-    display_inventory_table(avail_df, "all")
+    filter_opt = st.radio("재고 유형 선택", ["전체", "가용재고", "비가용재고"], horizontal=True, label_visibility="collapsed")
+    if filter_opt == "전체":
+        display_inventory_table(df, "all_total")
+    elif filter_opt == "가용재고":
+        display_inventory_table(avail_df, "all_avail")
+    else:
+        st.warning(f"비가용 창고 {unavail_wh_count}개 / 총 ₩{unavail_asset:,.0f} 상당의 재고가 보관 중입니다.")
+        display_inventory_table(unavail_df, "all_unavail")
 with tab_exp:
     st.subheader("🚨 유효기간별 재고 현황")
     st.info("유효기간 1.5년 미만 재고를 우선적으로 관리해 주세요.")
@@ -238,10 +245,3 @@ with tab4:
 with tab5:
     excess_df = avail_df[avail_df['item_code'].isin(agg_df[agg_df['status'] == "📈 과잉"]['item_code'])]
     display_inventory_table(excess_df, "excess")
-with tab_unavail:
-    st.subheader("🔒 비가용 창고 재고")
-    if unavail_df.empty:
-        st.info("비가용 창고에 등록된 재고가 없습니다.")
-    else:
-        st.warning(f"비가용 창고 {unavail_wh_count}개 / 총 ₩{unavail_asset:,.0f} 상당의 재고가 보관 중입니다.")
-        display_inventory_table(unavail_df, "unavail")
