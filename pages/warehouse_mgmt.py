@@ -204,10 +204,15 @@ def display_inventory_table(target_df, key_suffix=""):
         elif search_col == "창고명":
             res_df = res_df[res_df['warehouse_name'].astype(str).str.contains(q, case=False, na=False)]
     
+    cols_to_show = ['status', 'exp_status', 'item_code', 'item_name_spec', 'stock_qty', 'warehouse_name', 'expiration_date', 'category', 'inventory_cost']
+    if 'activity_status' in res_df.columns:
+        cols_to_show.insert(2, 'activity_status')
+        res_df['activity_status'] = res_df['activity_status'].fillna('알수없음')
+        
     st.dataframe(
-        res_df[['status', 'exp_status', 'item_code', 'item_name_spec', 'stock_qty', 'warehouse_name', 'expiration_date', 'category', 'inventory_cost']],
+        res_df[cols_to_show],
         column_config={
-            "status": "상태", "exp_status": "유효기간 등급", "item_code": "품목코드", "item_name_spec": "품목명[규격]",
+            "status": "상태", "exp_status": "유효기간 등급", "activity_status": "활성도", "item_code": "품목코드", "item_name_spec": "품목명[규격]",
             "stock_qty": st.column_config.NumberColumn("현재고", format="%d"),
             "warehouse_name": "창고명", "expiration_date": "유효기간", "category": "분류",
             "inventory_cost": st.column_config.NumberColumn("재고비용", format="₩%d")
@@ -238,7 +243,27 @@ with tab_exp:
     ].sort_values(by="rem_days")
     display_inventory_table(exp_filtered_df, "exp")
 with tab2:
-    display_inventory_table(avail_df[avail_df['category'] == "부재료"], "sub")
+    sub_df = avail_df[avail_df['category'] == "부재료"].copy()
+    if 'activity_status' not in sub_df.columns:
+        sub_df['activity_status'] = '알수없음'
+        
+    filter_sub = st.radio("부재료 보기 필터", ["전체", "활동상태별 분류", "재발주 필요"], horizontal=True, label_visibility="collapsed")
+    
+    if filter_sub == "전체":
+        display_inventory_table(sub_df, "sub_all")
+    elif filter_sub == "활동상태별 분류":
+        st.caption("💡 재고변동표 기준 (최근 3개월: 정상소진 / 최근 6개월: 소진요청 / 6개월 초과 무활동: 폐기요청)")
+        act_tabs = st.tabs(["🟢 정상소진", "🟡 소진요청", "🔴 폐기요청"])
+        with act_tabs[0]:
+            display_inventory_table(sub_df[sub_df['activity_status'] == "정상소진"], "sub_act_norm")
+        with act_tabs[1]:
+            display_inventory_table(sub_df[sub_df['activity_status'] == "소진요청"], "sub_act_warn")
+        with act_tabs[2]:
+            display_inventory_table(sub_df[sub_df['activity_status'] == "폐기요청"], "sub_act_err")
+    else:
+        st.caption("💡 현재고가 안전재고보다 적은(⚠️ 부족) 부재료 목록입니다.")
+        reorder_df = sub_df[sub_df['item_code'].isin(agg_df[agg_df['status'] == "⚠️ 부족"]['item_code'])]
+        display_inventory_table(reorder_df, "sub_reorder")
 with tab4:
     issue_df = avail_df[avail_df['item_code'].isin(agg_df[agg_df['status'].isin(["❌ 품절", "⚠️ 부족"])]['item_code'])]
     display_inventory_table(issue_df, "issue")

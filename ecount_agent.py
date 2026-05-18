@@ -745,18 +745,18 @@ def process_inventory_movement_excel(dl_path):
 
         log(f"  컨럼 매핑: 품목코드={code_col}, 일자={date_col}, 입고={in_col}, 출고={out_col}")
 
-        # 최근 3개월 기준 산정 (이번 달 제외, 지난 3개월)
+        # 기준 산정 (이번 달 제외, 1~3, 1~6, 1~12개월 전)
         now = datetime.now(KST)
-        recent_months = set()
-        for m in range(1, 4):  # 1, 2, 3개월 전
-            dt = now - relativedelta(months=m)
-            recent_months.add(dt.strftime("%Y/%m"))
-        log(f"  기준 3개월: {sorted(recent_months)}")
+        months_3 = set((now - relativedelta(months=m)).strftime("%Y/%m") for m in range(1, 4))
+        months_6 = set((now - relativedelta(months=m)).strftime("%Y/%m") for m in range(1, 7))
+        months_12 = set((now - relativedelta(months=m)).strftime("%Y/%m") for m in range(1, 13))
 
-        # 품목별 입출고 수량 집계
+        log(f"  기준 3개월: {sorted(months_3)}")
+
+        # 품목별 집계 및 최근 활동 월 추적
         item_outgoing = defaultdict(int)
-        item_activity = set()  # 3개월간 입고 or 출고가 있는 품목
-        date_pattern = _re.compile(r'^\d{4}/\d{2}$')  # YYYY/MM 형식만
+        item_latest_activity = {}  # 품목코드 -> 가장 최근 활동(입고/출고) 월
+        date_pattern = _re.compile(r'^\d{4}/\d{2}$')
 
         for _, row in df.iterrows():
             code = str(row.get(code_col, '')).strip()
@@ -767,75 +767,71 @@ def process_inventory_movement_excel(dl_path):
             if not date_pattern.match(date_val):
                 continue
 
-            if date_val in recent_months:
-                in_qty = pd.to_numeric(row.get(in_col, 0), errors='coerce') if in_col else 0
-                out_qty = pd.to_numeric(row.get(out_col, 0), errors='coerce')
-                if pd.notna(in_qty) and in_qty > 0:
-                    item_activity.add(code)
+            in_qty = pd.to_numeric(row.get(in_col, 0), errors='coerce') if in_col else 0
+            out_qty = pd.to_numeric(row.get(out_col, 0), errors='coerce')
+            has_activity = (pd.notna(in_qty) and in_qty > 0) or (pd.notna(out_qty) and out_qty > 0)
+
+            # 활동 월 기록
+            if has_activity:
+                if code not in item_latest_activity or date_val > item_latest_activity[code]:
+                    item_latest_activity[code] = date_val
+
+            # 3개월 월평균 사용량을 위한 출고 집계
+            if date_val in months_3:
                 if pd.notna(out_qty) and out_qty > 0:
                     item_outgoing[code] += int(out_qty)
-                    item_activity.add(code)
 
-        log(f"  3개월 활동 품목: {len(item_activity)}건 / 출고 있는 품목: {len(item_outgoing)}건")
+        log(f"  총 활동 품목(최근 1년): {len(item_latest_activity)}건 / 3개월 출고 품목: {len(item_outgoing)}건")
 
-        # 3개월간 입출고 없는 품목 DB에서 제거
-        db_set("rpa_message", "비활동 품목 정리 중...")
-        try:
-            r = requests.get(
-                f"{SUPABASE_URL}/rest/v1/item_master?select=item_code",
-                headers=HEADERS, timeout=10
-            )
-            if r.status_code == 200:
-                all_db_codes = {item['item_code'] for item in r.json()}
-                inactive_codes = all_db_codes - item_activity
-                if inactive_codes:
-                    # URL 파라미터로 다건 삭제
-                    import urllib.parse
-                    for code in inactive_codes:
-                        requests.delete(
-                            f"{SUPABASE_URL}/rest/v1/item_master?item_code=eq.{urllib.parse.quote(code)}",
-                            headers=HEADERS
-                        )
-                    log(f"🗑️ 3개월간 비활동 품목 {len(inactive_codes)}건 제거 완료")
-        except Exception as e:
-            log(f"  ⚠️ 비활동 품목 정리 실패: {e}")
-
-        if not item_outgoing:
-            log("⚠️ 최근 3개월 출고 데이터가 없습니다.")
-            return
-
-        # DB에서 기존 safety_months 읽기
-        db_set("rpa_message", "월평균/안전재고 계산 중...")
-        safety_months_map = {}
+        # DB에서 기존 item 읽기 (전체 품목을 대상으로 상태 업데이트)
+        db_set("rpa_message", "품목 상태 및 안전재고 계산 중...")
+        all_db_items = []
         try:
             r = requests.get(
                 f"{SUPABASE_URL}/rest/v1/item_master?select=item_code,safety_months",
                 headers=HEADERS, timeout=10
             )
             if r.status_code == 200:
-                for item in r.json():
-                    sm = item.get('safety_months', 2)
-                    safety_months_map[item['item_code']] = int(sm) if sm else 2
+                all_db_items = r.json()
         except Exception as e:
-            log(f"  ⚠️ safety_months 읽기 실패: {e}")
+            log(f"  ⚠️ 기존 품목 읽기 실패: {e}")
 
-        # 월평균 계산 + 안전재고/과잉기준 자동산출
+        if not all_db_items:
+            log("⚠️ DB에 등록된 품목이 없어 재고변동표 분석을 건너뜁니다.")
+            return
+
+        # 월평균 계산 + 안전재고 + 활성도 상태 자동산출
         update_data = []
-        for code, total_out in item_outgoing.items():
-            monthly_avg = total_out // 3  # 정수
-            safety_m = safety_months_map.get(code, 2)
+        for item in all_db_items:
+            code = item['item_code']
+            
+            # 월평균, 안전재고 계산 (최근 3개월 출고 기준)
+            total_out = item_outgoing.get(code, 0)
+            monthly_avg = total_out // 3
+            safety_m = int(item.get('safety_months') or 2)
             safety_stock = monthly_avg * safety_m
             excess_threshold = safety_stock * 4 if safety_stock > 0 else 500
+
+            # 활성도 상태 (activity_status) 판단
+            latest_month = item_latest_activity.get(code)
+            if latest_month and latest_month in months_3:
+                activity_status = "정상소진"
+            elif latest_month and latest_month in months_6:
+                activity_status = "소진요청"
+            else:
+                # 6개월 초과 또는 1년간 활동 없음
+                activity_status = "폐기요청"
 
             update_data.append({
                 "item_code": code,
                 "monthly_avg_usage": monthly_avg,
                 "safety_stock": safety_stock,
-                "excess_threshold": excess_threshold
+                "excess_threshold": excess_threshold,
+                "activity_status": activity_status
             })
 
         # DB 업데이트 (upsert)
-        db_set("rpa_message", f"월평균 사용량 DB 업데이트 중... ({len(update_data)}건)")
+        db_set("rpa_message", f"품목 상태 및 월평균 DB 업데이트 중... ({len(update_data)}건)")
         headers = {**HEADERS, "Prefer": "resolution=merge-duplicates,return=representation"}
         success_count = 0
         for i in range(0, len(update_data), 500):
@@ -847,9 +843,9 @@ def process_inventory_movement_excel(dl_path):
             if resp.status_code in (200, 201):
                 success_count += len(chunk)
             else:
-                log(f"❌ 월평균 업데이트 오류: {resp.status_code} {resp.text[:200]}", level="error")
+                log(f"❌ 상태 업데이트 오류: {resp.status_code} {resp.text[:200]}", level="error")
 
-        log(f"✅ 월평균 사용량 {success_count}건 업데이트 완료 (최근 3개월 기준)")
+        log(f"✅ 품목 마스터 자동 분석 {success_count}건 업데이트 완료 (활성도, 3개월 기준)")
 
     except Exception as e:
         log(f"❌ 재고변동표 처리 오류: {e}", level="error")

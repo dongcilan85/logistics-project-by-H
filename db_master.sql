@@ -135,6 +135,7 @@ ALTER TABLE public.item_master ADD COLUMN IF NOT EXISTS unit_price INT DEFAULT 0
 ALTER TABLE public.item_master ADD COLUMN IF NOT EXISTS date_type TEXT DEFAULT '유효기간';
 ALTER TABLE public.item_master ADD COLUMN IF NOT EXISTS monthly_avg_usage INT DEFAULT 0;
 ALTER TABLE public.item_master ADD COLUMN IF NOT EXISTS safety_months INT DEFAULT 2;
+ALTER TABLE public.item_master ADD COLUMN IF NOT EXISTS activity_status TEXT DEFAULT '정상소진';
 
 
 -- =========================================================================
