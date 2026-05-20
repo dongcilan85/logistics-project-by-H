@@ -241,27 +241,42 @@ with c4:
     if st.button(f"🛠️ 발주 필요 부자재\n{reorder_sub_count} 건", use_container_width=True):
         st.session_state.kpi_selected = "reorder_sub"
 
-# --- KPI 카드 클릭 시 상세 내역 표시 ---
+# --- KPI 카드 클릭 시 간소화 테이블 표시 ---
 if st.session_state.kpi_selected:
     st.divider()
     kpi_sel = st.session_state.kpi_selected
     
+    def display_summary_table(src_df, title):
+        """가용 재고 기준 품목별 합산 간소화 테이블"""
+        st.subheader(title)
+        if src_df.empty:
+            st.info("해당 조건의 데이터가 없습니다.")
+            return
+        summary = src_df.groupby(['item_code', 'item_name_spec']).agg({
+            'stock_qty': 'sum'
+        }).reset_index()
+        summary['status'] = summary['item_code'].map(item_status_map).fillna("✅ 정상")
+        summary = summary.sort_values(by='stock_qty')
+        st.dataframe(
+            summary[['status', 'item_code', 'item_name_spec', 'stock_qty']],
+            column_config={
+                "status": "상태", "item_code": "품목코드", "item_name_spec": "품목명[규격]",
+                "stock_qty": st.column_config.NumberColumn("현재고", format="%d")
+            },
+            use_container_width=True, hide_index=True
+        )
+    
     if kpi_sel == "total":
-        st.subheader("📦 총 재고자산 내역")
         st.caption(f"가용: ₩{avail_asset:,.0f} / 비가용: ₩{unavail_asset:,.0f}")
         display_inventory_table(df, "kpi_total")
     elif kpi_sel == "issue":
-        st.subheader("❌ 품절 / ⚠️ 부족 재고 내역")
         issue_df = avail_df[avail_df['item_code'].isin(agg_df[agg_df['status'].isin(["❌ 품절", "⚠️ 부족"])]['item_code'])]
-        display_inventory_table(issue_df, "kpi_issue")
+        display_summary_table(issue_df, "❌ 품절 / ⚠️ 부족 재고 내역")
     elif kpi_sel == "excess":
-        st.subheader("📈 과잉 재고 내역")
         excess_df = avail_df[avail_df['item_code'].isin(agg_df[agg_df['status'] == "📈 과잉"]['item_code'])]
-        display_inventory_table(excess_df, "kpi_excess")
+        display_summary_table(excess_df, "📈 과잉 재고 내역")
     elif kpi_sel == "reorder_sub":
-        st.subheader("🛠️ 발주 필요 부자재 내역")
-        st.caption("현재고가 안전재고 미만인 부재료 품목입니다.")
-        display_inventory_table(reorder_sub_df, "kpi_reorder")
+        display_summary_table(reorder_sub_df, "🛠️ 발주 필요 부자재 내역")
 
 st.divider()
 
