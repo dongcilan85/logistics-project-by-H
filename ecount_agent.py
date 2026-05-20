@@ -620,12 +620,14 @@ def process_item_master_excel(dl_path):
         spec_col = find_col(['규격'], '규격')
         cat_col = find_col(['구분', '카테고리'], '품목구분')
         price_col = find_col(['입고단가', '단가', '원가'], '입고단가')
-        grp1_col = find_col(['품목그룹1', '품목그룹 1'], None)
-        grp2_col = find_col(['품목그룹2', '품목그룹 2'], None)
-        grp3_col = find_col(['품목그룹3', '품목그룹 3'], None)
+        grp1_col = find_col(['품목그룹1', '품목그룹 1', '품목그룹(1)', 'Group1'], None)
+        grp2_col = find_col(['품목그룹2', '품목그룹 2', '품목그룹(2)', 'Group2'], None)
+        grp3_col = find_col(['품목그룹3', '품목그룹 3', '품목그룹(3)', 'Group3'], None)
+        log(f"  품목그룹 컬럼 매핑: G1={grp1_col}, G2={grp2_col}, G3={grp3_col}")
+        log(f"  엑셀 전체 컬럼: {list(df.columns)}")
         
         upload_data = []
-        import re as _re
+        discontinued_codes = []  # 단종 품목 코드 수집
         # footer/시간 stamp 패턴: 2026/05/13 오후 12:27:14 같은 날짜시간 행 제외
         footer_pat = _re.compile(r'^\d{4}[-/]\d{1,2}[-/]\d{1,2}')
         for _, row in df.iterrows():
@@ -656,6 +658,7 @@ def process_item_master_excel(dl_path):
                         is_discontinued = True
                         break
             if is_discontinued:
+                discontinued_codes.append(code)
                 continue
                 
             raw_price = str(row.get(price_col, 0)).replace(',', '').strip()
@@ -696,6 +699,20 @@ def process_item_master_excel(dl_path):
                 log("🗑️ 무형상품 카테고리 DB에서 제거 완료")
             else:
                 log(f"⚠️ 무형상품 삭제 실패: {del_resp.status_code}", level="warning")
+
+            # 단종 품목 DB에서 제거
+            if discontinued_codes:
+                db_set("rpa_message", f"단종 품목 {len(discontinued_codes)}건 정리 중...")
+                import urllib.parse
+                dc_del_count = 0
+                for dc_code in discontinued_codes:
+                    dc_resp = requests.delete(
+                        f"{SUPABASE_URL}/rest/v1/item_master?item_code=eq.{urllib.parse.quote(dc_code)}",
+                        headers=HEADERS
+                    )
+                    if dc_resp.status_code in (200, 204):
+                        dc_del_count += 1
+                log(f"🗑️ 단종 품목 {dc_del_count}/{len(discontinued_codes)}건 DB에서 제거 완료")
 
     except Exception as e:
         log(f"❌ 품목 마스터 처리 오류: {e}", level="error")
