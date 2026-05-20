@@ -778,18 +778,18 @@ def process_inventory_movement_excel(dl_path):
         # 기준 산정
         now = datetime.now(KST)
         
-        # 월평균 계산용 (이번 달 제외, 지난 1~3개월)
-        months_for_avg = set((now - relativedelta(months=m)).strftime("%Y/%m") for m in range(1, 4))
+        # 12개월치 내역 추적용 (이번 달 제외)
+        months_history = [(now - relativedelta(months=m)).strftime("%Y/%m") for m in range(1, 13)]
         
         # 활성도 산출용 (이번 달 포함, 0~3, 0~6개월 전)
         months_3 = set((now - relativedelta(months=m)).strftime("%Y/%m") for m in range(0, 4))
         months_6 = set((now - relativedelta(months=m)).strftime("%Y/%m") for m in range(0, 7))
 
-        log(f"  월평균 기준: {sorted(months_for_avg)}")
+        log(f"  월평균 및 표준편차 기준(12개월): {months_history[0]} ~ {months_history[-1]}")
         log(f"  정상소진(분기) 기준: {sorted(months_3)}")
 
         # 품목별 집계 및 최근 활동 월 추적
-        item_outgoing = defaultdict(int)
+        item_outgoing_monthly = defaultdict(lambda: defaultdict(int))
         item_latest_activity = {}  # 품목코드 -> 가장 최근 활동(입고/출고) 월
         date_pattern = _re.compile(r'^\d{4}/\d{2}$')
 
@@ -811,19 +811,19 @@ def process_inventory_movement_excel(dl_path):
                 if code not in item_latest_activity or date_val > item_latest_activity[code]:
                     item_latest_activity[code] = date_val
 
-            # 3개월 월평균 사용량을 위한 출고 집계
-            if date_val in months_for_avg:
+            # 12개월 사용량을 위한 출고 집계
+            if date_val in months_history:
                 if pd.notna(out_qty) and out_qty > 0:
-                    item_outgoing[code] += int(out_qty)
+                    item_outgoing_monthly[code][date_val] += int(out_qty)
 
-        log(f"  총 활동 품목(최근 1년): {len(item_latest_activity)}건 / 3개월 출고 품목: {len(item_outgoing)}건")
+        log(f"  총 활동 품목(최근 1년): {len(item_latest_activity)}건 / 12개월 출고 집계 품목: {len(item_outgoing_monthly)}건")
 
         # DB에서 기존 item 읽기 (전체 품목을 대상으로 상태 업데이트)
         db_set("rpa_message", "품목 상태 및 안전재고 계산 중...")
         all_db_items = []
         try:
             r = requests.get(
-                f"{SUPABASE_URL}/rest/v1/item_master?select=item_code,safety_months",
+                f"{SUPABASE_URL}/rest/v1/item_master?select=item_code,safety_months,buffer_multiplier",
                 headers=HEADERS, timeout=10
             )
             if r.status_code == 200:
@@ -837,14 +837,24 @@ def process_inventory_movement_excel(dl_path):
 
         # 월평균 계산 + 안전재고 + 활성도 상태 자동산출
         update_data = []
+        import math
         for item in all_db_items:
             code = item['item_code']
             
-            # 월평균, 안전재고 계산 (최근 3개월 출고 기준)
-            total_out = item_outgoing.get(code, 0)
-            monthly_avg = total_out // 3
-            safety_m = int(item.get('safety_months') or 2)
-            safety_stock = monthly_avg * safety_m
+            # 월평균, 표준편차 계산 (최근 12개월 출고 기준)
+            monthly_data = [item_outgoing_monthly[code].get(m, 0) for m in months_history]
+            mean_usage = sum(monthly_data) / 12.0
+            variance = sum((x - mean_usage) ** 2 for x in monthly_data) / 12.0
+            std_usage = math.sqrt(variance)
+            
+            # DB에서 배수 설정 불러오기 (UI에서 설정한 값)
+            safety_m = float(item.get('safety_months') if item.get('safety_months') is not None else 2.0)
+            buffer_mult = float(item.get('buffer_multiplier') if item.get('buffer_multiplier') is not None else 1.0)
+            
+            # 보정된 월 기준량 = 평균 + (표준편차 * 버퍼배수)
+            smoothed_usage = int(mean_usage + (std_usage * buffer_mult))
+            safety_stock = int(smoothed_usage * safety_m)
+            
             excess_threshold = safety_stock * 4 if safety_stock > 0 else 500
 
             # 활성도 상태 (activity_status) 판단
@@ -859,7 +869,9 @@ def process_inventory_movement_excel(dl_path):
 
             update_data.append({
                 "item_code": code,
-                "monthly_avg_usage": monthly_avg,
+                "monthly_avg_usage": int(mean_usage),
+                "safety_months": safety_m,
+                "buffer_multiplier": buffer_mult,
                 "safety_stock": safety_stock,
                 "excess_threshold": excess_threshold,
                 "activity_status": activity_status

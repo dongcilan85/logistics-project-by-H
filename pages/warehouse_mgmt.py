@@ -253,6 +253,45 @@ def render_usage_plan_ui(item_code, item_name, key_suffix):
                     st.success("✅ 사용계획이 등록되었습니다! 대시보드를 새로고침합니다.")
                     time.sleep(1)
                     st.rerun()
+
+    # 안전재고 설정 (목표 배수 및 버퍼) UI
+    st.markdown("---")
+    with st.expander("⚙️ 안전재고 기준 수동 튜닝 (배수 및 버퍼 설정)", expanded=False):
+        try:
+            im_res = supabase.table("item_master").select("safety_months,buffer_multiplier,monthly_avg_usage").eq("item_code", item_code).execute()
+            if im_res.data:
+                im_data = im_res.data[0]
+                cur_sm = float(im_data.get('safety_months') if im_data.get('safety_months') is not None else 2.0)
+                cur_bm = float(im_data.get('buffer_multiplier') if im_data.get('buffer_multiplier') is not None else 1.0)
+                cur_avg = int(im_data.get('monthly_avg_usage') or 0)
+                
+                st.caption(f"💡 현재 시스템이 산출한 이 품목의 12개월 평균 사용량은 **월 {cur_avg}개** 입니다. (표준편차 보정 전)")
+                
+                with st.form(key=f"form_safety_{key_suffix}"):
+                    sc1, sc2 = st.columns(2)
+                    with sc1:
+                        new_sm = st.number_input("목표 확보 개월 수 (기본 2개월)", min_value=0.0, step=0.5, value=cur_sm)
+                        st.caption("예: 1.5개월, 3개월 등")
+                    with sc2:
+                        new_bm = st.number_input("통계적 버퍼 배수 (기본 1.0)", min_value=0.0, step=0.1, value=cur_bm)
+                        st.caption("예: 1.0(추천), 1.5(보수적), 0.5(타이트)")
+                        
+                    if st.form_submit_button("설정 저장 및 즉시 갱신"):
+                        # DB에 즉시 업데이트
+                        supabase.table("item_master").update({
+                            "safety_months": new_sm,
+                            "buffer_multiplier": new_bm
+                        }).eq("item_code", item_code).execute()
+                        
+                        # RPA 에이전트가 돌기 전이라도 화면에 즉시 반영하기 위해 rpa_trigger로 백그라운드 재계산 요청 권장
+                        st.success("✅ 안전재고 배수 설정이 저장되었습니다. RPA 수집 시 새 기준으로 재고상태가 갱신됩니다.")
+                        time.sleep(1.5)
+                        st.rerun()
+            else:
+                st.info("이 품목은 아직 품목 마스터가 수집되지 않아 안전재고 설정이 불가합니다.")
+        except Exception as e:
+            st.error(f"설정 불러오기 실패: {e}")
+
 def display_inventory_table(target_df, key_suffix=""):
     if target_df.empty:
         st.info("해당 조건의 데이터가 없습니다.")
