@@ -628,7 +628,7 @@ def process_item_master_excel(dl_path):
         
         upload_data = []
         discontinued_codes = []  # 단종 품목 코드 수집
-        # footer/시간 stamp 패턴: 2026/05/13 오후 12:27:14 같은 날짜시간 행 제외
+        import re as _re
         footer_pat = _re.compile(r'^\d{4}[-/]\d{1,2}[-/]\d{1,2}')
         for _, row in df.iterrows():
             code = str(row.get(code_col, '')).strip()
