@@ -229,11 +229,13 @@ def render_usage_plan_ui(item_code, item_name, key_suffix):
     with st.expander("➕ 신규 사용계획 등록", expanded=True):
         with st.form(key=f"form_plan_{key_suffix}"):
             f_desc = st.text_input("사용 목적 (예: A현장 자재 출고, 샘플 발송 등)", max_chars=100)
-            c1, c2 = st.columns(2)
+            c1, c2, c3 = st.columns(3)
             with c1:
                 f_qty = st.number_input("사용 예정 수량", min_value=1, step=1, value=1)
             with c2:
                 f_date = st.date_input("사용 예정일")
+            with c3:
+                f_creator = st.text_input("작성자", max_chars=20, placeholder="미입력 시 admin")
             f_submit = st.form_submit_button("등록하기")
             
             if f_submit:
@@ -245,7 +247,7 @@ def render_usage_plan_ui(item_code, item_name, key_suffix):
                         "planned_qty": f_qty,
                         "description": f_desc,
                         "due_date": str(f_date),
-                        "created_by": "user" # TODO: 실제 로그인 사용자 정보 연동
+                        "created_by": f_creator.strip() if f_creator.strip() else "admin"
                     }
                     supabase.table("usage_plans").insert(new_plan).execute()
                     st.success("✅ 사용계획이 등록되었습니다! 대시보드를 새로고침합니다.")
