@@ -122,7 +122,7 @@ urgent_avail = avail_df[(avail_df['exp_status'] == "🔴 1년 미만") & (_date_
 urgent_count = len(urgent_avail)
 urgent_asset = urgent_avail['inventory_cost'].sum()
 
-# 품절/부족/과잉 - 가용 기준 (유효기간 무관 품목별 합산)
+# 품목별 상태 산출 (전체 가용 재고 기준 - 테이블 매핑용)
 agg_df = avail_df.groupby(['item_code']).agg({
     'stock_qty': 'sum',
     'safety_stock': 'max',
@@ -139,9 +139,18 @@ agg_df['status'] = agg_df.apply(get_status, axis=1)
 # 품목별 상태 맵 (각 행에 매핑용)
 item_status_map = dict(zip(agg_df['item_code'], agg_df['status']))
 
-sold_out_count = len(agg_df[agg_df['status'] == "❌ 품절"])
-low_stock_count = len(agg_df[agg_df['status'] == "⚠️ 부족"])
-excess_stock_count = len(agg_df[agg_df['status'] == "📈 과잉"])
+# 품절/부족/과잉 KPI 카드는 상품 카테고리만 집계
+avail_product_df = avail_df[avail_df['category'] == '상품']
+agg_product = avail_product_df.groupby(['item_code']).agg({
+    'stock_qty': 'sum',
+    'safety_stock': 'max',
+    'excess_threshold': 'max'
+}).reset_index()
+agg_product['status'] = agg_product.apply(get_status, axis=1)
+
+sold_out_count = len(agg_product[agg_product['status'] == "❌ 품절"])
+low_stock_count = len(agg_product[agg_product['status'] == "⚠️ 부족"])
+excess_stock_count = len(agg_product[agg_product['status'] == "📈 과잉"])
 unavail_wh_count = unavail_df['warehouse_name'].nunique() if not unavail_df.empty else 0
 
 # -------------------------------------------------------------
@@ -272,10 +281,10 @@ if st.session_state.kpi_selected:
     if kpi_sel == "urgent":
         display_inventory_table(urgent_avail, "kpi_urgent")
     elif kpi_sel == "issue":
-        issue_df = avail_df[avail_df['item_code'].isin(agg_df[agg_df['status'].isin(["❌ 품절", "⚠️ 부족"])]['item_code'])]
+        issue_df = avail_product_df[avail_product_df['item_code'].isin(agg_product[agg_product['status'].isin(["❌ 품절", "⚠️ 부족"])]['item_code'])]
         display_summary_table(issue_df, "❌ 품절 / ⚠️ 부족 재고 내역")
     elif kpi_sel == "excess":
-        excess_df = avail_df[avail_df['item_code'].isin(agg_df[agg_df['status'] == "📈 과잉"]['item_code'])]
+        excess_df = avail_product_df[avail_product_df['item_code'].isin(agg_product[agg_product['status'] == "📈 과잉"]['item_code'])]
         display_summary_table(excess_df, "📈 과잉 재고 내역")
     elif kpi_sel == "reorder_sub":
         display_summary_table(reorder_sub_df, "🛠️ 발주 필요 부자재 내역")
