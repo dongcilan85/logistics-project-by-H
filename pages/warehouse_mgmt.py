@@ -341,19 +341,16 @@ def display_inventory_table(target_df, key_suffix=""):
         cols_to_show.insert(2, 'activity_status')
         res_df['activity_status'] = res_df['activity_status'].fillna('알수없음')
         
-    # --- 합계 행 추가 로직 ---
-    sum_row = {col: "" for col in cols_to_show}
-    sum_row['status'] = "📊 합계"
-    
-    # 합산할 숫자형 컬럼들
-    num_cols = ['stock_qty', 'planned_qty', 'actual_stock', 'inventory_cost']
-    for c in num_cols:
-        if c in res_df.columns:
-            sum_row[c] = res_df[c].sum()
-            
-    # res_df의 컬럼 중 cols_to_show에 있는 것만 필터링하여 합계 행 추가 (타입 오류 방지)
+    # --- 요약 지표(Metric) 표시 ---
+    st.markdown("##### 📊 조회 항목 요약")
+    mc1, mc2, mc3, mc4 = st.columns(4)
+    mc1.metric("총 ERP 재고", f"{int(res_df['stock_qty'].sum()):,}")
+    mc2.metric("총 사용 예정", f"{int(res_df['planned_qty'].sum()):,}")
+    mc3.metric("총 실 가용재고", f"{int(res_df['actual_stock'].sum()):,}")
+    if 'inventory_cost' in res_df.columns:
+        mc4.metric("총 재고비용", f"₩{int(res_df['inventory_cost'].sum()):,}")
+        
     disp_df = res_df[cols_to_show].copy()
-    disp_df = pd.concat([disp_df, pd.DataFrame([sum_row])], ignore_index=True)
 
     st.dataframe(
         disp_df,
@@ -457,17 +454,14 @@ if st.session_state.kpi_selected:
         summary = summary.sort_values(by='actual_stock')
         cols_to_show = ['status', 'item_code', 'item_name_spec', 'stock_qty', 'planned_qty', 'actual_stock']
         
-        # --- 합계 행 추가 로직 ---
-        sum_row = {col: "" for col in cols_to_show}
-        sum_row['status'] = "📊 합계"
-        
-        num_cols = ['stock_qty', 'planned_qty', 'actual_stock']
-        for c in num_cols:
-            if c in summary.columns:
-                sum_row[c] = summary[c].sum()
+        # --- 요약 지표(Metric) 표시 ---
+        st.markdown("##### 📊 조회 항목 요약")
+        mc1, mc2, mc3 = st.columns(3)
+        mc1.metric("총 ERP 재고", f"{int(summary['stock_qty'].sum()):,}")
+        mc2.metric("총 사용 예정", f"{int(summary['planned_qty'].sum()):,}")
+        mc3.metric("총 실 가용재고", f"{int(summary['actual_stock'].sum()):,}")
                 
         disp_df = summary[cols_to_show].copy()
-        disp_df = pd.concat([disp_df, pd.DataFrame([sum_row])], ignore_index=True)
 
         st.dataframe(
             disp_df,
