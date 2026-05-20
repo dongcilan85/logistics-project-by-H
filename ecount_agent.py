@@ -620,6 +620,9 @@ def process_item_master_excel(dl_path):
         spec_col = find_col(['규격'], '규격')
         cat_col = find_col(['구분', '카테고리'], '품목구분')
         price_col = find_col(['입고단가', '단가', '원가'], '입고단가')
+        grp1_col = find_col(['품목그룹1', '품목그룹 1'], None)
+        grp2_col = find_col(['품목그룹2', '품목그룹 2'], None)
+        grp3_col = find_col(['품목그룹3', '품목그룹 3'], None)
         
         upload_data = []
         import re as _re
@@ -643,6 +646,16 @@ def process_item_master_excel(dl_path):
                 cat_val = '일반'
             # 무형상품은 재고관리 불필요 → 제외
             if cat_val == '무형상품':
+                continue
+            # 품목그룹1/2/3 중 하나라도 '단종'이면 제외
+            is_discontinued = False
+            for grp_col in [grp1_col, grp2_col, grp3_col]:
+                if grp_col:
+                    grp_val = str(row.get(grp_col, '')).strip().replace('[', '').replace(']', '').strip()
+                    if grp_val == '단종':
+                        is_discontinued = True
+                        break
+            if is_discontinued:
                 continue
                 
             raw_price = str(row.get(price_col, 0)).replace(',', '').strip()
