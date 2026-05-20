@@ -288,10 +288,48 @@ def display_inventory_table(target_df, key_suffix=""):
     if selected_items:
         res_df = res_df[res_df['item_name_spec'].isin(selected_items)]
     
-    # 품목별 사용예정/실가용재고 매핑
-    res_df['planned_qty'] = res_df['item_code'].map(item_planned_map).fillna(0).astype(int)
-    # 실제 가용재고는 현재고 - 사용예정
-    res_df['actual_stock'] = res_df['stock_qty'] - res_df['planned_qty']
+    # 품목별 총 사용예정을 가져옴
+    res_df['total_planned'] = res_df['item_code'].map(item_planned_map).fillna(0).astype(int)
+    
+    # 순차적 할당 (FIFO) 로직
+    # 유효기간이 빠른 순(혹은 데이터 순)으로 planned_qty를 stock_qty에서 차감
+    # expiration_date 처리를 위해 임시 정렬 (결측치는 뒤로)
+    res_df['_temp_sort'] = pd.to_datetime(res_df['expiration_date'].replace('해당없음', '2099-12-31'), errors='coerce')
+    res_df = res_df.sort_values(by=['item_code', '_temp_sort'])
+    
+    allocated_plans = []
+    actual_stocks = []
+    
+    # 품목별 잔여 예정 수량 추적
+    rem_plan_dict = {}
+    
+    for idx, row in res_df.iterrows():
+        icode = row['item_code']
+        sqty = row['stock_qty']
+        
+        if icode not in rem_plan_dict:
+            rem_plan_dict[icode] = row['total_planned']
+            
+        rem = rem_plan_dict[icode]
+        
+        if rem > 0:
+            if sqty >= rem:
+                allocated = rem
+                rem_plan_dict[icode] = 0
+            else:
+                allocated = sqty
+                rem_plan_dict[icode] -= sqty
+        else:
+            allocated = 0
+            
+        allocated_plans.append(allocated)
+        actual_stocks.append(sqty - allocated)
+        
+    res_df['planned_qty'] = allocated_plans
+    res_df['actual_stock'] = actual_stocks
+    
+    # 정렬 복구 및 임시 컬럼 삭제
+    res_df = res_df.drop(columns=['total_planned', '_temp_sort'])
     
     cols_to_show = ['status', 'exp_status', 'item_code', 'item_name_spec', 'stock_qty', 'planned_qty', 'actual_stock', 'warehouse_name', 'expiration_date', 'category', 'inventory_cost']
     if 'activity_status' in res_df.columns:
