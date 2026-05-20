@@ -143,36 +143,13 @@ low_stock_count = len(agg_df[agg_df['status'] == "⚠️ 부족"])
 excess_stock_count = len(agg_df[agg_df['status'] == "📈 과잉"])
 unavail_wh_count = unavail_df['warehouse_name'].nunique() if not unavail_df.empty else 0
 
-# --- KPI 1행: 가용 재고 ---
-c1, c2, c3, c4 = st.columns(4)
-with c1:
-    st.metric("🟢 가용 재고자산", f"₩{avail_asset:,.0f}")
-with c2:
-    st.metric("🔴 유효기간 1년 미만", f"₩{urgent_asset:,.0f}", f"{urgent_count}건", delta_color="inverse")
-with c3:
-    st.metric("❌ 품절/⚠️ 부족", f"{sold_out_count + low_stock_count} 건")
-with c4:
-    st.metric("📈 과잉 재고", f"{excess_stock_count} 건")
-
-# --- KPI 2행: 비가용 + 총합 ---
-c5, c6, c7, c8 = st.columns(4)
-with c5:
-    st.metric("🔒 비가용 재고자산", f"₩{unavail_asset:,.0f}")
-with c6:
-    st.metric("🏚️ 비가용 창고", f"{unavail_wh_count} 개")
-    if not unavail_df.empty:
-        st.caption(", ".join(sorted(unavail_df['warehouse_name'].unique())))
-with c7:
-    st.metric("📦 총 재고자산", f"₩{avail_asset + unavail_asset:,.0f}")
-with c8:
-    pass
-
-st.divider()
-
 # -------------------------------------------------------------
 # 4. 데이터 필터링 및 테이블 출력 유틸리티
 # -------------------------------------------------------------
 def display_inventory_table(target_df, key_suffix=""):
+    if target_df.empty:
+        st.info("해당 조건의 데이터가 없습니다.")
+        return
     wh_list = ["전체"] + sorted(target_df['warehouse_name'].unique().tolist())
     f1, f2, f3 = st.columns([1, 1, 2])
     with f1:
@@ -220,6 +197,77 @@ def display_inventory_table(target_df, key_suffix=""):
         use_container_width=True, hide_index=True
     )
 
+# 발주 필요 부자재 집계
+sub_material_df = avail_df[avail_df['category'] == "부재료"].copy()
+reorder_sub_codes = agg_df[agg_df['status'] == "⚠️ 부족"]['item_code']
+reorder_sub_df = sub_material_df[sub_material_df['item_code'].isin(reorder_sub_codes)]
+reorder_sub_count = reorder_sub_df['item_code'].nunique()
+
+total_asset = avail_asset + unavail_asset
+
+# --- KPI 카드 스타일 ---
+st.markdown("""
+<style>
+div[data-testid="stHorizontalBlock"] > div > div > button[kind="secondary"] {
+    width: 100%;
+    padding: 1.2rem 0.8rem;
+    border-radius: 12px;
+    border: 2px solid transparent;
+    transition: all 0.2s ease;
+}
+div[data-testid="stHorizontalBlock"] > div > div > button[kind="secondary"]:hover {
+    border-color: #4A90D9;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(74, 144, 217, 0.3);
+}
+</style>
+""", unsafe_allow_html=True)
+
+# session_state 초기화
+if 'kpi_selected' not in st.session_state:
+    st.session_state.kpi_selected = None
+
+c1, c2, c3, c4 = st.columns(4)
+with c1:
+    if st.button(f"📦 총 재고자산\n₩{total_asset:,.0f}", use_container_width=True):
+        st.session_state.kpi_selected = "total"
+with c2:
+    if st.button(f"❌ 품절/부족 재고\n{sold_out_count + low_stock_count} 건", use_container_width=True):
+        st.session_state.kpi_selected = "issue"
+with c3:
+    if st.button(f"📈 과잉 재고\n{excess_stock_count} 건", use_container_width=True):
+        st.session_state.kpi_selected = "excess"
+with c4:
+    if st.button(f"🛠️ 발주 필요 부자재\n{reorder_sub_count} 건", use_container_width=True):
+        st.session_state.kpi_selected = "reorder_sub"
+
+# --- KPI 카드 클릭 시 상세 내역 표시 ---
+if st.session_state.kpi_selected:
+    st.divider()
+    kpi_sel = st.session_state.kpi_selected
+    
+    if kpi_sel == "total":
+        st.subheader("📦 총 재고자산 내역")
+        st.caption(f"가용: ₩{avail_asset:,.0f} / 비가용: ₩{unavail_asset:,.0f}")
+        display_inventory_table(df, "kpi_total")
+    elif kpi_sel == "issue":
+        st.subheader("❌ 품절 / ⚠️ 부족 재고 내역")
+        issue_df = avail_df[avail_df['item_code'].isin(agg_df[agg_df['status'].isin(["❌ 품절", "⚠️ 부족"])]['item_code'])]
+        display_inventory_table(issue_df, "kpi_issue")
+    elif kpi_sel == "excess":
+        st.subheader("📈 과잉 재고 내역")
+        excess_df = avail_df[avail_df['item_code'].isin(agg_df[agg_df['status'] == "📈 과잉"]['item_code'])]
+        display_inventory_table(excess_df, "kpi_excess")
+    elif kpi_sel == "reorder_sub":
+        st.subheader("🛠️ 발주 필요 부자재 내역")
+        st.caption("현재고가 안전재고 미만인 부재료 품목입니다.")
+        display_inventory_table(reorder_sub_df, "kpi_reorder")
+
+st.divider()
+
+# -------------------------------------------------------------
+# 5. 재고 탭 영역
+# -------------------------------------------------------------
 tab1, tab_exp, tab2, tab4, tab5 = st.tabs(["📊 전체 재고", "🗓️ 유효기간 분석", "🛠️ 부재료", "🔥 이슈(품절/부족)", "📈 과잉재고"])
 
 with tab1:
@@ -262,11 +310,12 @@ with tab2:
             display_inventory_table(sub_df[sub_df['activity_status'] == "폐기요청"], "sub_act_err")
     else:
         st.caption("💡 현재고가 안전재고보다 적은(⚠️ 부족) 부재료 목록입니다.")
-        reorder_df = sub_df[sub_df['item_code'].isin(agg_df[agg_df['status'] == "⚠️ 부족"]['item_code'])]
-        display_inventory_table(reorder_df, "sub_reorder")
+        reorder_df_tab = sub_df[sub_df['item_code'].isin(agg_df[agg_df['status'] == "⚠️ 부족"]['item_code'])]
+        display_inventory_table(reorder_df_tab, "sub_reorder")
 with tab4:
     issue_df = avail_df[avail_df['item_code'].isin(agg_df[agg_df['status'].isin(["❌ 품절", "⚠️ 부족"])]['item_code'])]
     display_inventory_table(issue_df, "issue")
 with tab5:
     excess_df = avail_df[avail_df['item_code'].isin(agg_df[agg_df['status'] == "📈 과잉"]['item_code'])]
     display_inventory_table(excess_df, "excess")
+
