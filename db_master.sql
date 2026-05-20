@@ -105,6 +105,17 @@ CREATE TABLE IF NOT EXISTS public.warehouse_history (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 2-3. 사용 계획 (출고 예정 관리)
+CREATE TABLE IF NOT EXISTS public.usage_plans (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    item_code TEXT NOT NULL,
+    planned_qty INT NOT NULL DEFAULT 0,
+    description TEXT,
+    due_date DATE,
+    created_by TEXT DEFAULT 'admin',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 
 -- =========================================================================
 -- SECTION 3: RPA 원격 트리거 테이블
@@ -162,6 +173,7 @@ ALTER TABLE public.system_config     DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.site_names        DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.warehouse_inventory DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.warehouse_history   DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.usage_plans         DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rpa_commands        DISABLE ROW LEVEL SECURITY;
 
 
@@ -206,6 +218,7 @@ GRANT ALL ON public.system_config        TO anon, authenticated, service_role;
 GRANT ALL ON public.site_names           TO anon, authenticated, service_role;
 GRANT ALL ON public.warehouse_inventory  TO anon, authenticated, service_role;
 GRANT ALL ON public.warehouse_history    TO anon, authenticated, service_role;
+GRANT ALL ON public.usage_plans          TO anon, authenticated, service_role;
 GRANT ALL ON public.rpa_commands         TO anon, authenticated, service_role;
 
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;

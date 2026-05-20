@@ -38,6 +38,13 @@ def load_comprehensive_data():
         wh_df = pd.DataFrame(wh_res.data) if wh_res.data else pd.DataFrame()
         item_df = pd.DataFrame(item_res.data) if item_res.data else pd.DataFrame()
         
+        # usage_plans 테이블이 없으면 빈 데이터프레임 처리
+        try:
+            up_res = supabase.table("usage_plans").select("item_code, planned_qty").execute()
+            usage_df = pd.DataFrame(up_res.data) if up_res.data else pd.DataFrame(columns=['item_code', 'planned_qty'])
+        except:
+            usage_df = pd.DataFrame(columns=['item_code', 'planned_qty'])
+        
         if inv_df.empty: return pd.DataFrame()
         
         # 💡 유효기간 컬럼 보장 (DB에 아직 없더라도 에러 방지)
@@ -61,12 +68,13 @@ def load_comprehensive_data():
         inv_df['safety_stock'] = inv_df['safety_stock'].fillna(0)
         inv_df['excess_threshold'] = inv_df['excess_threshold'].fillna(1000)
         
-        return inv_df
+        return inv_df, usage_df
     except Exception as e:
         st.error(f"데이터 로드 중 오류: {e}")
-        return pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame(columns=['item_code', 'planned_qty'])
 
-df = load_comprehensive_data()
+inv_df_raw, usage_df_raw = load_comprehensive_data()
+df = inv_df_raw.copy()
 
 if df.empty:
     st.info("💡 수집된 재고 데이터가 없습니다. 에이전트를 통해 수집을 먼저 진행해 주세요.")
@@ -129,15 +137,31 @@ agg_df = avail_df.groupby(['item_code']).agg({
     'excess_threshold': 'max'
 }).reset_index()
 
+# 사용 계획(출고 예정) 병합
+if not usage_df_raw.empty:
+    usage_sum = usage_df_raw.groupby('item_code')['planned_qty'].sum().reset_index()
+    agg_df = agg_df.merge(usage_sum, on='item_code', how='left')
+    agg_df['planned_qty'] = agg_df['planned_qty'].fillna(0).astype(int)
+else:
+    agg_df['planned_qty'] = 0
+
+# 실 가용재고 = 가용 창고 내 총 ERP 재고 - 사용 예정 재고
+agg_df['actual_stock'] = agg_df['stock_qty'] - agg_df['planned_qty']
+
 def get_status(row):
-    if row['stock_qty'] <= 0: return "❌ 품절"
-    if row['stock_qty'] < row['safety_stock']: return "⚠️ 부족"
-    if row['stock_qty'] > row['excess_threshold']: return "📈 과잉"
+    stock = row['actual_stock']
+    if stock <= 0: return "❌ 품절"
+    if stock < row['safety_stock']: return "⚠️ 부족"
+    if stock > row['excess_threshold']: return "📈 과잉"
     return "✅ 정상"
 agg_df['status'] = agg_df.apply(get_status, axis=1)
 
 # 품목별 상태 맵 (각 행에 매핑용)
 item_status_map = dict(zip(agg_df['item_code'], agg_df['status']))
+
+# 품목별 사용예정/실가용재고 맵 (전체 테이블용)
+item_planned_map = dict(zip(agg_df['item_code'], agg_df['planned_qty']))
+item_actual_map = dict(zip(agg_df['item_code'], agg_df['actual_stock']))
 
 # 품절/부족/과잉 KPI 카드는 상품 카테고리만 집계
 avail_product_df = avail_df[avail_df['category'] == '상품']
@@ -146,6 +170,14 @@ agg_product = avail_product_df.groupby(['item_code']).agg({
     'safety_stock': 'max',
     'excess_threshold': 'max'
 }).reset_index()
+
+if not usage_df_raw.empty:
+    agg_product = agg_product.merge(usage_sum, on='item_code', how='left')
+    agg_product['planned_qty'] = agg_product['planned_qty'].fillna(0).astype(int)
+else:
+    agg_product['planned_qty'] = 0
+
+agg_product['actual_stock'] = agg_product['stock_qty'] - agg_product['planned_qty']
 agg_product['status'] = agg_product.apply(get_status, axis=1)
 
 sold_out_count = len(agg_product[agg_product['status'] == "❌ 품절"])
@@ -154,8 +186,71 @@ excess_stock_count = len(agg_product[agg_product['status'] == "📈 과잉"])
 unavail_wh_count = unavail_df['warehouse_name'].nunique() if not unavail_df.empty else 0
 
 # -------------------------------------------------------------
-# 4. 데이터 필터링 및 테이블 출력 유틸리티
+# 4. 사용계획(출고예정) UI 및 데이터 필터링 유틸리티
 # -------------------------------------------------------------
+def render_usage_plan_ui(item_code, item_name, key_suffix):
+    st.markdown(f"### 📝 `{item_name}` 사용계획 관리")
+    
+    # 기존 계획 목록 조회
+    try:
+        up_res = supabase.table("usage_plans").select("*").eq("item_code", item_code).execute()
+        item_plans = pd.DataFrame(up_res.data) if up_res.data else pd.DataFrame()
+    except Exception as e:
+        st.error("데이터베이스 조회 오류가 발생했습니다.")
+        item_plans = pd.DataFrame()
+
+    if not item_plans.empty:
+        item_plans['due_date'] = pd.to_datetime(item_plans['due_date']).dt.strftime('%Y-%m-%d')
+        item_plans['created_at'] = pd.to_datetime(item_plans['created_at']).dt.strftime('%Y-%m-%d %H:%M')
+        st.dataframe(
+            item_plans[['description', 'planned_qty', 'due_date', 'created_by', 'created_at']],
+            column_config={
+                "description": "사용 목적 (프로젝트/사유)",
+                "planned_qty": st.column_config.NumberColumn("예정 수량", format="%d"),
+                "due_date": "사용 예정일",
+                "created_by": "등록자",
+                "created_at": "등록일시"
+            },
+            use_container_width=True, hide_index=True
+        )
+        
+        # 삭제 폼
+        with st.expander("🗑️ 등록된 사용계획 삭제"):
+            del_id = st.selectbox("삭제할 내역 선택", item_plans['id'].tolist(), format_func=lambda x: item_plans[item_plans['id'] == x]['description'].values[0], key=f"del_{key_suffix}")
+            if st.button("선택 내역 삭제", type="primary", key=f"btn_del_{key_suffix}"):
+                supabase.table("usage_plans").delete().eq("id", del_id).execute()
+                st.success("✅ 삭제 완료! 대시보드를 새로고침합니다.")
+                time.sleep(1)
+                st.rerun()
+    else:
+        st.info("등록된 사용계획(출고예정)이 없습니다.")
+
+    # 신규 등록 폼
+    with st.expander("➕ 신규 사용계획 등록", expanded=True):
+        with st.form(key=f"form_plan_{key_suffix}"):
+            f_desc = st.text_input("사용 목적 (예: A현장 자재 출고, 샘플 발송 등)", max_chars=100)
+            c1, c2 = st.columns(2)
+            with c1:
+                f_qty = st.number_input("사용 예정 수량", min_value=1, step=1, value=1)
+            with c2:
+                f_date = st.date_input("사용 예정일")
+            f_submit = st.form_submit_button("등록하기")
+            
+            if f_submit:
+                if not f_desc.strip():
+                    st.warning("사용 목적을 입력해주세요.")
+                else:
+                    new_plan = {
+                        "item_code": item_code,
+                        "planned_qty": f_qty,
+                        "description": f_desc,
+                        "due_date": str(f_date),
+                        "created_by": "user" # TODO: 실제 로그인 사용자 정보 연동
+                    }
+                    supabase.table("usage_plans").insert(new_plan).execute()
+                    st.success("✅ 사용계획이 등록되었습니다! 대시보드를 새로고침합니다.")
+                    time.sleep(1)
+                    st.rerun()
 def display_inventory_table(target_df, key_suffix=""):
     if target_df.empty:
         st.info("해당 조건의 데이터가 없습니다.")
@@ -193,7 +288,12 @@ def display_inventory_table(target_df, key_suffix=""):
     if selected_items:
         res_df = res_df[res_df['item_name_spec'].isin(selected_items)]
     
-    cols_to_show = ['status', 'exp_status', 'item_code', 'item_name_spec', 'stock_qty', 'warehouse_name', 'expiration_date', 'category', 'inventory_cost']
+    # 품목별 사용예정/실가용재고 매핑
+    res_df['planned_qty'] = res_df['item_code'].map(item_planned_map).fillna(0).astype(int)
+    # 실제 가용재고는 현재고 - 사용예정
+    res_df['actual_stock'] = res_df['stock_qty'] - res_df['planned_qty']
+    
+    cols_to_show = ['status', 'exp_status', 'item_code', 'item_name_spec', 'stock_qty', 'planned_qty', 'actual_stock', 'warehouse_name', 'expiration_date', 'category', 'inventory_cost']
     if 'activity_status' in res_df.columns:
         cols_to_show.insert(2, 'activity_status')
         res_df['activity_status'] = res_df['activity_status'].fillna('알수없음')
@@ -202,12 +302,24 @@ def display_inventory_table(target_df, key_suffix=""):
         res_df[cols_to_show],
         column_config={
             "status": "상태", "exp_status": "유효기간 등급", "activity_status": "활성도", "item_code": "품목코드", "item_name_spec": "품목명[규격]",
-            "stock_qty": st.column_config.NumberColumn("현재고", format="%d"),
+            "stock_qty": st.column_config.NumberColumn("ERP 재고", format="%d"),
+            "planned_qty": st.column_config.NumberColumn("사용 예정", format="%d"),
+            "actual_stock": st.column_config.NumberColumn("실 가용재고", format="%d"),
             "warehouse_name": "창고명", "expiration_date": "유효기간", "category": "분류",
             "inventory_cost": st.column_config.NumberColumn("재고비용", format="₩%d")
         },
         use_container_width=True, hide_index=True
     )
+    
+    # 단일 품목이 선택되었을 때만 하단에 사용계획 UI 표시
+    if selected_items and len(selected_items) == 1:
+        selected_name = selected_items[0]
+        # res_df에 해당 품목이 있을 때
+        matched = res_df[res_df['item_name_spec'] == selected_name]
+        if not matched.empty:
+            sel_code = matched.iloc[0]['item_code']
+            st.divider()
+            render_usage_plan_ui(sel_code, selected_name, key_suffix)
 
 # 발주 필요 부자재 집계
 sub_material_df = avail_df[avail_df['category'] == "부재료"].copy()
@@ -268,12 +380,16 @@ if st.session_state.kpi_selected:
             'stock_qty': 'sum'
         }).reset_index()
         summary['status'] = summary['item_code'].map(item_status_map).fillna("✅ 정상")
-        summary = summary.sort_values(by='stock_qty')
+        summary['planned_qty'] = summary['item_code'].map(item_planned_map).fillna(0).astype(int)
+        summary['actual_stock'] = summary['stock_qty'] - summary['planned_qty']
+        summary = summary.sort_values(by='actual_stock')
         st.dataframe(
-            summary[['status', 'item_code', 'item_name_spec', 'stock_qty']],
+            summary[['status', 'item_code', 'item_name_spec', 'stock_qty', 'planned_qty', 'actual_stock']],
             column_config={
                 "status": "상태", "item_code": "품목코드", "item_name_spec": "품목명[규격]",
-                "stock_qty": st.column_config.NumberColumn("현재고", format="%d")
+                "stock_qty": st.column_config.NumberColumn("ERP 재고", format="%d"),
+                "planned_qty": st.column_config.NumberColumn("사용 예정", format="%d"),
+                "actual_stock": st.column_config.NumberColumn("실 가용재고", format="%d")
             },
             use_container_width=True, hide_index=True
         )
