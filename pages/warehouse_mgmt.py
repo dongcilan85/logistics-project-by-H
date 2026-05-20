@@ -277,6 +277,8 @@ def display_inventory_table(target_df, key_suffix=""):
         res_df = res_df[res_df['warehouse_name'] == sel_wh]
     else:
         group_cols = ['warehouse_name', 'item_code', 'item_name_spec', 'category', 'expiration_date', 'exp_status']
+        if 'is_available' in res_df.columns:
+            group_cols.append('is_available')
         res_df = res_df.groupby(group_cols).agg({
             'stock_qty': 'sum',
             'safety_stock': 'max',
@@ -308,13 +310,14 @@ def display_inventory_table(target_df, key_suffix=""):
     for idx, row in res_df.iterrows():
         icode = row['item_code']
         sqty = row['stock_qty']
+        is_avail = row.get('is_available', True)
         
         if icode not in rem_plan_dict:
             rem_plan_dict[icode] = row['total_planned']
             
         rem = rem_plan_dict[icode]
         
-        if rem > 0:
+        if rem > 0 and is_avail:
             if sqty >= rem:
                 allocated = rem
                 rem_plan_dict[icode] = 0
