@@ -745,13 +745,18 @@ def process_inventory_movement_excel(dl_path):
 
         log(f"  컨럼 매핑: 품목코드={code_col}, 일자={date_col}, 입고={in_col}, 출고={out_col}")
 
-        # 기준 산정 (이번 달 제외, 1~3, 1~6, 1~12개월 전)
+        # 기준 산정
         now = datetime.now(KST)
-        months_3 = set((now - relativedelta(months=m)).strftime("%Y/%m") for m in range(1, 4))
-        months_6 = set((now - relativedelta(months=m)).strftime("%Y/%m") for m in range(1, 7))
-        months_12 = set((now - relativedelta(months=m)).strftime("%Y/%m") for m in range(1, 13))
+        
+        # 월평균 계산용 (이번 달 제외, 지난 1~3개월)
+        months_for_avg = set((now - relativedelta(months=m)).strftime("%Y/%m") for m in range(1, 4))
+        
+        # 활성도 산출용 (이번 달 포함, 0~3, 0~6개월 전)
+        months_3 = set((now - relativedelta(months=m)).strftime("%Y/%m") for m in range(0, 4))
+        months_6 = set((now - relativedelta(months=m)).strftime("%Y/%m") for m in range(0, 7))
 
-        log(f"  기준 3개월: {sorted(months_3)}")
+        log(f"  월평균 기준: {sorted(months_for_avg)}")
+        log(f"  정상소진(분기) 기준: {sorted(months_3)}")
 
         # 품목별 집계 및 최근 활동 월 추적
         item_outgoing = defaultdict(int)
@@ -777,7 +782,7 @@ def process_inventory_movement_excel(dl_path):
                     item_latest_activity[code] = date_val
 
             # 3개월 월평균 사용량을 위한 출고 집계
-            if date_val in months_3:
+            if date_val in months_for_avg:
                 if pd.notna(out_qty) and out_qty > 0:
                     item_outgoing[code] += int(out_qty)
 
