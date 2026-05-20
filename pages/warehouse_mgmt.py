@@ -152,13 +152,19 @@ def display_inventory_table(target_df, key_suffix=""):
         st.info("해당 조건의 데이터가 없습니다.")
         return
     wh_list = ["전체"] + sorted(target_df['warehouse_name'].unique().tolist())
-    f1, f2, f3 = st.columns([1, 1, 2])
+    f1, f2 = st.columns([1, 3])
     with f1:
         sel_wh = st.selectbox("🏢 창고 필터", wh_list, key=f"wh_{key_suffix}")
     with f2:
-        search_col = st.selectbox("🔍 검색 기준", ["품목명", "품목코드", "창고명"], key=f"scol_{key_suffix}")
-    with f3:
-        q = st.text_input("검색어 입력", key=f"q_{key_suffix}")
+        # 품목 목록 생성 (코드 + 품목명 조합으로 검색 편의성 확보)
+        item_options = sorted(target_df['item_name_spec'].dropna().unique().tolist())
+        selected_items = st.multiselect(
+            "🔍 품목 검색 (다중 선택 가능)",
+            options=item_options,
+            default=[],
+            key=f"ms_{key_suffix}",
+            placeholder="품목명을 입력하세요..."
+        )
     
     res_df = target_df.copy()
     if sel_wh != "전체":
@@ -174,13 +180,9 @@ def display_inventory_table(target_df, key_suffix=""):
     # 상태: 품목별 합산 기준 상태 매핑 (유효기간별 개별 판단 X)
     res_df['status'] = res_df['item_code'].map(item_status_map).fillna("✅ 정상")
     
-    if q:
-        if search_col == "품목명":
-            res_df = res_df[res_df['item_name_spec'].astype(str).str.contains(q, case=False, na=False)]
-        elif search_col == "품목코드":
-            res_df = res_df[res_df['item_code'].astype(str).str.contains(q, case=False, na=False)]
-        elif search_col == "창고명":
-            res_df = res_df[res_df['warehouse_name'].astype(str).str.contains(q, case=False, na=False)]
+    # 다중 품목 필터 적용
+    if selected_items:
+        res_df = res_df[res_df['item_name_spec'].isin(selected_items)]
     
     cols_to_show = ['status', 'exp_status', 'item_code', 'item_name_spec', 'stock_qty', 'warehouse_name', 'expiration_date', 'category', 'inventory_cost']
     if 'activity_status' in res_df.columns:
