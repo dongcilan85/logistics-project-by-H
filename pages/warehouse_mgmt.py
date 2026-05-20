@@ -116,8 +116,9 @@ unavail_df = df[df['is_available'] == False].copy()
 avail_asset = avail_df['inventory_cost'].sum()
 unavail_asset = unavail_df['inventory_cost'].sum()
 
-# 유효기간 임박(1년 미만) - 가용 기준
-urgent_avail = avail_df[avail_df['exp_status'] == "🔴 1년 미만"]
+# 유효기간 임박(1년 미만) - 가용 기준 (제조일자 품목 제외)
+_date_type = avail_df['date_type'] if 'date_type' in avail_df.columns else pd.Series('유효기간', index=avail_df.index)
+urgent_avail = avail_df[(avail_df['exp_status'] == "🔴 1년 미만") & (_date_type != '제조일자')]
 urgent_count = len(urgent_avail)
 urgent_asset = urgent_avail['inventory_cost'].sum()
 
