@@ -336,8 +336,22 @@ def display_inventory_table(target_df, key_suffix=""):
         cols_to_show.insert(2, 'activity_status')
         res_df['activity_status'] = res_df['activity_status'].fillna('알수없음')
         
+    # --- 합계 행 추가 로직 ---
+    sum_row = {col: "" for col in cols_to_show}
+    sum_row['status'] = "📊 합계"
+    
+    # 합산할 숫자형 컬럼들
+    num_cols = ['stock_qty', 'planned_qty', 'actual_stock', 'inventory_cost']
+    for c in num_cols:
+        if c in res_df.columns:
+            sum_row[c] = res_df[c].sum()
+            
+    # res_df의 컬럼 중 cols_to_show에 있는 것만 필터링하여 합계 행 추가 (타입 오류 방지)
+    disp_df = res_df[cols_to_show].copy()
+    disp_df = pd.concat([disp_df, pd.DataFrame([sum_row])], ignore_index=True)
+
     st.dataframe(
-        res_df[cols_to_show],
+        disp_df,
         column_config={
             "status": "상태", "exp_status": "유효기간 등급", "activity_status": "활성도", "item_code": "품목코드", "item_name_spec": "품목명[규격]",
             "stock_qty": st.column_config.NumberColumn("ERP 재고", format="%d"),
@@ -436,8 +450,22 @@ if st.session_state.kpi_selected:
         summary['planned_qty'] = summary['item_code'].map(item_planned_map).fillna(0).astype(int)
         summary['actual_stock'] = summary['stock_qty'] - summary['planned_qty']
         summary = summary.sort_values(by='actual_stock')
+        cols_to_show = ['status', 'item_code', 'item_name_spec', 'stock_qty', 'planned_qty', 'actual_stock']
+        
+        # --- 합계 행 추가 로직 ---
+        sum_row = {col: "" for col in cols_to_show}
+        sum_row['status'] = "📊 합계"
+        
+        num_cols = ['stock_qty', 'planned_qty', 'actual_stock']
+        for c in num_cols:
+            if c in summary.columns:
+                sum_row[c] = summary[c].sum()
+                
+        disp_df = summary[cols_to_show].copy()
+        disp_df = pd.concat([disp_df, pd.DataFrame([sum_row])], ignore_index=True)
+
         st.dataframe(
-            summary[['status', 'item_code', 'item_name_spec', 'stock_qty', 'planned_qty', 'actual_stock']],
+            disp_df,
             column_config={
                 "status": "상태", "item_code": "품목코드", "item_name_spec": "품목명[규격]",
                 "stock_qty": st.column_config.NumberColumn("ERP 재고", format="%d"),
