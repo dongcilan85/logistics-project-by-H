@@ -382,6 +382,21 @@ div[data-testid="stHorizontalBlock"] > div > div > button[kind="secondary"]:hove
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(74, 144, 217, 0.3);
 }
+/* 다중 선택(multiselect) 드롭다운 항목 텍스트 줄바꿈 허용 (짤림 방지) */
+div[data-baseweb="select"] ul li {
+    white-space: normal !important;
+    word-break: break-word !important;
+}
+/* 다중 선택된 칩(태그) 텍스트 전체 표시 (짤림 방지) */
+span[data-baseweb="tag"] {
+    max-width: 100% !important;
+}
+span[data-baseweb="tag"] span {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: unset !important;
+    max-width: none !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
