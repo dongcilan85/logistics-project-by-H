@@ -229,8 +229,8 @@ if 'kpi_selected' not in st.session_state:
 
 c1, c2, c3, c4 = st.columns(4)
 with c1:
-    if st.button(f"📦 총 재고자산\n₩{total_asset:,.0f}", use_container_width=True):
-        st.session_state.kpi_selected = "total"
+    if st.button(f"🔴 유효기간 임박\n{urgent_count} 건", use_container_width=True):
+        st.session_state.kpi_selected = "urgent"
 with c2:
     if st.button(f"❌ 품절/부족 재고\n{sold_out_count + low_stock_count} 건", use_container_width=True):
         st.session_state.kpi_selected = "issue"
@@ -266,9 +266,8 @@ if st.session_state.kpi_selected:
             use_container_width=True, hide_index=True
         )
     
-    if kpi_sel == "total":
-        st.caption(f"가용: ₩{avail_asset:,.0f} / 비가용: ₩{unavail_asset:,.0f}")
-        display_inventory_table(df, "kpi_total")
+    if kpi_sel == "urgent":
+        display_inventory_table(urgent_avail, "kpi_urgent")
     elif kpi_sel == "issue":
         issue_df = avail_df[avail_df['item_code'].isin(agg_df[agg_df['status'].isin(["❌ 품절", "⚠️ 부족"])]['item_code'])]
         display_summary_table(issue_df, "❌ 품절 / ⚠️ 부족 재고 내역")
