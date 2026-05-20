@@ -446,13 +446,14 @@ if st.session_state.kpi_selected:
             st.info("해당 조건의 데이터가 없습니다.")
             return
         summary = src_df.groupby(['item_code', 'item_name_spec']).agg({
-            'stock_qty': 'sum'
+            'stock_qty': 'sum',
+            'safety_stock': 'max'
         }).reset_index()
         summary['status'] = summary['item_code'].map(item_status_map).fillna("✅ 정상")
         summary['planned_qty'] = summary['item_code'].map(item_planned_map).fillna(0).astype(int)
         summary['actual_stock'] = summary['stock_qty'] - summary['planned_qty']
         summary = summary.sort_values(by='actual_stock')
-        cols_to_show = ['status', 'item_code', 'item_name_spec', 'stock_qty', 'planned_qty', 'actual_stock']
+        cols_to_show = ['status', 'item_code', 'item_name_spec', 'stock_qty', 'safety_stock', 'planned_qty', 'actual_stock']
         
         # --- 요약 지표(Metric) 표시 ---
         st.markdown("##### 📊 조회 항목 요약")
@@ -468,6 +469,7 @@ if st.session_state.kpi_selected:
             column_config={
                 "status": "상태", "item_code": "품목코드", "item_name_spec": "품목명[규격]",
                 "stock_qty": st.column_config.NumberColumn("ERP 재고", format="%d"),
+                "safety_stock": st.column_config.NumberColumn("안전 재고", format="%d"),
                 "planned_qty": st.column_config.NumberColumn("사용 예정", format="%d"),
                 "actual_stock": st.column_config.NumberColumn("실 가용재고", format="%d")
             },
