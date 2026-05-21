@@ -209,11 +209,20 @@ def execute_rpa(task="all"):
                     if ok_inv:
                         log("📊 [동기화] 허브 재고 엑셀 → DB 업로드 중...")
                         process_inventory_excel(dl_path, is_hub=True)
+                        log("✅ [허브 완료] 허브 재고 수집 및 동기화가 끝났습니다.")
+                        db_set("rpa_status", "idle")
+                        db_set("rpa_message", "대기 중")
                     else:
                         log(f"⚠️ [허브] 수집 실패: {msg_inv}", level="warning")
             finally:
                 log("허브 브라우저를 종료합니다.")
                 hub_rpa.close()
+        else:
+            # 허브 계정이 없어서 본사만 수행한 경우에도 idle로 초기화 (잠시 후 상태창 닫히게)
+            import time
+            time.sleep(2)
+            db_set("rpa_status", "idle")
+            db_set("rpa_message", "대기 중")
 
     except Exception as e:
         error_msg = str(e)
