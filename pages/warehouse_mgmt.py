@@ -59,6 +59,9 @@ def load_comprehensive_data():
         if not item_df.empty:
             inv_df['division'] = inv_df['warehouse_name'].apply(lambda x: "허브" if str(x).startswith("[HUB]") else "본사")
             inv_df = inv_df.merge(item_df, on=["division", "item_code"], how="left", suffixes=('', '_master'))
+            if 'category_master' in inv_df.columns:
+                # 품목마스터의 카테고리가 있으면 그것을 최우선으로 사용
+                inv_df['category'] = inv_df['category_master'].combine_first(inv_df['category'])
         else:
             inv_df['category'] = '일반'
             inv_df['safety_stock'] = 0
