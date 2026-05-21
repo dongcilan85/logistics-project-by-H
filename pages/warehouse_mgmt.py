@@ -57,7 +57,8 @@ def load_comprehensive_data():
             inv_df['is_available'] = True
             
         if not item_df.empty:
-            inv_df = inv_df.merge(item_df, on="item_code", how="left", suffixes=('', '_master'))
+            inv_df['division'] = inv_df['warehouse_name'].apply(lambda x: "허브" if str(x).startswith("[HUB]") else "본사")
+            inv_df = inv_df.merge(item_df, on=["division", "item_code"], how="left", suffixes=('', '_master'))
         else:
             inv_df['category'] = '일반'
             inv_df['safety_stock'] = 0
