@@ -160,10 +160,13 @@ try:
             item_df[_c] = pd.to_numeric(item_df[_c], errors="coerce").fillna(0)
             
     # safety_months 기본값 2.0, buffer_multiplier 기본값 1.0
-    if "safety_months" in item_df.columns:
-        item_df["safety_months"] = item_df["safety_months"].replace(0, 2.0).astype(float)
-    if "buffer_multiplier" in item_df.columns:
-        item_df["buffer_multiplier"] = item_df["buffer_multiplier"].replace(0, 1.0).astype(float)
+    if "safety_months" not in item_df.columns:
+        item_df["safety_months"] = 2.0
+    item_df["safety_months"] = item_df["safety_months"].replace(0, 2.0).astype(float)
+    
+    if "buffer_multiplier" not in item_df.columns:
+        item_df["buffer_multiplier"] = 1.0
+    item_df["buffer_multiplier"] = item_df["buffer_multiplier"].replace(0, 1.0).astype(float)
 
     # 카테고리를 pd.Categorical로 명시적 변환하면 Streamlit이 옵션 매핑 오류 없이 정확하게 Selectbox로 렌더링함
     valid_categories = ["상품", "제품", "부재료", "원재료", "반제품", "무형상품", "일반"]
