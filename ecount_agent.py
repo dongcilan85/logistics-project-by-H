@@ -714,9 +714,11 @@ def process_item_master_excel(dl_path, is_hub=False):
             cat_val = cat_raw.replace('[', '').replace(']', '').strip()
             if not cat_val or cat_val.lower() in ('nan', 'none'):
                 cat_val = '일반'
-            # 무형상품은 재고관리 불필요 → 제외
-            if cat_val == '무형상품':
+                
+            # 상품, 제품, 부재료만 수집 (무형상품, 반제품 등 제외)
+            if cat_val not in ('상품', '제품', '부재료'):
                 continue
+                
             # 품목그룹1/2/3 중 하나라도 '단종'이면 제외
             is_discontinued = False
             for grp_col in [grp1_col, grp2_col, grp3_col]:
