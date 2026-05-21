@@ -228,6 +228,7 @@ try:
     edited_item_df = st.data_editor(
         display_df,
         column_config={
+            "division": st.column_config.TextColumn("구분", disabled=True),
             "item_code": st.column_config.TextColumn("품목 코드", required=True),
             "item_name": st.column_config.TextColumn("품목 명칭"),
             "category": st.column_config.SelectboxColumn("카테고리"),
@@ -240,7 +241,7 @@ try:
             "excess_threshold": st.column_config.NumberColumn("과잉기준", format="%d", disabled=True),
             "updated_at": None,
         },
-        column_order=["item_code", "item_name", "category", "date_type", "unit_price", "monthly_avg_usage", "safety_months", "buffer_multiplier", "safety_stock", "excess_threshold"],
+        column_order=["division", "item_code", "item_name", "category", "date_type", "unit_price", "monthly_avg_usage", "safety_months", "buffer_multiplier", "safety_stock", "excess_threshold"],
         num_rows="dynamic",
         use_container_width=True,
         key="item_editor_final",
@@ -254,7 +255,8 @@ try:
             if state.get("deleted_rows"):
                 for row_idx in state["deleted_rows"]:
                     tcode = item_df.iloc[row_idx]['item_code']
-                    supabase.table("item_master").delete().eq("item_code", tcode).execute()
+                    tdiv = item_df.iloc[row_idx].get('division', '본사')
+                    supabase.table("item_master").delete().eq("item_code", tcode).eq("division", tdiv).execute()
 
             upsert_items = []
             for _, row in edited_item_df.iterrows():
@@ -271,6 +273,7 @@ try:
                     excess_threshold = safety_stock * 4 if safety_stock > 0 else 500
 
                     upsert_items.append({
+                        "division": str(row.get('division', '본사')).strip(),
                         "item_code": str(row['item_code']).strip(),
                         "item_name": str(row.get('item_name', '')).strip(),
                         "category": str(row.get('category', '일반')),

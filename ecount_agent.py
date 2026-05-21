@@ -209,11 +209,29 @@ def execute_rpa(task="all"):
                     if ok_inv:
                         log("📊 [동기화] 허브 재고 엑셀 → DB 업로드 중...")
                         process_inventory_excel(dl_path, is_hub=True)
-                        log("✅ [허브 완료] 허브 재고 수집 및 동기화가 끝났습니다.")
-                        db_set("rpa_status", "idle")
-                        db_set("rpa_message", "대기 중")
-                    else:
-                        log(f"⚠️ [허브] 수집 실패: {msg_inv}", level="warning")
+
+                    if task in ("all", "item_master"):
+                        log("📦 [작업] 허브 품목 마스터(품목등록) 수집 시작...")
+                        db_set("rpa_message", "[Hub] 품목 마스터 수집 중...")
+                        success_item, item_file = hub_rpa.get_item_master_excel()
+                        if success_item:
+                            log("📊 [동기화] 허브 품목 마스터 → DB 업로드 중...")
+                            process_item_master_excel(dl_path, is_hub=True)
+                        else:
+                            log(f"⚠️ [허브] 품목 마스터 수집 건너뜀: {item_file}", level="warning")
+
+                        log("📊 [작업] 허브 재고변동표 수집 시작...")
+                        db_set("rpa_message", "[Hub] 재고변동표 수집 중...")
+                        success_mv, mv_msg = hub_rpa.get_inventory_movement()
+                        if success_mv:
+                            log("📊 [동기화] 허브 재고변동표 → 월평균 사용량 계산 중...")
+                            process_inventory_movement_excel(dl_path, is_hub=True)
+                        else:
+                            log(f"⚠️ [허브] 재고변동표 수집 건너뜀: {mv_msg}", level="warning")
+
+                    log("✅ [허브 완료] 허브 재고 수집 및 동기화가 끝났습니다.")
+                    db_set("rpa_status", "idle")
+                    db_set("rpa_message", "대기 중")
             finally:
                 log("허브 브라우저를 종료합니다.")
                 hub_rpa.close()
@@ -631,7 +649,7 @@ def process_warehouse_inventory_files(dl_path, warehouses):
     log(f"📤 유효기간 DB 동기화 완료: {len(processed_warehouses)}개 창고 / {total}건")
 
 
-def process_item_master_excel(dl_path):
+def process_item_master_excel(dl_path, is_hub=False):
     """품목 마스터 엑셀을 읽어 DB 동기화"""
     db_set("rpa_message", "품목 마스터 엑셀 파싱 중...")
     try:
@@ -716,6 +734,7 @@ def process_item_master_excel(dl_path):
             unit_price = int(float(unit_price_val)) if pd.notna(unit_price_val) else 0
 
             upload_data.append({
+                "division": "허브" if is_hub else "본사",
                 "item_code": code,
                 "item_name": item_name,
                 "category": cat_val,
@@ -732,7 +751,7 @@ def process_item_master_excel(dl_path):
             for i in range(0, total_cnt, 1000):
                 chunk = upload_data[i:i+1000]
                 db_set("rpa_message", f"품목 마스터 업로드 중... ({i}/{total_cnt}건)")
-                resp = requests.post(f"{SUPABASE_URL}/rest/v1/item_master?on_conflict=item_code", headers=headers, json=chunk)
+                resp = requests.post(f"{SUPABASE_URL}/rest/v1/item_master?on_conflict=division,item_code", headers=headers, json=chunk)
                 if resp.status_code in (200, 201):
                     success_count += len(chunk)
                 else:
@@ -742,7 +761,7 @@ def process_item_master_excel(dl_path):
             # 무형상품 DB에서 제거
             db_set("rpa_message", "무형상품 정리 중...")
             del_resp = requests.delete(
-                f"{SUPABASE_URL}/rest/v1/item_master?category=eq.무형상품",
+                f"{SUPABASE_URL}/rest/v1/item_master?category=eq.무형상품&division=eq.{'허브' if is_hub else '본사'}",
                 headers=HEADERS
             )
             if del_resp.status_code in (200, 204):
@@ -757,7 +776,7 @@ def process_item_master_excel(dl_path):
                 dc_del_count = 0
                 for dc_code in discontinued_codes:
                     dc_resp = requests.delete(
-                        f"{SUPABASE_URL}/rest/v1/item_master?item_code=eq.{urllib.parse.quote(dc_code)}",
+                        f"{SUPABASE_URL}/rest/v1/item_master?item_code=eq.{urllib.parse.quote(dc_code)}&division=eq.{'허브' if is_hub else '본사'}",
                         headers=HEADERS
                     )
                     if dc_resp.status_code in (200, 204):
@@ -768,7 +787,7 @@ def process_item_master_excel(dl_path):
         log(f"❌ 품목 마스터 처리 오류: {e}", level="error")
 
 
-def process_inventory_movement_excel(dl_path):
+def process_inventory_movement_excel(dl_path, is_hub=False):
     """재고변동표 엑셀을 파싱하여 품목별 월평균 사용량 계산 후 item_master 업데이트
     
     엑셀 구조:
@@ -873,7 +892,7 @@ def process_inventory_movement_excel(dl_path):
         all_db_items = []
         try:
             r = requests.get(
-                f"{SUPABASE_URL}/rest/v1/item_master?select=item_code,safety_months,buffer_multiplier",
+                f"{SUPABASE_URL}/rest/v1/item_master?select=item_code,safety_months,buffer_multiplier&division=eq.{'허브' if is_hub else '본사'}",
                 headers=HEADERS, timeout=10
             )
             if r.status_code == 200:
@@ -918,6 +937,7 @@ def process_inventory_movement_excel(dl_path):
                 activity_status = "폐기요청"
 
             update_data.append({
+                "division": "허브" if is_hub else "본사",
                 "item_code": code,
                 "monthly_avg_usage": int(mean_usage),
                 "safety_months": safety_m,
@@ -934,7 +954,7 @@ def process_inventory_movement_excel(dl_path):
         for i in range(0, len(update_data), 500):
             chunk = update_data[i:i+500]
             resp = requests.post(
-                f"{SUPABASE_URL}/rest/v1/item_master?on_conflict=item_code",
+                f"{SUPABASE_URL}/rest/v1/item_master?on_conflict=division,item_code",
                 headers=headers, json=chunk
             )
             if resp.status_code in (200, 201):
