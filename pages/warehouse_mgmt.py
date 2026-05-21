@@ -359,11 +359,11 @@ def display_inventory_table(target_df, key_suffix=""):
         disp_df,
         column_config={
             "status": "상태", "exp_status": "유효기간 등급", "activity_status": "활성도", "item_code": "품목코드", "item_name_spec": "품목명[규격]",
-            "stock_qty": st.column_config.NumberColumn("ERP 재고", format="%d"),
-            "planned_qty": st.column_config.NumberColumn("사용 예정", format="%d"),
-            "actual_stock": st.column_config.NumberColumn("실 가용재고", format="%d"),
+            "stock_qty": st.column_config.NumberColumn("ERP 재고", format="%,d"),
+            "planned_qty": st.column_config.NumberColumn("사용 예정", format="%,d"),
+            "actual_stock": st.column_config.NumberColumn("실 가용재고", format="%,d"),
             "warehouse_name": "창고명", "expiration_date": "유효기간", "category": "분류",
-            "inventory_cost": st.column_config.NumberColumn("재고비용", format="₩%d")
+            "inventory_cost": st.column_config.NumberColumn("재고비용", format="₩%,d")
         },
         use_container_width=True, hide_index=True
     )
@@ -471,10 +471,10 @@ if st.session_state.kpi_selected:
             disp_df,
             column_config={
                 "status": "상태", "item_code": "품목코드", "item_name_spec": "품목명[규격]",
-                "stock_qty": st.column_config.NumberColumn("ERP 재고", format="%d"),
-                "safety_stock": st.column_config.NumberColumn("안전 재고", format="%d"),
-                "planned_qty": st.column_config.NumberColumn("사용 예정", format="%d"),
-                "actual_stock": st.column_config.NumberColumn("실 가용재고", format="%d")
+                "stock_qty": st.column_config.NumberColumn("ERP 재고", format="%,d"),
+                "safety_stock": st.column_config.NumberColumn("안전 재고", format="%,d"),
+                "planned_qty": st.column_config.NumberColumn("사용 예정", format="%,d"),
+                "actual_stock": st.column_config.NumberColumn("실 가용재고", format="%,d")
             },
             use_container_width=True, hide_index=True
         )
