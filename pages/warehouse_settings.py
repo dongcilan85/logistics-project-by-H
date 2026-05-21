@@ -149,18 +149,21 @@ st.divider()
 st.subheader("📦 품목 마스터 및 안전재고 설정")
 try:
     item_res = supabase.table("item_master").select("*").order("item_code").execute()
-    item_df = pd.DataFrame(item_res.data) if item_res.data else pd.DataFrame(columns=["item_code", "item_name", "category", "date_type", "unit_price", "monthly_avg_usage", "safety_months", "safety_stock", "excess_threshold"])
+    item_df = pd.DataFrame(item_res.data) if item_res.data else pd.DataFrame(columns=["item_code", "item_name", "category", "date_type", "unit_price", "monthly_avg_usage", "safety_months", "buffer_multiplier", "safety_stock", "excess_threshold"])
 
     # 표시 전에 dtype 정규화 — data_editor가 텍스트 컬럼에 NaN/혼합타입이 섞이면 셀을 빈칸으로 그리는 케이스가 있어 명시적으로 문자열로 캐스팅한다.
     for _c in ("item_code", "item_name", "category", "date_type"):
         if _c in item_df.columns:
             item_df[_c] = item_df[_c].fillna("").astype(str)
-    for _c in ("unit_price", "monthly_avg_usage", "safety_months", "safety_stock", "excess_threshold"):
+    for _c in ("unit_price", "monthly_avg_usage", "safety_months", "buffer_multiplier", "safety_stock", "excess_threshold"):
         if _c in item_df.columns:
             item_df[_c] = pd.to_numeric(item_df[_c], errors="coerce").fillna(0)
-    # safety_months 기본값 2
+            
+    # safety_months 기본값 2.0, buffer_multiplier 기본값 1.0
     if "safety_months" in item_df.columns:
-        item_df["safety_months"] = item_df["safety_months"].replace(0, 2)
+        item_df["safety_months"] = item_df["safety_months"].replace(0, 2.0).astype(float)
+    if "buffer_multiplier" in item_df.columns:
+        item_df["buffer_multiplier"] = item_df["buffer_multiplier"].replace(0, 1.0).astype(float)
 
     # 카테고리를 pd.Categorical로 명시적 변환하면 Streamlit이 옵션 매핑 오류 없이 정확하게 Selectbox로 렌더링함
     valid_categories = ["상품", "제품", "부재료", "원재료", "반제품", "무형상품", "일반"]
@@ -203,18 +206,19 @@ try:
             "date_type": st.column_config.SelectboxColumn("날짜유형"),
             "unit_price": st.column_config.NumberColumn("입고단가", format="%d"),
             "monthly_avg_usage": st.column_config.NumberColumn("월평균사용", format="%d", disabled=True),
-            "safety_months": st.column_config.NumberColumn("기준개월", format="%d"),
+            "safety_months": st.column_config.NumberColumn("목표배수(개월)", format="%.1f", step=0.5),
+            "buffer_multiplier": st.column_config.NumberColumn("버퍼배수(표준편차)", format="%.1f", step=0.1),
             "safety_stock": st.column_config.NumberColumn("안전재고", format="%d", disabled=True),
             "excess_threshold": st.column_config.NumberColumn("과잉기준", format="%d", disabled=True),
             "updated_at": None,
         },
-        column_order=["item_code", "item_name", "category", "date_type", "unit_price", "monthly_avg_usage", "safety_months", "safety_stock", "excess_threshold"],
+        column_order=["item_code", "item_name", "category", "date_type", "unit_price", "monthly_avg_usage", "safety_months", "buffer_multiplier", "safety_stock", "excess_threshold"],
         num_rows="dynamic",
         use_container_width=True,
         key="item_editor_final",
         hide_index=True
     )
-    st.caption("💡 월평균사용 = 재고변동표 자동계산 / 안전재고 = 월평균 × 기준개월 / 과잉기준 = 안전재고 × 4 (0일 때 500)")
+    st.caption("💡 안전재고 수동 튜닝: 목표배수(개월)와 버퍼배수를 수정 후 저장하세요.")
 
     if st.button("💾 품목 마스터 저장", use_container_width=True):
         with st.status("품목 데이터 저장 중...") as status:
@@ -228,10 +232,14 @@ try:
             for _, row in edited_item_df.iterrows():
                 if pd.notnull(row['item_code']) and str(row['item_code']).strip():
                     monthly_avg = int(float(row.get('monthly_avg_usage', 0)))
-                    safety_m = int(float(row.get('safety_months', 2)))
+                    safety_m = float(row.get('safety_months', 2.0))
+                    buffer_m = float(row.get('buffer_multiplier', 1.0))
                     if safety_m == 0:
-                        safety_m = 2
-                    safety_stock = monthly_avg * safety_m
+                        safety_m = 2.0
+                    
+                    # Dashboard UI에서 즉시 계산 로직은 없으나 (RPA가 상세 계산), 
+                    # 임시로 저장 시 안전재고를 갱신해줍니다. (RPA가 나중에 표준편차 기반으로 덮어씀)
+                    safety_stock = int(monthly_avg * safety_m)
                     excess_threshold = safety_stock * 4 if safety_stock > 0 else 500
 
                     upsert_items.append({
@@ -242,6 +250,7 @@ try:
                         "unit_price": int(float(row.get('unit_price', 0))),
                         "monthly_avg_usage": monthly_avg,
                         "safety_months": safety_m,
+                        "buffer_multiplier": buffer_m,
                         "safety_stock": safety_stock,
                         "excess_threshold": excess_threshold
                     })
