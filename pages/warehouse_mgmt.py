@@ -99,10 +99,12 @@ def analyze_expiration(row):
         
         if diff_days < 365:
             return "🔴 1년 미만", diff_days
-        elif diff_days < 548: # 1년 6개월 (365 + 183)
-            return "🟡 1.5년 이상", diff_days
-        else:
-            return "🟢 2년 이상", diff_days
+        elif diff_days < 548: # 365일 ~ 547일
+            return "🟡 1년 ~ 1.5년", diff_days
+        elif diff_days < 730: # 548일 ~ 729일
+            return "🟢 1.5년 ~ 2년", diff_days
+        else: # 730일 이상
+            return "🔵 2년 이상", diff_days
     except:
         return "⭕ 유효기간 없음", 9999
 
