@@ -131,6 +131,12 @@ try:
                     supabase.table("warehouse_codes").delete().eq("id", tid).execute()
 
             upsert_list = []
+            max_id = 0
+            if not wh_df.empty and 'id' in wh_df.columns:
+                valid_ids = pd.to_numeric(wh_df['id'], errors='coerce').dropna()
+                if not valid_ids.empty:
+                    max_id = int(valid_ids.max())
+
             for _, row in edited_wh_df.iterrows():
                 if pd.notnull(row['warehouse_code']) and str(row['warehouse_code']).strip():
                     item = {
@@ -140,6 +146,9 @@ try:
                     }
                     if pd.notnull(row.get('id')):
                         item["id"] = int(row['id'])
+                    else:
+                        max_id += 1
+                        item["id"] = max_id
                     upsert_list.append(item)
             
             if upsert_list:
