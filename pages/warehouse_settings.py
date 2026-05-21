@@ -36,22 +36,38 @@ st.title("⚙️ 창고 및 RPA 환경설정")
 # [복구] 이카운트 계정 설정 섹션
 # -------------------------------------------------------------
 st.subheader("🔑 이카운트 계정 설정")
+
+st.markdown("#### 🏢 본사 (HQ) 계정")
 with st.container(border=True):
     col1, col2, col3 = st.columns(3)
     with col1:
-        com_code = st.text_input("회사 코드", value=get_config("ecount_com_code"))
+        com_code = st.text_input("회사 코드", value=get_config("ecount_com_code"), key="hq_com")
     with col2:
-        user_id = st.text_input("아이디", value=get_config("ecount_user_id"))
+        user_id = st.text_input("아이디", value=get_config("ecount_user_id"), key="hq_id")
     with col3:
-        user_pw = st.text_input("비밀번호", type="password", value=get_config("ecount_user_pw"))
-    
-    if st.button("💾 계정 정보 저장", use_container_width=True, type="primary"):
-        set_config("ecount_com_code", com_code)
-        set_config("ecount_user_id", user_id)
-        set_config("ecount_user_pw", user_pw)
-        st.success("✅ 이카운트 계정 정보가 안전하게 저장되었습니다.")
-        time.sleep(1)
-        st.rerun()
+        user_pw = st.text_input("비밀번호", type="password", value=get_config("ecount_user_pw"), key="hq_pw")
+
+st.markdown("#### 🏭 허브 (Hub) 계정 (선택사항)")
+st.caption("허브 계정 정보를 입력하시면, RPA 수집 시 본사 재고와 허브 재고(단순재고)를 함께 수집합니다.")
+with st.container(border=True):
+    hc1, hc2, hc3 = st.columns(3)
+    with hc1:
+        hub_com = st.text_input("허브 회사 코드", value=get_config("hub_com_code"), key="hub_com")
+    with hc2:
+        hub_id = st.text_input("허브 아이디", value=get_config("hub_user_id"), key="hub_id")
+    with hc3:
+        hub_pw = st.text_input("허브 비밀번호", type="password", value=get_config("hub_user_pw"), key="hub_pw")
+        
+if st.button("💾 계정 정보 일괄 저장", use_container_width=True, type="primary"):
+    set_config("ecount_com_code", com_code)
+    set_config("ecount_user_id", user_id)
+    set_config("ecount_user_pw", user_pw)
+    set_config("hub_com_code", hub_com)
+    set_config("hub_user_id", hub_id)
+    set_config("hub_user_pw", hub_pw)
+    st.success("✅ 본사 및 허브 계정 정보가 안전하게 저장되었습니다.")
+    time.sleep(1)
+    st.rerun()
 
 st.divider()
 

@@ -180,12 +180,40 @@ def execute_rpa(task="all"):
                     log(f"⚠️ 재고변동표 수집 건너뜀: {mv_msg}")
 
             db_set("rpa_status", "completed")
-            db_set("rpa_message", f"{task_label} 완료")
-            log(f"[완료] '{task_label}' 작업이 성공적으로 끝났습니다.")
+            db_set("rpa_message", f"{task_label} 본사 수집 완료")
+            log(f"[본사 완료] '{task_label}' 작업이 성공적으로 끝났습니다.")
 
         finally:
-            log("브라우저를 종료합니다.")
+            log("본사 브라우저를 종료합니다.")
             rpa.close()
+
+        # --- 허브(Hub) 계정 수집 로직 ---
+        hub_com = db_get("hub_com_code")
+        hub_id  = db_get("hub_user_id")
+        hub_pw  = db_get("hub_user_pw")
+
+        if hub_com and hub_id and hub_com not in ("NULL", "ERROR", ""):
+            log("🏢 [허브] 허브 계정 설정이 확인되어 추가 수집을 시작합니다.")
+            
+            hub_rpa = EcountRPA(hub_com, hub_id, hub_pw, dl_path, headless=is_headless, status_cb=lambda m: db_set("rpa_message", f"[Hub] {m[:80]}"))
+            
+            try:
+                db_set("rpa_message", "[Hub] 허브 계정 로그인 시도 중...")
+                success, msg = hub_rpa.login()
+                if not success:
+                    log(f"⚠️ [허브] 로그인 실패: {msg}", level="warning")
+                else:
+                    log("📊 [허브] 허브 재고 수집 (유효기간 제외 단순 수집) 시작...")
+                    db_set("rpa_message", "[Hub] 창고별재고현황 수집 중...")
+                    ok_inv, msg_inv = hub_rpa.get_inventory_balance()
+                    if ok_inv:
+                        log("📊 [동기화] 허브 재고 엑셀 → DB 업로드 중...")
+                        process_inventory_excel(dl_path, is_hub=True)
+                    else:
+                        log(f"⚠️ [허브] 수집 실패: {msg_inv}", level="warning")
+            finally:
+                log("허브 브라우저를 종료합니다.")
+                hub_rpa.close()
 
     except Exception as e:
         error_msg = str(e)
@@ -196,7 +224,7 @@ def execute_rpa(task="all"):
         db_set("rpa_trigger", "idle")
         db_set("rpa_updated_at", datetime.now(KST).isoformat())
 
-def process_inventory_excel(dl_path):
+def process_inventory_excel(dl_path, is_hub=False):
     """수집된 엑셀 파일을 읽어 DB(warehouse_inventory_details)에 업로드"""
     import glob
     files = glob.glob(os.path.join(dl_path, "*창고별재고현황*.xlsx"))
@@ -308,6 +336,9 @@ def process_inventory_excel(dl_path):
                 wh_code_val = str(row.get(wh_code_col, '')).strip()
                 if wh_code_val and wh_code_val in wh_name_map:
                     wh_name_final = wh_name_map[wh_code_val]
+            
+            if is_hub and not wh_name_final.startswith("[HUB]"):
+                wh_name_final = f"[HUB] {wh_name_final}"
 
             upload_data.append({
                 "warehouse_name": wh_name_final,
