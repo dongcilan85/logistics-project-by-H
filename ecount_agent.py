@@ -345,6 +345,10 @@ def process_inventory_excel(dl_path, is_hub=False):
             
             if is_hub and not wh_name_final.startswith("[HUB]"):
                 wh_name_final = f"[HUB] {wh_name_final}"
+            
+            # 허브 수집 시 '용인 창고' 재고만 업로드
+            if is_hub and wh_name_final != "[HUB] 용인 창고":
+                continue
 
             upload_data.append({
                 "warehouse_name": wh_name_final,
