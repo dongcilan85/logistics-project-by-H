@@ -307,6 +307,12 @@ def process_inventory_excel(dl_path, is_hub=False):
         exclude_keywords = '계|합계|소계|총계|Total'
         df = df[~df[code_col].astype(str).str.contains(exclude_keywords, na=False)]
         
+        # 컬럼 누락 방어 로직 (KeyError: '입고단가' 등 방지)
+        if qty_col not in df.columns:
+            df[qty_col] = 0
+        if price_col not in df.columns:
+            df[price_col] = 0
+
         df['calc_qty'] = pd.to_numeric(df[qty_col], errors='coerce').fillna(0)
         df['calc_price'] = pd.to_numeric(df[price_col], errors='coerce').fillna(0)
         df['calc_cost'] = df['calc_qty'] * df['calc_price']
