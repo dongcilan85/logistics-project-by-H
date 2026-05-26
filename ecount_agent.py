@@ -715,9 +715,13 @@ def process_item_master_excel(dl_path, is_hub=False):
             if not cat_val or cat_val.lower() in ('nan', 'none'):
                 cat_val = '일반'
                 
-            # 상품, 제품, 부재료만 수집 (무형상품, 반제품 등 제외)
-            if cat_val not in ('상품', '제품', '부재료'):
-                continue
+            # 허브 품목은 카테고리가 '상품'인 것만 수집, 본사는 '상품', '제품', '부재료' 수집
+            if is_hub:
+                if cat_val != '상품':
+                    continue
+            else:
+                if cat_val not in ('상품', '제품', '부재료'):
+                    continue
                 
             # 품목그룹1/2/3 중 하나라도 '단종'이면 제외
             is_discontinued = False
@@ -784,6 +788,18 @@ def process_item_master_excel(dl_path, is_hub=False):
                     if dc_resp.status_code in (200, 204):
                         dc_del_count += 1
                 log(f"🗑️ 단종 품목 {dc_del_count}/{len(discontinued_codes)}건 DB에서 제거 완료")
+
+            # 허브 전용: '상품'이 아닌 카테고리를 가진 허브 품목 DB에서 제거
+            if is_hub:
+                db_set("rpa_message", "허브 비상품 품목 정리 중...")
+                del_hub_resp = requests.delete(
+                    f"{SUPABASE_URL}/rest/v1/item_master?division=eq.허브&category=not.eq.상품",
+                    headers=HEADERS
+                )
+                if del_hub_resp.status_code in (200, 204):
+                    log("🗑️ 허브 비상품 카테고리 DB에서 제거 완료")
+                else:
+                    log(f"⚠️ 허브 비상품 카테고리 삭제 실패: {del_hub_resp.status_code}", level="warning")
 
     except Exception as e:
         log(f"❌ 품목 마스터 처리 오류: {e}", level="error")
