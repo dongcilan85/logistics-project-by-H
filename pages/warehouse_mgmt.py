@@ -284,10 +284,15 @@ def display_inventory_table(target_df, key_suffix=""):
         )
     
     res_df = target_df.copy()
+    if 'division' in res_df.columns:
+        res_df['division'] = res_df['division'].fillna("본사").astype(str)
+        
     if sel_wh != "전체":
         res_df = res_df[res_df['warehouse_name'] == sel_wh]
     else:
         group_cols = ['warehouse_name', 'item_code', 'item_name_spec', 'category', 'expiration_date', 'exp_status']
+        if 'division' in res_df.columns:
+            group_cols.append('division')
         if 'is_available' in res_df.columns:
             group_cols.append('is_available')
         res_df = res_df.groupby(group_cols).agg({
@@ -297,14 +302,15 @@ def display_inventory_table(target_df, key_suffix=""):
         }).reset_index()
     
     # 상태: 품목별 합산 기준 상태 매핑 (유효기간별 개별 판단 X, 복합 키 적용)
-    res_df['status'] = (res_df['division'] + "_" + res_df['item_code']).map(item_status_map).fillna("✅ 정상")
+    div_col = res_df['division'] if 'division' in res_df.columns else pd.Series("본사", index=res_df.index)
+    res_df['status'] = (div_col + "_" + res_df['item_code']).map(item_status_map).fillna("✅ 정상")
     
     # 다중 품목 필터 적용
     if selected_items:
         res_df = res_df[res_df['item_name_spec'].isin(selected_items)]
     
     # 품목별 총 사용예정을 가져옴 (복합 키 적용)
-    res_df['total_planned'] = (res_df['division'] + "_" + res_df['item_code']).map(item_planned_map).fillna(0).astype(int)
+    res_df['total_planned'] = (div_col + "_" + res_df['item_code']).map(item_planned_map).fillna(0).astype(int)
     
     # 순차적 할당 (FIFO) 로직
     # 유효기간이 빠른 순(혹은 데이터 순)으로 planned_qty를 stock_qty에서 차감
