@@ -134,9 +134,9 @@ unavail_df = df[df['is_available'] == False].copy()
 avail_asset = avail_df['inventory_cost'].sum()
 unavail_asset = unavail_df['inventory_cost'].sum()
 
-# 유효기간 임박(1년 미만) - 가용 기준 (제조일자 품목 제외)
+# 유효기간 임박(1년 미만) - 가용 기준 (제조일자 품목 제외, 본사만 대상)
 _date_type = avail_df['date_type'] if 'date_type' in avail_df.columns else pd.Series('유효기간', index=avail_df.index)
-urgent_avail = avail_df[(avail_df['exp_status'] == "🔴 1년 미만") & (_date_type != '제조일자')]
+urgent_avail = avail_df[(avail_df['exp_status'] == "🔴 1년 미만") & (_date_type != '제조일자') & (avail_df['division'] == '본사')]
 urgent_count = len(urgent_avail)
 urgent_asset = urgent_avail['inventory_cost'].sum()
 
@@ -173,9 +173,9 @@ item_status_map = {f"{row['division']}_{row['item_code']}": row['status'] for _,
 item_planned_map = {f"{row['division']}_{row['item_code']}": row['planned_qty'] for _, row in agg_df.iterrows()}
 item_actual_map = {f"{row['division']}_{row['item_code']}": row['actual_stock'] for _, row in agg_df.iterrows()}
 
-# 품절/부족/과잉 KPI 카드는 상품 카테고리만 집계 (본사/허브 division 구분 필수)
-avail_product_df = avail_df[avail_df['category'] == '상품']
-agg_product = avail_product_df.groupby(['division', 'item_code']).agg({
+# 품절/부족/과잉 KPI 카드는 상품 카테고리 중 본사 재고만 집계
+avail_product_df = avail_df[(avail_df['category'] == '상품') & (avail_df['division'] == '본사')]
+agg_product = avail_product_df.groupby(['item_code']).agg({
     'stock_qty': 'sum',
     'safety_stock': 'max',
     'excess_threshold': 'max'
@@ -386,9 +386,9 @@ def display_inventory_table(target_df, key_suffix=""):
             st.divider()
             render_usage_plan_ui(sel_code, selected_name, key_suffix)
 
-# 발주 필요 부자재 집계
-sub_material_df = avail_df[avail_df['category'] == "부재료"].copy()
-reorder_sub_codes = agg_df[agg_df['status'] == "⚠️ 부족"]['item_code']
+# 발주 필요 부자재 집계 (본사만 대상)
+sub_material_df = avail_df[(avail_df['category'] == "부재료") & (avail_df['division'] == '본사')].copy()
+reorder_sub_codes = agg_df[(agg_df['status'] == "⚠️ 부족") & (agg_df['division'] == '본사')]['item_code']
 reorder_sub_df = sub_material_df[sub_material_df['item_code'].isin(reorder_sub_codes)]
 reorder_sub_count = reorder_sub_df['item_code'].nunique()
 
@@ -451,25 +451,26 @@ if st.session_state.kpi_selected:
     kpi_sel = st.session_state.kpi_selected
     
     def display_summary_table(src_df, title, is_excess=False):
-        """가용 재고 기준 품목별 합산 간소화 테이블"""
+        """가용 재고 기준 품목별 합산 간소화 테이블 (본사 전용)"""
         st.subheader(title)
         if src_df.empty:
             st.info("해당 조건의 데이터가 없습니다.")
             return
-        summary = src_df.groupby(['division', 'item_code', 'item_name_spec']).agg({
+        summary = src_df.groupby(['item_code', 'item_name_spec']).agg({
             'stock_qty': 'sum',
             'safety_stock': 'max',
             'excess_threshold': 'max'
         }).reset_index()
-        summary['status'] = (summary['division'] + "_" + summary['item_code']).map(item_status_map).fillna("✅ 정상")
-        summary['planned_qty'] = (summary['division'] + "_" + summary['item_code']).map(item_planned_map).fillna(0).astype(int)
+        # 본사 데이터만 있으므로 복합 키 '본사_' 접두어 적용하여 매핑
+        summary['status'] = ("본사_" + summary['item_code']).map(item_status_map).fillna("✅ 정상")
+        summary['planned_qty'] = ("본사_" + summary['item_code']).map(item_planned_map).fillna(0).astype(int)
         summary['actual_stock'] = summary['stock_qty'] - summary['planned_qty']
         
         if is_excess:
             summary = summary.sort_values(by='actual_stock', ascending=False)
-            cols_to_show = ['status', 'division', 'item_code', 'item_name_spec', 'stock_qty', 'excess_threshold', 'planned_qty', 'actual_stock']
+            cols_to_show = ['status', 'item_code', 'item_name_spec', 'stock_qty', 'excess_threshold', 'planned_qty', 'actual_stock']
             col_config = {
-                "status": "상태", "division": "구분", "item_code": "품목코드", "item_name_spec": "품목명[규격]",
+                "status": "상태", "item_code": "품목코드", "item_name_spec": "품목명[규격]",
                 "stock_qty": st.column_config.NumberColumn("ERP 재고", format="%,d"),
                 "excess_threshold": st.column_config.NumberColumn("과잉 기준", format="%,d"),
                 "planned_qty": st.column_config.NumberColumn("사용 예정", format="%,d"),
@@ -477,9 +478,9 @@ if st.session_state.kpi_selected:
             }
         else:
             summary = summary.sort_values(by='actual_stock')
-            cols_to_show = ['status', 'division', 'item_code', 'item_name_spec', 'stock_qty', 'safety_stock', 'planned_qty', 'actual_stock']
+            cols_to_show = ['status', 'item_code', 'item_name_spec', 'stock_qty', 'safety_stock', 'planned_qty', 'actual_stock']
             col_config = {
-                "status": "상태", "division": "구분", "item_code": "품목코드", "item_name_spec": "품목명[규격]",
+                "status": "상태", "item_code": "품목코드", "item_name_spec": "품목명[규격]",
                 "stock_qty": st.column_config.NumberColumn("ERP 재고", format="%,d"),
                 "safety_stock": st.column_config.NumberColumn("안전 재고", format="%,d"),
                 "planned_qty": st.column_config.NumberColumn("사용 예정", format="%,d"),
@@ -504,17 +505,15 @@ if st.session_state.kpi_selected:
     if kpi_sel == "urgent":
         display_inventory_table(urgent_avail, "kpi_urgent")
     elif kpi_sel == "issue":
-        issue_keys = (agg_product[agg_product['status'].isin(["❌ 품절", "⚠️ 부족"])]['division'] + "_" + agg_product[agg_product['status'].isin(["❌ 품절", "⚠️ 부족"])]['item_code']).tolist()
-        issue_df = avail_product_df[(avail_product_df['division'] + "_" + avail_product_df['item_code']).isin(issue_keys)]
+        issue_codes = agg_product[agg_product['status'].isin(["❌ 품절", "⚠️ 부족"])]['item_code'].tolist()
+        issue_df = avail_product_df[avail_product_df['item_code'].isin(issue_codes)]
         display_summary_table(issue_df, "❌ 품절 / ⚠️ 부족 재고 내역")
     elif kpi_sel == "excess":
-        excess_keys = (agg_product[agg_product['status'] == "📈 과잉"]['division'] + "_" + agg_product[agg_product['status'] == "📈 과잉"]['item_code']).tolist()
-        excess_df = avail_product_df[(avail_product_df['division'] + "_" + avail_product_df['item_code']).isin(excess_keys)]
+        excess_codes = agg_product[agg_product['status'] == "📈 과잉"]['item_code'].tolist()
+        excess_df = avail_product_df[avail_product_df['item_code'].isin(excess_codes)]
         display_summary_table(excess_df, "📈 과잉 재고 내역", is_excess=True)
     elif kpi_sel == "reorder_sub":
-        reorder_sub_keys = (agg_df[(agg_df['status'] == "⚠️ 부족") & (agg_df['item_code'].isin(reorder_sub_df['item_code']))]['division'] + "_" + agg_df[(agg_df['status'] == "⚠️ 부족") & (agg_df['item_code'].isin(reorder_sub_df['item_code']))]['item_code']).tolist()
-        reorder_sub_filtered = reorder_sub_df[(reorder_sub_df['division'] + "_" + reorder_sub_df['item_code']).isin(reorder_sub_keys)]
-        display_summary_table(reorder_sub_filtered, "🛠️ 발주 필요 부자재 내역")
+        display_summary_table(reorder_sub_df, "🛠️ 발주 필요 부자재 내역")
 
 st.divider()
 
