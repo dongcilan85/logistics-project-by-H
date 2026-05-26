@@ -298,7 +298,7 @@ try:
             "safety_months": st.column_config.NumberColumn("목표배수(개월)", format="%.1f", step=0.5),
             "buffer_multiplier": st.column_config.NumberColumn("버퍼배수(표준편차)", format="%.1f", step=0.1),
             "safety_stock": st.column_config.NumberColumn("안전재고", format="%d", disabled=True),
-            "excess_threshold": st.column_config.NumberColumn("과잉기준", format="%d", disabled=True),
+            "excess_threshold": st.column_config.NumberColumn("과잉기준", format="%d"),
             "updated_at": None,
         },
         column_order=["division", "item_code", "item_name", "category", "date_type", "unit_price", "monthly_avg_usage", "safety_months", "buffer_multiplier", "safety_stock", "excess_threshold"],
@@ -330,7 +330,11 @@ try:
                     # Dashboard UI에서 즉시 계산 로직은 없으나 (RPA가 상세 계산), 
                     # 임시로 저장 시 안전재고를 갱신해줍니다. (RPA가 나중에 표준편차 기반으로 덮어씀)
                     safety_stock = int(monthly_avg * safety_m)
-                    excess_threshold = safety_stock * 4 if safety_stock > 0 else 500
+                    excess_val = pd.to_numeric(row.get('excess_threshold', 0), errors='coerce')
+                    if pd.isna(excess_val) or excess_val <= 0:
+                        excess_threshold = safety_stock * 4 if safety_stock > 0 else 500
+                    else:
+                        excess_threshold = int(excess_val)
 
                     upsert_items.append({
                         "division": str(row.get('division', '본사')).strip(),

@@ -894,7 +894,7 @@ def process_inventory_movement_excel(dl_path, is_hub=False):
         all_db_items = []
         try:
             r = requests.get(
-                f"{SUPABASE_URL}/rest/v1/item_master?select=item_code,safety_months,buffer_multiplier&division=eq.{'허브' if is_hub else '본사'}",
+                f"{SUPABASE_URL}/rest/v1/item_master?select=item_code,safety_months,buffer_multiplier,excess_threshold&division=eq.{'허브' if is_hub else '본사'}",
                 headers=HEADERS, timeout=10
             )
             if r.status_code == 200:
@@ -926,7 +926,11 @@ def process_inventory_movement_excel(dl_path, is_hub=False):
             smoothed_usage = int(mean_usage + (std_usage * buffer_mult))
             safety_stock = int(smoothed_usage * safety_m)
             
-            excess_threshold = safety_stock * 4 if safety_stock > 0 else 500
+            excess_val = item.get('excess_threshold')
+            if excess_val is None or float(excess_val) <= 0:
+                excess_threshold = safety_stock * 4 if safety_stock > 0 else 500
+            else:
+                excess_threshold = int(float(excess_val))
 
             # 활성도 상태 (activity_status) 판단
             latest_month = item_latest_activity.get(code)
