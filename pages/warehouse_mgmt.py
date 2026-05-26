@@ -62,6 +62,10 @@ def load_comprehensive_data():
             if 'category_master' in inv_df.columns:
                 # 품목마스터의 카테고리가 있으면 그것을 최우선으로 사용
                 inv_df['category'] = inv_df['category_master'].combine_first(inv_df['category'])
+            if 'safety_stock_master' in inv_df.columns:
+                inv_df['safety_stock'] = inv_df['safety_stock_master'].combine_first(inv_df['safety_stock'])
+            if 'excess_threshold_master' in inv_df.columns:
+                inv_df['excess_threshold'] = inv_df['excess_threshold_master'].combine_first(inv_df['excess_threshold'])
         else:
             inv_df['category'] = '일반'
             inv_df['safety_stock'] = 0
@@ -446,7 +450,7 @@ if st.session_state.kpi_selected:
     st.divider()
     kpi_sel = st.session_state.kpi_selected
     
-    def display_summary_table(src_df, title):
+    def display_summary_table(src_df, title, is_excess=False):
         """가용 재고 기준 품목별 합산 간소화 테이블"""
         st.subheader(title)
         if src_df.empty:
@@ -454,13 +458,33 @@ if st.session_state.kpi_selected:
             return
         summary = src_df.groupby(['item_code', 'item_name_spec']).agg({
             'stock_qty': 'sum',
-            'safety_stock': 'max'
+            'safety_stock': 'max',
+            'excess_threshold': 'max'
         }).reset_index()
         summary['status'] = summary['item_code'].map(item_status_map).fillna("✅ 정상")
         summary['planned_qty'] = summary['item_code'].map(item_planned_map).fillna(0).astype(int)
         summary['actual_stock'] = summary['stock_qty'] - summary['planned_qty']
-        summary = summary.sort_values(by='actual_stock')
-        cols_to_show = ['status', 'item_code', 'item_name_spec', 'stock_qty', 'safety_stock', 'planned_qty', 'actual_stock']
+        
+        if is_excess:
+            summary = summary.sort_values(by='actual_stock', ascending=False)
+            cols_to_show = ['status', 'item_code', 'item_name_spec', 'stock_qty', 'excess_threshold', 'planned_qty', 'actual_stock']
+            col_config = {
+                "status": "상태", "item_code": "품목코드", "item_name_spec": "품목명[규격]",
+                "stock_qty": st.column_config.NumberColumn("ERP 재고", format="%,d"),
+                "excess_threshold": st.column_config.NumberColumn("과잉 기준", format="%,d"),
+                "planned_qty": st.column_config.NumberColumn("사용 예정", format="%,d"),
+                "actual_stock": st.column_config.NumberColumn("실 가용재고", format="%,d")
+            }
+        else:
+            summary = summary.sort_values(by='actual_stock')
+            cols_to_show = ['status', 'item_code', 'item_name_spec', 'stock_qty', 'safety_stock', 'planned_qty', 'actual_stock']
+            col_config = {
+                "status": "상태", "item_code": "품목코드", "item_name_spec": "품목명[규격]",
+                "stock_qty": st.column_config.NumberColumn("ERP 재고", format="%,d"),
+                "safety_stock": st.column_config.NumberColumn("안전 재고", format="%,d"),
+                "planned_qty": st.column_config.NumberColumn("사용 예정", format="%,d"),
+                "actual_stock": st.column_config.NumberColumn("실 가용재고", format="%,d")
+            }
         
         # --- 요약 지표(Metric) 표시 ---
         st.markdown("##### 📊 조회 항목 요약")
@@ -473,13 +497,7 @@ if st.session_state.kpi_selected:
 
         st.dataframe(
             disp_df,
-            column_config={
-                "status": "상태", "item_code": "품목코드", "item_name_spec": "품목명[규격]",
-                "stock_qty": st.column_config.NumberColumn("ERP 재고", format="%,d"),
-                "safety_stock": st.column_config.NumberColumn("안전 재고", format="%,d"),
-                "planned_qty": st.column_config.NumberColumn("사용 예정", format="%,d"),
-                "actual_stock": st.column_config.NumberColumn("실 가용재고", format="%,d")
-            },
+            column_config=col_config,
             use_container_width=True, hide_index=True
         )
     
@@ -490,7 +508,7 @@ if st.session_state.kpi_selected:
         display_summary_table(issue_df, "❌ 품절 / ⚠️ 부족 재고 내역")
     elif kpi_sel == "excess":
         excess_df = avail_product_df[avail_product_df['item_code'].isin(agg_product[agg_product['status'] == "📈 과잉"]['item_code'])]
-        display_summary_table(excess_df, "📈 과잉 재고 내역")
+        display_summary_table(excess_df, "📈 과잉 재고 내역", is_excess=True)
     elif kpi_sel == "reorder_sub":
         display_summary_table(reorder_sub_df, "🛠️ 발주 필요 부자재 내역")
 
