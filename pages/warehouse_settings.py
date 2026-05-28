@@ -171,64 +171,139 @@ st.divider()
 # -------------------------------------------------------------
 # [UI: 품목 마스터 설정]
 # -------------------------------------------------------------
-st.subheader("📦 품목 마스터 및 안전재고 설정")
-with st.expander("📂 엑셀로 품목 마스터 일괄 업로드", expanded=False):
-    st.info("이카운트 품목등록 엑셀이나 자체 양식(필수: 품목코드)을 업로드하여 기존 RPA 수집에 추가/덮어쓰기 할 수 있습니다.")
-    up_div = st.selectbox("업로드 대상 (구분)", ["본사", "허브"])
-    uploaded_file = st.file_uploader("엑셀 파일 선택", type=["xlsx", "xls"], key="item_master_uploader")
+st.subheader("📦 품목 마스터 일괄 관리 (리터치 및 수정)")
+st.info("💡 **품목 마스터 엑셀 편집 가이드**:\n1. 현재 데이터베이스에 등록된 품목 마스터를 다운로드합니다.\n2. 다운로드한 엑셀에서 **안전재고, 과잉기준, 목표배수, 입고단가** 등을 원하는 대로 수정(리터치)합니다.\n3. 수정한 엑셀 파일을 아래 업로드 영역에 넣어 반영시킵니다. (구분 및 품목코드 기준으로 자동 업데이트)")
+
+# 다운로드 및 업로드 레이아웃 구성
+col_dl, col_ul = st.columns([1, 2])
+
+with col_dl:
+    st.markdown("#### 1. 현재 데이터 다운로드")
+    try:
+        dl_res = supabase.table("item_master").select("*").order("item_code").execute()
+        if dl_res.data:
+            dl_df = pd.DataFrame(dl_res.data)
+            col_rename = {
+                "division": "구분",
+                "item_code": "품목코드",
+                "item_name": "품목명",
+                "category": "카테고리",
+                "unit_price": "입고단가",
+                "safety_stock": "안전재고",
+                "excess_threshold": "과잉기준",
+                "safety_months": "목표배수(개월)",
+                "buffer_multiplier": "버퍼배수"
+            }
+            col_order = ["division", "item_code", "item_name", "category", "unit_price", "safety_stock", "excess_threshold", "safety_months", "buffer_multiplier"]
+            
+            # 컬럼 방어
+            for col in col_order:
+                if col not in dl_df.columns:
+                    dl_df[col] = None
+                    
+            export_df = dl_df[col_order].rename(columns=col_rename)
+            
+            # 엑셀 변환 (openpyxl 사용)
+            import io
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                export_df.to_excel(writer, index=False, sheet_name="품목마스터_리터치")
+            
+            st.download_button(
+                label="📥 현재 품목 마스터 엑셀 다운로드",
+                data=buffer.getvalue(),
+                file_name=f"IWP_item_master_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+        else:
+            st.warning("다운로드할 품목 데이터가 없습니다. (RPA 수집을 먼저 실행해 주세요)")
+    except Exception as e:
+        st.error(f"다운로드 파일 생성 실패: {e}")
+
+with col_ul:
+    st.markdown("#### 2. 리터치 파일 업로드")
+    uploaded_file = st.file_uploader("수정 완료한 엑셀 파일 선택", type=["xlsx", "xls"], key="item_master_uploader", label_visibility="collapsed")
     if uploaded_file is not None:
         try:
             up_df = pd.read_excel(uploaded_file)
-            st.write("미리보기 (첫 5줄):", up_df.head())
+            st.write("미리보기 (첫 5줄):", up_df.head(5))
             
-            if st.button(f"🚀 {up_div} 품목 마스터 업로드 실행"):
-                with st.spinner("데이터 처리 중..."):
-                    # 컬럼 매핑 유틸
-                    def find_col(keywords, default):
+            if st.button("🚀 리터치 완료 파일 업로드 실행", use_container_width=True, type="primary"):
+                with st.spinner("데이터 처리 및 업데이트 중..."):
+                    # 유연한 컬럼 매핑 유틸
+                    def get_clean_col(keywords):
                         for col in up_df.columns:
-                            c_clean = str(col).replace(' ', '').replace('\n', '')
-                            if any(k.replace(' ', '') in c_clean for k in keywords):
+                            c_clean = str(col).replace(' ', '').replace('\n', '').lower()
+                            if any(k.lower() in c_clean for k in keywords):
                                 return col
-                        return default
-                        
-                    code_col = find_col(['품목코드', 'ItemCode'], '품목코드')
-                    name_col = find_col(['품목명', 'ItemName'], '품목명')
-                    cat_col = find_col(['구분', '카테고리', '품목구분'], '품목구분')
-                    price_col = find_col(['입고단가', '단가', '원가'], '입고단가')
+                        return None
                     
-                    if code_col not in up_df.columns:
-                        st.error(f"엑셀에서 필수 컬럼('{code_col}')을 찾을 수 없습니다.")
+                    div_col = get_clean_col(['구분', 'division'])
+                    code_col = get_clean_col(['품목코드', 'itemcode', 'item_code'])
+                    name_col = get_clean_col(['품목명', 'itemname', 'item_name'])
+                    cat_col = get_clean_col(['카테고리', 'category'])
+                    price_col = get_clean_col(['입고단가', '단가', 'unitprice', 'unit_price'])
+                    safety_col = get_clean_col(['안전재고', 'safetystock', 'safety_stock'])
+                    excess_col = get_clean_col(['과잉기준', 'excessthreshold', 'excess_threshold'])
+                    months_col = get_clean_col(['목표배수', 'safetymonths', 'safety_months'])
+                    buf_col = get_clean_col(['버퍼배수', 'buffermultiplier', 'buffer_multiplier'])
+                    
+                    if not code_col:
+                        st.error("엑셀 파일에 필수 컬럼인 '품목코드'가 존재하지 않습니다.")
                     else:
                         upsert_data = []
                         for _, row in up_df.iterrows():
                             code = str(row.get(code_col, '')).strip()
-                            if not code or code.lower() in ('nan', 'none'): continue
+                            if not code or code.lower() in ('nan', 'none'): 
+                                continue
                             
-                            name = str(row.get(name_col, '')).strip() if name_col in up_df.columns else ""
-                            cat = str(row.get(cat_col, '일반')).strip() if cat_col in up_df.columns else "일반"
-                            if cat.lower() in ('nan', 'none', ''): cat = '일반'
-                            
-                            price = pd.to_numeric(row.get(price_col, 0), errors='coerce') if price_col in up_df.columns else 0
-                            if pd.isna(price): price = 0
+                            # 기본 식별자 처리
+                            div = str(row.get(div_col, '본사')).strip() if div_col else "본사"
+                            if not div or div.lower() in ('nan', 'none', ''):
+                                div = "본사"
                                 
+                            name = str(row.get(name_col, '')).strip() if name_col and pd.notnull(row.get(name_col)) else ""
+                            cat = str(row.get(cat_col, '일반')).strip() if cat_col and pd.notnull(row.get(cat_col)) else "일반"
+                            
+                            # 수치형 필드 안전 정수/소수 변환
+                            price = pd.to_numeric(row.get(price_col, 0), errors='coerce')
+                            price = int(price) if pd.notna(price) else 0
+                            
+                            safety = pd.to_numeric(row.get(safety_col, 0), errors='coerce')
+                            safety = int(safety) if pd.notna(safety) else 0
+                            
+                            excess = pd.to_numeric(row.get(excess_col, 0), errors='coerce')
+                            excess = int(excess) if pd.notna(excess) else 0
+                            
+                            months = pd.to_numeric(row.get(months_col, 2.0), errors='coerce')
+                            months = float(months) if pd.notna(months) else 2.0
+                            
+                            buf = pd.to_numeric(row.get(buf_col, 1.0), errors='coerce')
+                            buf = float(buf) if pd.notna(buf) else 1.0
+                            
                             upsert_data.append({
-                                "division": up_div,
+                                "division": div,
                                 "item_code": code,
                                 "item_name": name,
                                 "category": cat,
-                                "unit_price": int(price)
+                                "unit_price": price,
+                                "safety_stock": safety,
+                                "excess_threshold": excess,
+                                "safety_months": months,
+                                "buffer_multiplier": buf
                             })
                         
                         if upsert_data:
-                            # 500건씩 청크로 upsert
+                            # 500건씩 청크 upsert
                             for i in range(0, len(upsert_data), 500):
                                 chunk = upsert_data[i:i+500]
                                 supabase.table("item_master").upsert(chunk).execute()
-                            st.success(f"✅ {len(upsert_data)}건의 품목이 {up_div} 구분으로 업로드되었습니다.")
+                            st.success(f"✅ {len(upsert_data)}건의 품목 정보가 성공적으로 반영되었습니다!")
                             time.sleep(1)
                             st.rerun()
                         else:
-                            st.warning("업로드할 유효한 데이터가 없습니다.")
+                            st.warning("업로드할 유효한 품목 데이터가 존재하지 않습니다.")
         except Exception as e:
             st.error(f"파일 처리 오류: {e}")
 
