@@ -45,22 +45,64 @@ def load_comprehensive_data():
         except:
             usage_df = pd.DataFrame(columns=['item_code', 'planned_qty'])
         
-        if inv_df.empty: return pd.DataFrame()
+        # inv_df가 비어 있는 경우 기본 컬럼 뼈대 보장
+        if inv_df.empty:
+            inv_df = pd.DataFrame(columns=["warehouse_name", "item_code", "item_name_spec", "category", "expiration_date", "stock_qty", "unit_price", "inventory_cost"])
+            
+        # division 컬럼 우선 적용 (merge 및 쌍 비교용)
+        inv_df['division'] = inv_df['warehouse_name'].apply(lambda x: "허브" if str(x).startswith("[HUB]") else "본사")
         
-        # 💡 유효기간 컬럼 보장 (DB에 아직 없더라도 에러 방지)
+        # 💡 [요구사항] 품목마스터에는 존재하나 수집된 재고현황에 없는 품목(전체재고 0) 강제 주입
+        if not item_df.empty:
+            # 본사/허브 각각 가용 창고 기본값 탐색
+            hq_default_wh = "본사대표창고"
+            hub_default_wh = "[HUB] 용인 창고"
+            if not wh_df.empty:
+                hq_whs = wh_df[(wh_df['is_available'] == True) & (~wh_df['warehouse_name'].str.startswith("[HUB]", na=False))]['warehouse_name'].tolist()
+                if hq_whs: hq_default_wh = hq_whs[0]
+                hub_whs = wh_df[(wh_df['is_available'] == True) & (wh_df['warehouse_name'].str.startswith("[HUB]", na=False))]['warehouse_name'].tolist()
+                if hub_whs: hub_default_wh = hub_whs[0]
+                
+            existing_pairs = set(zip(inv_df['division'], inv_df['item_code']))
+            missing_rows = []
+            
+            for _, row in item_df.iterrows():
+                div = str(row.get('division', '본사')).strip()
+                code = str(row.get('item_code', '')).strip()
+                if not code:
+                    continue
+                if (div, code) not in existing_pairs:
+                    wh_name = hq_default_wh if div == "본사" else hub_default_wh
+                    missing_rows.append({
+                        "warehouse_name": wh_name,
+                        "item_code": code,
+                        "item_name_spec": row.get('item_name', ''),
+                        "category": row.get('category', '일반'),
+                        "expiration_date": None,
+                        "stock_qty": 0,
+                        "unit_price": row.get('unit_price', 0),
+                        "inventory_cost": 0,
+                        "division": div
+                    })
+            
+            if missing_rows:
+                missing_df = pd.DataFrame(missing_rows)
+                inv_df = pd.concat([inv_df, missing_df], ignore_index=True)
+        
+        # 💡 유효기간 컬럼 보장
         if 'expiration_date' not in inv_df.columns:
             inv_df['expiration_date'] = None
 
         if not wh_df.empty:
+            if 'is_available' in inv_df.columns:
+                inv_df = inv_df.drop(columns=['is_available'])
             inv_df = inv_df.merge(wh_df, on="warehouse_name", how="left")
         else:
             inv_df['is_available'] = True
             
         if not item_df.empty:
-            inv_df['division'] = inv_df['warehouse_name'].apply(lambda x: "허브" if str(x).startswith("[HUB]") else "본사")
             inv_df = inv_df.merge(item_df, on=["division", "item_code"], how="left", suffixes=('', '_master'))
             if 'category_master' in inv_df.columns:
-                # 품목마스터의 카테고리가 있으면 그것을 최우선으로 사용
                 inv_df['category'] = inv_df['category_master'].combine_first(inv_df['category'])
             if 'safety_stock_master' in inv_df.columns:
                 inv_df['safety_stock'] = inv_df['safety_stock_master'].combine_first(inv_df['safety_stock'])
