@@ -326,22 +326,40 @@ def confirm_finish_dialog(task, curr_w):
 @st.dialog("🚀 작업 생성")
 def create_task_dialog(cat):
     st.write(f"### '{cat}' 작업 시작")
-    sites = get_site_names()
-    if sites:
-        place = st.selectbox("현장명", options=sites)
-    else:
-        st.warning("⚠️ 등록된 현장이 없습니다. [카테고리 관리]에서 현장을 먼저 등록해주세요.")
-        place = st.text_input("현장명 (직접 입력)", placeholder="현장명을 입력하세요")
     
-    workers = st.number_input("인원", min_value=1, value=1)
-    qty = st.number_input("목표수량", min_value=0, value=0)
-    if st.button("🚀 시작", key="start_new_task_btn", use_container_width=True, type="primary"):
-        if not place: st.error("현장명을 선택/입력해 주세요.")
+    # st.dialog 내부 입력 값 조작 시 클릭 유실 방지 및 고유 키 충돌 방지를 위해 st.form 도입
+    with st.form(key=f"create_task_form_{cat}", clear_on_submit=False):
+        sites = get_site_names()
+        if sites:
+            place = st.selectbox("현장명", options=sites)
         else:
-            supabase.table("active_tasks").insert({
-                "session_name": place, "task_type": cat, "workers": workers, "quantity": qty,
-                "status": "running", "last_started_at": datetime.now(KST).isoformat(), "accumulated_seconds": 0
-            }).execute(); st.rerun()
+            st.warning("⚠️ 등록된 현장이 없습니다. [카테고리 관리]에서 현장을 먼저 등록해주세요.")
+            place = st.text_input("현장명 (직접 입력)", placeholder="현장명을 입력하세요")
+        
+        workers = st.number_input("인원", min_value=1, value=1)
+        qty = st.number_input("목표수량", min_value=0, value=0)
+        
+        submit_btn = st.form_submit_button("🚀 시작", use_container_width=True, type="primary")
+        
+        if submit_btn:
+            if not place:
+                st.error("현장명을 선택/입력해 주세요.")
+            else:
+                try:
+                    supabase.table("active_tasks").insert({
+                        "session_name": place,
+                        "task_type": cat,
+                        "workers": workers,
+                        "quantity": qty,
+                        "status": "running",
+                        "last_started_at": datetime.now(KST).isoformat(),
+                        "accumulated_seconds": 0
+                    }).execute()
+                    st.success("작업이 성공적으로 시작되었습니다!")
+                    time.sleep(0.5)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"작업 생성 중 DB 오류 발생: {e}")
 
 @st.dialog("🏢 현장 추가")
 def add_site_dialog(parent_task):
