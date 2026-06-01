@@ -696,6 +696,7 @@ def process_item_master_excel(dl_path, is_hub=False):
         
         upload_data = []
         discontinued_codes = []  # 단종 품목 코드 수집
+        excluded_codes = []      # 카테고리 변경 등으로 제외된 품목 코드 수집
         import re as _re
         footer_pat = _re.compile(r'^\d{4}[-/]\d{1,2}[-/]\d{1,2}')
         for _, row in df.iterrows():
@@ -718,9 +719,11 @@ def process_item_master_excel(dl_path, is_hub=False):
             # 허브 품목은 카테고리가 '상품'인 것만 수집, 본사는 '상품', '제품', '부재료' 수집
             if is_hub:
                 if cat_val != '상품':
+                    excluded_codes.append(code)
                     continue
             else:
                 if cat_val not in ('상품', '제품', '부재료'):
+                    excluded_codes.append(code)
                     continue
                 
             # 품목그룹1/2/3 중 하나라도 '단종'이면 제외
@@ -800,6 +803,20 @@ def process_item_master_excel(dl_path, is_hub=False):
                     log("🗑️ 허브 비상품 카테고리 DB에서 제거 완료")
                 else:
                     log(f"⚠️ 허브 비상품 카테고리 삭제 실패: {del_hub_resp.status_code}", level="warning")
+
+            # 카테고리 변경 등으로 제외된 품목들 DB에서 일괄 제거
+            if excluded_codes:
+                db_set("rpa_message", f"제외 품목 {len(excluded_codes)}건 정리 중...")
+                import urllib.parse
+                ex_del_count = 0
+                for ex_code in excluded_codes:
+                    ex_resp = requests.delete(
+                        f"{SUPABASE_URL}/rest/v1/item_master?item_code=eq.{urllib.parse.quote(ex_code)}&division=eq.{'허브' if is_hub else '본사'}",
+                        headers=HEADERS
+                    )
+                    if ex_resp.status_code in (200, 204):
+                        ex_del_count += 1
+                log(f"🗑️ 카테고리 변경 제외 품목 {ex_del_count}/{len(excluded_codes)}건 DB에서 제거 완료")
 
     except Exception as e:
         log(f"❌ 품목 마스터 처리 오류: {e}", level="error")
