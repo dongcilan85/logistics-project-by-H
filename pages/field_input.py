@@ -15,6 +15,17 @@ KST = timezone(timedelta(hours=9))
 apply_premium_style()
 
 # --- 💡 [복구] 시간 및 인원 계산 헬퍼 함수 ---
+def safe_parse_dt(dt_str):
+    if not dt_str:
+        return datetime.now(KST)
+    try:
+        dt = datetime.fromisoformat(str(dt_str).replace('Z', '+00:00'))
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=KST)
+        return dt.astimezone(KST)
+    except Exception:
+        return datetime.now(KST)
+
 def split_man_seconds_by_date(start_dt, end_dt, workers):
     history_map = {}
     curr = start_dt
@@ -263,8 +274,10 @@ def confirm_finish_dialog(task, curr_w):
             # 1. 닫히는 현장의 최종 공수 누적 및 상태 변경 (대기 상태로 돌입)
             total_sec = task['accumulated_seconds']
             if task['status'] == "running":
-                total_sec += (now - datetime.fromisoformat(task['last_started_at'])).total_seconds()
-                new_segs = split_man_seconds_by_date(datetime.fromisoformat(task['last_started_at']), now, curr_w)
+                started_at = safe_parse_dt(task['last_started_at'])
+                total_sec += (now - started_at).total_seconds()
+                workers_val = int(curr_w) if curr_w is not None else 1
+                new_segs = split_man_seconds_by_date(started_at, now, workers_val)
                 final_h = update_history_map(final_h, new_segs)
                 
             supabase.table("active_tasks").update({
@@ -312,7 +325,8 @@ def confirm_finish_dialog(task, curr_w):
                 
                 # 최종 일괄 삭제 (정산 완료)
                 task_ids = [t['id'] for t in group_tasks]
-                supabase.table("active_tasks").delete().in_("id", task_ids).execute()
+                if task_ids:
+                    supabase.table("active_tasks").delete().in_("id", task_ids).execute()
                 
                 # 강제 뷰 전환: Expander DOM이 파괴되며 발생하는 Streamlit 화이트아웃(React 충돌) 방지
                 st.session_state.view = "cat_list"
@@ -416,7 +430,7 @@ def render_site_control(task):
         
         total_sec = task['accumulated_seconds']
         if task['status'] == 'running' and task['last_started_at']:
-            total_sec += (datetime.now(KST) - datetime.fromisoformat(task['last_started_at'])).total_seconds()
+            total_sec += (datetime.now(KST) - safe_parse_dt(task['last_started_at'])).total_seconds()
         h, m, s = int(total_sec // 3600), int((total_sec % 3600) // 60), int(total_sec % 60)
         with r1_c3: st.write(f"{'⏱️' if task['status'] == 'running' else '⏸️'} {h:02d}:{m:02d}:{s:02d}")
         
@@ -448,8 +462,9 @@ def render_site_control(task):
                         history = task.get('work_history') or []
                         
                         if task['status'] == 'running':
-                            last_start = datetime.fromisoformat(task['last_started_at'])
-                            new_segs = split_man_seconds_by_date(last_start, now, task['workers'])
+                            last_start = safe_parse_dt(task['last_started_at'])
+                            workers_val = int(task['workers']) if task.get('workers') is not None else 1
+                            new_segs = split_man_seconds_by_date(last_start, now, workers_val)
                             history = update_history_map(history, new_segs)
                             update_data["last_started_at"] = now.isoformat()
                         else:
@@ -486,8 +501,9 @@ def render_site_control(task):
                 if st.button("정지", key=f"p_{task['id']}", use_container_width=True):
                     now = datetime.now(KST)
                     # 정지 로직 재검증
-                    last_start = datetime.fromisoformat(task['last_started_at'])
-                    new_segs = split_man_seconds_by_date(last_start, now, task['workers'])
+                    last_start = safe_parse_dt(task['last_started_at'])
+                    workers_val = int(task['workers']) if task.get('workers') is not None else 1
+                    new_segs = split_man_seconds_by_date(last_start, now, workers_val)
                     supabase.table("active_tasks").update({
                         "status": "paused", 
                         "accumulated_seconds": int(total_sec), 
