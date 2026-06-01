@@ -392,6 +392,16 @@ if st.session_state.get('trigger_note_dialog'):
     del st.session_state['trigger_note_dialog']
     note_dialog(root_to_note)
 
+if st.session_state.get('trigger_create_task'):
+    cat_to_create = st.session_state.trigger_create_task
+    del st.session_state['trigger_create_task']
+    create_task_dialog(cat_to_create)
+
+if st.session_state.get('trigger_add_site'):
+    parent_to_add = st.session_state.trigger_add_site
+    del st.session_state['trigger_add_site']
+    add_site_dialog(parent_to_add)
+
 # --- 💡 기능 렌더러 ---
 def render_site_control(task):
     if task['status'] == 'finished':
@@ -658,7 +668,9 @@ def render_cat_detail():
                     render_site_control(root)
                     children = [t for t in all_tasks if t.get('parent_id') == root['id']]
                     for child in children: render_site_control(child)
-                    if st.button("➕ 현장 추가", key=f"add_site_{root['id']}", use_container_width=True): add_site_dialog(root)
+                    if st.button("➕ 현장 추가", key=f"add_site_{root['id']}", use_container_width=True):
+                        st.session_state.trigger_add_site = root
+                        st.rerun()
     except Exception as e: st.error(f"데이터 로드 오류: {e}")
 
     # --- 💡 순정 Expander 상태 영구 보존용 안전한 스크립트 주입 ---
@@ -702,7 +714,8 @@ def render_cat_detail():
     st.markdown('<div class="footer-anchor"></div>', unsafe_allow_html=True)
     with st.container():
         if st.button("🚀 신규 작업 생성 (+)", key="footer_create_btn", use_container_width=True, type="primary"): 
-            create_task_dialog(cat)
+            st.session_state.trigger_create_task = cat
+            st.rerun()
 
 # --- 💡 라우팅 ---
 if st.session_state.view == "cat_list": render_cat_selector()
