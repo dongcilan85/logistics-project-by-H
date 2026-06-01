@@ -416,6 +416,11 @@ if st.session_state.get('trigger_add_site'):
     del st.session_state['trigger_add_site']
     add_site_dialog(parent_to_add)
 
+if st.session_state.get('trigger_finish_dialog'):
+    task_to_finish, curr_w = st.session_state.trigger_finish_dialog
+    del st.session_state['trigger_finish_dialog']
+    confirm_finish_dialog(task_to_finish, curr_w)
+
 # --- 💡 기능 렌더러 ---
 def render_site_control(task):
     if task['status'] == 'finished':
@@ -515,7 +520,9 @@ def render_site_control(task):
         
         with r2_c3:
             # 래퍼 제거 및 일반 버튼 사용 (CSS에서 위치로 색상 지정)
-            if st.button("종료", key=f"e_{task['id']}", use_container_width=True): confirm_finish_dialog(task, task['workers'])
+            if st.button("종료", key=f"e_{task['id']}", use_container_width=True):
+                st.session_state.trigger_finish_dialog = (task, task['workers'])
+                st.rerun()
         
         st.divider()
 
