@@ -411,8 +411,16 @@ def display_inventory_table(target_df, key_suffix=""):
         
     disp_df = res_df[cols_to_show].copy()
 
+    def style_row(row):
+        status = row.get('status')
+        if status == "❌ 품절":
+            return ['background-color: rgba(255, 0, 0, 0.15)'] * len(row)
+        elif status == "⚠️ 부족":
+            return ['background-color: rgba(255, 255, 0, 0.15)'] * len(row)
+        return [''] * len(row)
+
     st.dataframe(
-        disp_df,
+        disp_df.style.apply(style_row, axis=1),
         column_config={
             "status": "상태", "exp_status": "유효기간 등급", "activity_status": "활성도", "item_code": "품목코드", "item_name_spec": "품목명[규격]",
             "stock_qty": st.column_config.NumberColumn("ERP 재고", format="%,d"),
@@ -544,8 +552,16 @@ if st.session_state.kpi_selected:
                 
         disp_df = summary[cols_to_show].copy()
 
+        def style_row(row):
+            status = row.get('status')
+            if status == "❌ 품절":
+                return ['background-color: rgba(255, 0, 0, 0.15)'] * len(row)
+            elif status == "⚠️ 부족":
+                return ['background-color: rgba(255, 255, 0, 0.15)'] * len(row)
+            return [''] * len(row)
+
         st.dataframe(
-            disp_df,
+            disp_df.style.apply(style_row, axis=1),
             column_config=col_config,
             use_container_width=True, hide_index=True
         )
