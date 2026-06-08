@@ -979,8 +979,8 @@ def process_inventory_movement_excel(dl_path, is_hub=False):
                 "division": "허브" if is_hub else "본사",
                 "item_code": code,
                 "monthly_avg_usage": int(mean_usage),
-                "safety_months": safety_m,
-                "buffer_multiplier": buffer_mult,
+                "safety_months": int(safety_m),
+                "buffer_multiplier": int(buffer_mult),
                 "safety_stock": safety_stock,
                 "excess_threshold": excess_threshold,
                 "activity_status": activity_status

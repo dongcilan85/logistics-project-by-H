@@ -19,9 +19,9 @@ supabase = init_connection()
 KST = timezone(timedelta(hours=9))
 
 # 페이지 설정
-st.set_page_config(page_title="IWP 창고 관리 대시보드", layout="wide")
+st.set_page_config(page_title="IWP 재고 관리 대시보드", layout="wide")
 
-st.title("📦 창고 통합 관리 대시보드")
+st.title("📦 재고 통합 관리 대시보드")
 st.write(f"최종 업데이트 (KST): {datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')}")
 
 # -------------------------------------------------------------

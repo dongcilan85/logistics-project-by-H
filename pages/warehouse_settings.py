@@ -30,7 +30,7 @@ def set_config(key, value):
     except:
         return False
 
-st.title("⚙️ 창고 및 RPA 환경설정")
+st.title("⚙️ 재고 및 RPA 환경설정")
 
 # -------------------------------------------------------------
 # [복구] 이카운트 계정 설정 섹션
