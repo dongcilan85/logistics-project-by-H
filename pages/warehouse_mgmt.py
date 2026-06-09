@@ -465,19 +465,7 @@ def display_inventory_table(target_df, key_suffix=""):
     # 정렬 복구 및 임시 컬럼 삭제
     res_df = res_df.drop(columns=['total_planned', '_temp_sort'])
     
-    # BOM 구성 정보 적용
-    def get_bom_info(row):
-        cat = row.get('category')
-        code = row.get('item_code')
-        if cat == "제품":
-            return parent_bom_map.get(code, "-")
-        elif cat == "부재료":
-            return child_bom_map.get(code, "-")
-        return "-"
-    
-    res_df['bom_info'] = res_df.apply(get_bom_info, axis=1)
-    
-    cols_to_show = ['status', 'exp_status', 'item_code', 'item_name_spec', 'stock_qty', 'planned_qty', 'actual_stock', 'bom_info', 'warehouse_name', 'expiration_date', 'category', 'inventory_cost']
+    cols_to_show = ['status', 'exp_status', 'item_code', 'item_name_spec', 'stock_qty', 'planned_qty', 'actual_stock', 'warehouse_name', 'expiration_date', 'category', 'inventory_cost']
     if 'activity_status' in res_df.columns:
         cols_to_show.insert(2, 'activity_status')
         res_df['activity_status'] = res_df['activity_status'].fillna('알수없음')
@@ -508,7 +496,6 @@ def display_inventory_table(target_df, key_suffix=""):
             "stock_qty": st.column_config.NumberColumn("ERP 재고", format="%,d"),
             "planned_qty": st.column_config.NumberColumn("사용 예정", format="%,d"),
             "actual_stock": st.column_config.NumberColumn("실 가용재고", format="%,d"),
-            "bom_info": "제품별 부자재 구성정보",
             "warehouse_name": "창고명", "expiration_date": "유효기간", "category": "분류",
             "inventory_cost": st.column_config.NumberColumn("재고비용", format="₩%,d")
         },
@@ -610,38 +597,25 @@ if st.session_state.kpi_selected:
         if not item_df_raw.empty:
             item_cat_map = item_df_raw.set_index('item_code')['category'].to_dict()
             
-        def get_bom_info_summary(row):
-            code = row.get('item_code')
-            cat = item_cat_map.get(code, "-")
-            if cat == "제품":
-                return parent_bom_map.get(code, "-")
-            elif cat == "부재료":
-                return child_bom_map.get(code, "-")
-            return "-"
-            
-        summary['bom_info'] = summary.apply(get_bom_info_summary, axis=1)
-
         if is_excess:
             summary = summary.sort_values(by='actual_stock', ascending=False)
-            cols_to_show = ['status', 'item_code', 'item_name_spec', 'stock_qty', 'excess_threshold', 'planned_qty', 'actual_stock', 'bom_info']
+            cols_to_show = ['status', 'item_code', 'item_name_spec', 'stock_qty', 'excess_threshold', 'planned_qty', 'actual_stock']
             col_config = {
                 "status": "상태", "item_code": "품목코드", "item_name_spec": "품목명[규격]",
                 "stock_qty": st.column_config.NumberColumn("ERP 재고", format="%,d"),
                 "excess_threshold": st.column_config.NumberColumn("과잉 기준", format="%,d"),
                 "planned_qty": st.column_config.NumberColumn("사용 예정", format="%,d"),
-                "actual_stock": st.column_config.NumberColumn("실 가용재고", format="%,d"),
-                "bom_info": "제품별 부자재 구성정보"
+                "actual_stock": st.column_config.NumberColumn("실 가용재고", format="%,d")
             }
         else:
             summary = summary.sort_values(by='actual_stock')
-            cols_to_show = ['status', 'item_code', 'item_name_spec', 'stock_qty', 'safety_stock', 'planned_qty', 'actual_stock', 'bom_info']
+            cols_to_show = ['status', 'item_code', 'item_name_spec', 'stock_qty', 'safety_stock', 'planned_qty', 'actual_stock']
             col_config = {
                 "status": "상태", "item_code": "품목코드", "item_name_spec": "품목명[규격]",
                 "stock_qty": st.column_config.NumberColumn("ERP 재고", format="%,d"),
                 "safety_stock": st.column_config.NumberColumn("안전 재고", format="%,d"),
                 "planned_qty": st.column_config.NumberColumn("사용 예정", format="%,d"),
-                "actual_stock": st.column_config.NumberColumn("실 가용재고", format="%,d"),
-                "bom_info": "제품별 부자재 구성정보"
+                "actual_stock": st.column_config.NumberColumn("실 가용재고", format="%,d")
             }
         
         # --- 요약 지표(Metric) 표시 ---
@@ -685,7 +659,7 @@ st.divider()
 # -------------------------------------------------------------
 # 5. 재고 탭 영역
 # -------------------------------------------------------------
-tab1, tab_exp, tab2, tab4, tab5 = st.tabs(["📊 전체 재고", "🗓️ 유효기간 분석", "🛠️ 부재료", "🔥 이슈(품절/부족)", "📈 과잉재고"])
+tab1, tab_exp, tab2, tab4, tab5, tab_bom = st.tabs(["📊 전체 재고", "🗓️ 유효기간 분석", "🛠️ 부재료", "🔥 이슈(품절/부족)", "📈 과잉재고", "🔗 제품별 부자재 구성정보"])
 
 with tab1:
     filter_opt = st.radio("재고 유형 선택", ["전체", "가용재고", "비가용재고"], horizontal=True, label_visibility="collapsed")
@@ -735,4 +709,84 @@ with tab4:
 with tab5:
     excess_df = avail_df[avail_df['item_code'].isin(agg_df[agg_df['status'] == "📈 과잉"]['item_code'])]
     display_inventory_table(excess_df, "excess")
+with tab_bom:
+    st.subheader("🔗 제품별 부자재 구성정보 (BOM)")
+    st.caption("💡 아래 목록에서 제품(세트 품목)을 클릭하시면 해당 완제품을 구성하는 부자재 목록 및 재고 상황이 하단에 상세하게 표시됩니다.")
+    
+    # 카테고리가 제품인 가용 재고 집계 (완제품 유니크화)
+    products_only_df = df[df['category'] == '제품'].copy()
+    if not products_only_df.empty:
+        unique_products_df = products_only_df.groupby('item_code').agg({
+            'item_name_spec': 'first',
+            'stock_qty': 'sum',
+            'unit_price': 'first',
+            'inventory_cost': 'sum'
+        }).reset_index()
+        
+        sel_event = st.dataframe(
+            unique_products_df,
+            column_config={
+                "item_code": "품목코드",
+                "item_name_spec": "품목명[규격]",
+                "stock_qty": st.column_config.NumberColumn("ERP 재고", format="%,d"),
+                "unit_price": st.column_config.NumberColumn("입고단가", format="₩%,d"),
+                "inventory_cost": st.column_config.NumberColumn("재고비용", format="₩%,d")
+            },
+            use_container_width=True,
+            hide_index=True,
+            on_select="rerun",
+            selection_mode="single-row"
+        )
+        
+        selected_rows = sel_event.selection.rows if hasattr(sel_event, 'selection') and hasattr(sel_event.selection, 'rows') else []
+        
+        if selected_rows:
+            selected_p_code = unique_products_df.iloc[selected_rows[0]]['item_code']
+            selected_p_name = unique_products_df.iloc[selected_rows[0]]['item_name_spec']
+            
+            st.divider()
+            st.markdown(f"#### 🔗 `{selected_p_name}`의 부자재 구성 정보 (BOM)")
+            
+            if not bom_df_raw.empty:
+                p_bom = bom_df_raw[bom_df_raw['parent_item_code'] == selected_p_code].copy()
+                if not p_bom.empty:
+                    # 부자재 이름 매핑
+                    item_names_for_bom = item_df_raw.set_index('item_code')['item_name'].to_dict() if not item_df_raw.empty else {}
+                    p_bom['부자재명'] = p_bom['child_item_code'].map(item_names_for_bom)
+                    
+                    # 부자재 재고/가용재고 매핑
+                    child_stock_map = agg_df.set_index('item_code')['stock_qty'].to_dict()
+                    child_actual_map = agg_df.set_index('item_code')['actual_stock'].to_dict()
+                    child_status_map = agg_df.set_index('item_code')['status'].to_dict()
+                    
+                    p_bom['부자재 ERP 재고'] = p_bom['child_item_code'].map(child_stock_map).fillna(0).astype(int)
+                    p_bom['부자재 실가용재고'] = p_bom['child_item_code'].map(child_actual_map).fillna(0).astype(int)
+                    p_bom['부자재 상태'] = p_bom['child_item_code'].map(child_status_map).fillna("✅ 정상")
+                    
+                    p_bom_display = p_bom[['부자재 상태', 'child_item_code', '부자재명', 'quantity', '부자재 ERP 재고', '부자재 실가용재고']].rename(columns={
+                        'child_item_code': '부자재코드',
+                        'quantity': '소요량 (1세트 당)'
+                    })
+                    
+                    st.dataframe(
+                        p_bom_display,
+                        column_config={
+                            "부자재 상태": "상태",
+                            "부자재코드": "부자재코드",
+                            "부자재명": "부자재명",
+                            "소요량 (1세트 당)": st.column_config.NumberColumn("소요량", format="%d"),
+                            "부자재 ERP 재고": st.column_config.NumberColumn("현재 ERP 재고", format="%,d"),
+                            "부자재 실가용재고": st.column_config.NumberColumn("실 가용재고 (계획차감)", format="%,d")
+                        },
+                        use_container_width=True,
+                        hide_index=True
+                    )
+                else:
+                    st.info("해당 제품에 등록된 부자재 구성 정보(BOM)가 없습니다. 재고관리 환경설정에서 구성품을 등록해 주세요.")
+            else:
+                st.info("등록된 BOM 데이터가 없습니다.")
+        else:
+            st.info("👆 위 목록에서 완제품을 클릭하시면 하단에 부자재 구성 정보가 나타납니다.")
+    else:
+        st.info("등록된 완제품(제품) 품목이 없습니다.")
 
