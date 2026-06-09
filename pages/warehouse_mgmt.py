@@ -716,6 +716,13 @@ with tab_bom:
     # 카테고리가 제품인 가용 재고 집계 (완제품 유니크화)
     products_only_df = df[df['category'] == '제품'].copy()
     if not products_only_df.empty:
+        # 💡 [요구사항] 3개월간 소모, 판매 내역 없는 건(monthly_avg_usage <= 0) 제외
+        usage_col = 'monthly_avg_usage' if 'monthly_avg_usage' in products_only_df.columns else ('monthly_avg_usage_master' if 'monthly_avg_usage_master' in products_only_df.columns else None)
+        if usage_col:
+            products_only_df[usage_col] = pd.to_numeric(products_only_df[usage_col], errors='coerce').fillna(0)
+            products_only_df = products_only_df[products_only_df[usage_col] > 0]
+            
+    if not products_only_df.empty:
         unique_products_df = products_only_df.groupby('item_code').agg({
             'item_name_spec': 'first',
             'stock_qty': 'sum',
@@ -723,8 +730,29 @@ with tab_bom:
             'inventory_cost': 'sum'
         }).reset_index()
         
+        # 💡 [요구사항] 다중 검색이 가능한 검색창 추가
+        unique_products_df['display_name'] = unique_products_df.apply(
+            lambda r: f"{r['item_name_spec']} ({r['item_code']})", axis=1
+        )
+        search_options = unique_products_df['display_name'].tolist()
+        
+        selected_products = st.multiselect(
+            "🔍 완제품 검색 (다중 선택 가능)",
+            options=search_options,
+            placeholder="검색하거나 선택할 완제품(제품)들을 입력하세요...",
+            help="제품 이름이나 품목코드로 검색할 수 있으며, 여러 개를 선택하여 동시에 펼쳐볼 수 있습니다."
+        )
+        
+        # 검색 선택값에 따라 목록 필터링 (미선택 시 전체 노출)
+        if selected_products:
+            display_df = unique_products_df[unique_products_df['display_name'].isin(selected_products)]
+        else:
+            display_df = unique_products_df
+            
+        st.write(f"총 {len(display_df)}개의 완제품이 노출되었습니다.")
+        
         # UI 개선: st.expander 방식으로 각각의 제품을 접이식으로 노출
-        for _, prod_row in unique_products_df.iterrows():
+        for _, prod_row in display_df.iterrows():
             prod_code = prod_row['item_code']
             prod_name = prod_row['item_name_spec']
             prod_stock = int(prod_row['stock_qty'])
@@ -773,7 +801,7 @@ with tab_bom:
                 else:
                     st.info("등록된 BOM 데이터가 없습니다.")
     else:
-        st.info("등록된 완제품(제품) 품목이 없습니다.")
+        st.info("등록된 완제품(제품) 품목이 없거나, 최근 3개월간 소모/판매 기록이 있는 품목이 없습니다.")
 
 # --- 이전 [단일 행 선택 방식] 백업 주석 ---
 # (원복 필요 시 아래 코드를 다시 적용할 수 있습니다)
