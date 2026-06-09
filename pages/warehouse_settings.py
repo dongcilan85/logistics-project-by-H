@@ -546,8 +546,11 @@ with col_bom_ul:
                             })
                             
                         if upsert_bom_data:
-                            supabase.table("item_bom").upsert(upsert_bom_data, on_conflict="parent_item_code,child_item_code").execute()
-                            st.success(f"✅ {len(upsert_bom_data)}건의 BOM 정보가 성공적으로 반영되었습니다!")
+                            # 💡 기존 BOM 전체 데이터를 삭제하고, 업로드한 엑셀 기준으로 덮어쓰기(대체)합니다.
+                            supabase.table("item_bom").delete().neq("parent_item_code", "").execute()
+                            supabase.table("item_bom").insert(upsert_bom_data).execute()
+                            
+                            st.success(f"✅ 기존 BOM 데이터를 대체하여 총 {len(upsert_bom_data)}건의 BOM 정보가 성공적으로 반영되었습니다!")
                             time.sleep(1)
                             st.rerun()
                         else:
