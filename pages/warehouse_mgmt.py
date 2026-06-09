@@ -722,6 +722,13 @@ with tab_bom:
             products_only_df[usage_col] = pd.to_numeric(products_only_df[usage_col], errors='coerce').fillna(0)
             products_only_df = products_only_df[products_only_df[usage_col] > 0]
             
+        # 💡 [요구사항] 실제 BOM 정보가 등록된 완제품만 노출되도록 필터링
+        if not bom_df_raw.empty:
+            registered_parents = bom_df_raw['parent_item_code'].unique().tolist()
+            products_only_df = products_only_df[products_only_df['item_code'].isin(registered_parents)]
+        else:
+            products_only_df = pd.DataFrame(columns=products_only_df.columns)
+            
     if not products_only_df.empty:
         unique_products_df = products_only_df.groupby('item_code').agg({
             'item_name_spec': 'first',
