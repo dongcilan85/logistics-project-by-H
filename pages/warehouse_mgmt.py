@@ -71,7 +71,12 @@ def load_comprehensive_data():
                 code = str(row.get('item_code', '')).strip()
                 if not code:
                     continue
-                if (div, code) not in existing_pairs:
+                # 3개월간 판매/출고 기록(월평균사용량)이 있는 경우에만 미수집 품목(재고 0)으로 주입
+                monthly_usage = pd.to_numeric(row.get('monthly_avg_usage', 0), errors='coerce')
+                if pd.isna(monthly_usage):
+                    monthly_usage = 0
+                
+                if (div, code) not in existing_pairs and monthly_usage > 0:
                     wh_name = hq_default_wh if div == "본사" else hub_default_wh
                     missing_rows.append({
                         "warehouse_name": wh_name,
