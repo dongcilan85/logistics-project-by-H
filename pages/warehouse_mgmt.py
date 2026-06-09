@@ -765,11 +765,39 @@ with tab_bom:
             prod_stock = int(prod_row['stock_qty'])
             prod_cost = int(prod_row['inventory_cost'])
             
-            # expander 타이틀을 가독성있게 구성
-            expander_title = f"📦 {prod_name} ({prod_code}) ｜ ERP 재고: {prod_stock:,}개 ｜ 재고비용: ₩{prod_cost:,}원"
+            # 💡 [요구사항] 완제품 생산 가능 수량 역산 (본사 실가용재고 기준)
+            possible_prod_qty = 0
+            has_bom_info = False
+            
+            if not bom_df_raw.empty:
+                p_bom_temp = bom_df_raw[bom_df_raw['parent_item_code'] == prod_code].copy()
+                if not p_bom_temp.empty:
+                    has_bom_info = True
+                    agg_hq = agg_df[agg_df['division'] == '본사']
+                    child_actual_map_temp = agg_hq.set_index('item_code')['actual_stock'].to_dict()
+                    
+                    possible_qtys = []
+                    for _, bom_row in p_bom_temp.iterrows():
+                        c_code = bom_row['child_item_code']
+                        bom_qty = int(bom_row['quantity']) if pd.notna(bom_row['quantity']) and int(bom_row['quantity']) > 0 else 1
+                        c_actual_stock = child_actual_map_temp.get(c_code, 0)
+                        
+                        # 음수 재고인 경우 0개로 판단
+                        c_actual_stock = max(0, c_actual_stock)
+                        possible_qtys.append(c_actual_stock // bom_qty)
+                    
+                    possible_prod_qty = min(possible_qtys) if possible_qtys else 0
+            
+            # expander 타이틀을 가독성있게 구성 (생산 가능 수량 컬럼정보 추가)
+            if has_bom_info:
+                expander_title = f"📦 {prod_name} ({prod_code}) ｜ ERP 재고: {prod_stock:,}개 ｜ 생산가능: {possible_prod_qty:,}개 ｜ 재고비용: ₩{prod_cost:,}원"
+            else:
+                expander_title = f"📦 {prod_name} ({prod_code}) ｜ ERP 재고: {prod_stock:,}개 ｜ 생산가능: - ｜ 재고비용: ₩{prod_cost:,}원"
             
             with st.expander(expander_title):
-                if not bom_df_raw.empty:
+                if has_bom_info:
+                    st.markdown(f"**💡 본사 부자재 가용 재고 기준 최대 생산 가능량:** `{possible_prod_qty:,}` 세트")
+                    
                     p_bom = bom_df_raw[bom_df_raw['parent_item_code'] == prod_code].copy()
                     if not p_bom.empty:
                         # 부자재 이름 매핑
