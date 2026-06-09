@@ -776,10 +776,11 @@ with tab_bom:
                         item_names_for_bom = item_df_raw.set_index('item_code')['item_name'].to_dict() if not item_df_raw.empty else {}
                         p_bom['부자재명'] = p_bom['child_item_code'].map(item_names_for_bom)
                         
-                        # 부자재 재고/가용재고 매핑
-                        child_stock_map = agg_df.set_index('item_code')['stock_qty'].to_dict()
-                        child_actual_map = agg_df.set_index('item_code')['actual_stock'].to_dict()
-                        child_status_map = agg_df.set_index('item_code')['status'].to_dict()
+                        # 부자재 재고/가용재고 매핑 (본사 재고 기준)
+                        agg_hq = agg_df[agg_df['division'] == '본사']
+                        child_stock_map = agg_hq.set_index('item_code')['stock_qty'].to_dict()
+                        child_actual_map = agg_hq.set_index('item_code')['actual_stock'].to_dict()
+                        child_status_map = agg_hq.set_index('item_code')['status'].to_dict()
                         
                         p_bom['부자재 ERP 재고'] = p_bom['child_item_code'].map(child_stock_map).fillna(0).astype(int)
                         p_bom['부자재 실가용재고'] = p_bom['child_item_code'].map(child_actual_map).fillna(0).astype(int)
