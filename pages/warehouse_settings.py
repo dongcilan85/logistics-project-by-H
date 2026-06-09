@@ -437,3 +437,198 @@ try:
 
 except Exception as e:
     st.info(f"품목 로드 오류: {e}")
+
+st.divider()
+
+# -------------------------------------------------------------
+# [UI: BOM (자재명세서) 일괄 및 상세 관리]
+# -------------------------------------------------------------
+st.subheader("🔗 BOM (자재명세서) 일괄 및 상세 관리")
+st.info("💡 **BOM 설정 안내**:\n- **완제품(제품)** 카테고리의 세트 품목이 어떤 **부자재**들로 구성되는지 정의합니다.\n- 제품의 출고 계획이 잡히면 BOM에 설정된 비율에 맞춰 부자재의 실 가용재고도 자동으로 차감됩니다.")
+
+# 데이터 준비
+try:
+    bom_res = supabase.table("item_bom").select("*").execute()
+    bom_df = pd.DataFrame(bom_res.data) if bom_res.data else pd.DataFrame(columns=["id", "parent_item_code", "child_item_code", "quantity"])
+except:
+    bom_df = pd.DataFrame(columns=["id", "parent_item_code", "child_item_code", "quantity"])
+
+# 품목 목록 정보 로드
+products_list = item_df[item_df['category'] == '제품'] if not item_df.empty else pd.DataFrame()
+sub_materials_list = item_df[item_df['category'] == '부재료'] if not item_df.empty else pd.DataFrame()
+
+# -------------------------------------------------------------
+# [안 B] BOM 엑셀 업로드/다운로드
+# -------------------------------------------------------------
+col_bom_dl, col_bom_ul = st.columns([1, 2])
+
+with col_bom_dl:
+    st.markdown("#### 1. BOM 데이터 다운로드")
+    if not bom_df.empty and not item_df.empty:
+        # parent, child의 이름을 보여주기 위해 조인
+        item_names = item_df.set_index('item_code')['item_name'].to_dict()
+        export_bom = bom_df.copy()
+        export_bom['제품명'] = export_bom['parent_item_code'].map(item_names)
+        export_bom['부자재명'] = export_bom['child_item_code'].map(item_names)
+        
+        col_order_bom = ['parent_item_code', '제품명', 'child_item_code', '부자재명', 'quantity']
+        export_bom = export_bom[col_order_bom].rename(columns={
+            'parent_item_code': '제품코드',
+            'child_item_code': '부자재코드',
+            'quantity': '소요량'
+        })
+        
+        import io
+        bom_buffer = io.BytesIO()
+        with pd.ExcelWriter(bom_buffer, engine='openpyxl') as writer:
+            export_bom.to_excel(writer, index=False, sheet_name="BOM_설정")
+            
+        st.download_button(
+            label="📥 현재 BOM 엑셀 다운로드",
+            data=bom_buffer.getvalue(),
+            file_name=f"IWP_BOM_master_{datetime.now().strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+    else:
+        # 양식 다운로드
+        sample_bom = pd.DataFrame(columns=['제품코드', '제품명', '부자재코드', '부자재명', '소요량'])
+        import io
+        bom_buffer = io.BytesIO()
+        with pd.ExcelWriter(bom_buffer, engine='openpyxl') as writer:
+            sample_bom.to_excel(writer, index=False, sheet_name="BOM_설정")
+        st.download_button(
+            label="📥 BOM 업로드 양식 다운로드",
+            data=bom_buffer.getvalue(),
+            file_name="IWP_BOM_Template.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+
+with col_bom_ul:
+    st.markdown("#### 2. BOM 리터치 파일 업로드")
+    uploaded_bom_file = st.file_uploader("수정 완료한 BOM 엑셀 파일 선택", type=["xlsx", "xls"], key="bom_master_uploader", label_visibility="collapsed")
+    if uploaded_bom_file is not None:
+        try:
+            up_bom_df = pd.read_excel(uploaded_bom_file)
+            st.write("미리보기 (첫 5줄):", up_bom_df.head(5))
+            
+            if st.button("🚀 BOM 엑셀 업로드 실행", use_container_width=True, type="primary"):
+                with st.spinner("BOM 데이터 처리 중..."):
+                    def get_clean_col(keywords, df_target):
+                        for col in df_target.columns:
+                            c_clean = str(col).replace(' ', '').replace('\n', '').lower()
+                            if any(k.lower() in c_clean for k in keywords):
+                                return col
+                        return None
+                    
+                    p_code_col = get_clean_col(['제품코드', 'parent_item_code', 'parent'], up_bom_df)
+                    c_code_col = get_clean_col(['부자재코드', 'child_item_code', 'child'], up_bom_df)
+                    qty_col = get_clean_col(['소요량', 'quantity', 'qty'], up_bom_df)
+                    
+                    if not p_code_col or not c_code_col:
+                        st.error("엑셀 파일에 필수 컬럼인 '제품코드' 및 '부자재코드'가 존재하지 않습니다.")
+                    else:
+                        upsert_bom_data = []
+                        for _, row in up_bom_df.iterrows():
+                            p_code = str(row.get(p_code_col, '')).strip()
+                            c_code = str(row.get(c_code_col, '')).strip()
+                            if not p_code or p_code.lower() in ('nan', 'none') or not c_code or c_code.lower() in ('nan', 'none'):
+                                continue
+                            
+                            qty = pd.to_numeric(row.get(qty_col, 1), errors='coerce')
+                            qty = int(qty) if pd.notna(qty) and qty > 0 else 1
+                            
+                            upsert_bom_data.append({
+                                "parent_item_code": p_code,
+                                "child_item_code": c_code,
+                                "quantity": qty
+                            })
+                            
+                        if upsert_bom_data:
+                            supabase.table("item_bom").upsert(upsert_bom_data, on_conflict="parent_item_code,child_item_code").execute()
+                            st.success(f"✅ {len(upsert_bom_data)}건의 BOM 정보가 성공적으로 반영되었습니다!")
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.warning("업로드할 유효한 BOM 데이터가 존재하지 않습니다.")
+        except Exception as e:
+            st.error(f"파일 처리 오류: {e}")
+
+st.divider()
+
+# -------------------------------------------------------------
+# [안 A] BOM UI 상세 설정
+# -------------------------------------------------------------
+st.markdown("#### 🛠️ 완제품별 BOM 상세 설정 (개별 편집)")
+
+if not products_list.empty:
+    product_options = {row['item_code']: f"{row['item_name']} ({row['item_code']})" for _, row in products_list.iterrows()}
+    selected_p_code = st.selectbox("완제품(제품) 선택", options=list(product_options.keys()), format_func=lambda x: product_options[x], key="selected_bom_parent")
+    
+    # 선택된 완제품의 기존 BOM 조회
+    current_bom = bom_df[bom_df['parent_item_code'] == selected_p_code].copy()
+    
+    # 부자재 목록 드롭다운 데이터 준비
+    if not sub_materials_list.empty:
+        sub_options = sorted(sub_materials_list['item_code'].unique().tolist())
+        sub_names = sub_materials_list.set_index('item_code')['item_name'].to_dict()
+        
+        # UI 편집을 위해 데이터프레임 구조화
+        edit_bom_df = current_bom[['child_item_code', 'quantity']].copy()
+        if edit_bom_df.empty:
+            edit_bom_df = pd.DataFrame(columns=['child_item_code', 'quantity'])
+            
+        edited_bom_table = st.data_editor(
+            edit_bom_df,
+            column_config={
+                "child_item_code": st.column_config.SelectboxColumn(
+                    "부자재 품목 선택",
+                    options=sub_options,
+                    format_func=lambda x: f"{sub_names.get(x, x)} ({x})",
+                    required=True
+                ),
+                "quantity": st.column_config.NumberColumn(
+                    "소요량 (단위 완제품 당)",
+                    min_value=1,
+                    step=1,
+                    default=1,
+                    required=True
+                )
+            },
+            num_rows="dynamic",
+            use_container_width=True,
+            key="bom_editor_final",
+            hide_index=True
+        )
+        
+        if st.button("💾 완제품 BOM 설정 저장", use_container_width=True, type="primary"):
+            with st.status("BOM 정보 저장 중...") as status:
+                # 1. 기존 이 제품에 대한 BOM 매핑 삭제
+                supabase.table("item_bom").delete().eq("parent_item_code", selected_p_code).execute()
+                
+                # 2. 새로운 설정 저장
+                new_bom_rows = []
+                for _, r in edited_bom_table.iterrows():
+                    c_code = r.get('child_item_code')
+                    qty = r.get('quantity', 1)
+                    if pd.notnull(c_code) and str(c_code).strip():
+                        new_bom_rows.append({
+                            "parent_item_code": selected_p_code,
+                            "child_item_code": str(c_code).strip(),
+                            "quantity": int(qty)
+                        })
+                if new_bom_rows:
+                    supabase.table("item_bom").insert(new_bom_rows).execute()
+                
+                status.update(label="✅ 완제품 BOM 설정 저장 완료", state="complete")
+                
+            st.cache_data.clear()
+            if "bom_editor_final" in st.session_state:
+                del st.session_state["bom_editor_final"]
+            time.sleep(1)
+            st.rerun()
+    else:
+        st.warning("등록된 부자재 품목이 없습니다. 품목 마스터에서 카테고리를 '부재료'로 지정해 주세요.")
+else:
+    st.info("등록된 완제품(제품) 품목이 없습니다. 품목 마스터에서 카테고리를 '제품'으로 지정해 주세요.")

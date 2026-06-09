@@ -123,12 +123,19 @@ def load_comprehensive_data():
         inv_df['safety_stock'] = inv_df['safety_stock'].fillna(0)
         inv_df['excess_threshold'] = inv_df['excess_threshold'].fillna(1000)
         
-        return inv_df, usage_df
+        # item_bom 테이블 데이터 로드
+        try:
+            bom_res = supabase.table("item_bom").select("*").execute()
+            bom_df = pd.DataFrame(bom_res.data) if bom_res.data else pd.DataFrame(columns=['parent_item_code', 'child_item_code', 'quantity'])
+        except:
+            bom_df = pd.DataFrame(columns=['parent_item_code', 'child_item_code', 'quantity'])
+            
+        return inv_df, usage_df, bom_df, item_df
     except Exception as e:
         st.error(f"데이터 로드 중 오류: {e}")
-        return pd.DataFrame(), pd.DataFrame(columns=['item_code', 'planned_qty'])
-
-inv_df_raw, usage_df_raw = load_comprehensive_data()
+        return pd.DataFrame(), pd.DataFrame(columns=['item_code', 'planned_qty']), pd.DataFrame(columns=['parent_item_code', 'child_item_code', 'quantity']), pd.DataFrame()
+ 
+inv_df_raw, usage_df_raw, bom_df_raw, item_df_raw = load_comprehensive_data()
 df = inv_df_raw.copy()
 
 if df.empty:
@@ -194,9 +201,40 @@ agg_df = avail_df.groupby(['division', 'item_code']).agg({
     'excess_threshold': 'max'
 }).reset_index()
 
-# 사용 계획(출고 예정) 병합
+# 사용 계획(출고 예정) 및 BOM 기반 간접 사용량 계산
+# 1. 완제품(parent)의 사용 계획에 따른 부자재(child)의 간접 소요량 계산
+from collections import defaultdict
+parent_plans = {}
 if not usage_df_raw.empty:
-    usage_sum = usage_df_raw.groupby('item_code')['planned_qty'].sum().reset_index()
+    parent_plans = usage_df_raw.groupby('item_code')['planned_qty'].sum().to_dict()
+
+indirect_plans = defaultdict(int)
+if not bom_df_raw.empty and parent_plans:
+    for parent_code, planned_qty in parent_plans.items():
+        children = bom_df_raw[bom_df_raw['parent_item_code'] == parent_code]
+        for _, row_bom in children.iterrows():
+            child_code = row_bom['child_item_code']
+            bom_qty = int(row_bom['quantity'])
+            indirect_plans[child_code] += planned_qty * bom_qty
+
+# 2. 총 사용 예정 수량 = 직접 사용 예정 수량 + 간접 소요량
+direct_plans = {}
+if not usage_df_raw.empty:
+    direct_plans = usage_df_raw.groupby('item_code')['planned_qty'].sum().to_dict()
+
+all_item_codes = set(list(direct_plans.keys()) + list(indirect_plans.keys()))
+total_plans_list = []
+for code in all_item_codes:
+    d_qty = direct_plans.get(code, 0)
+    i_qty = indirect_plans.get(code, 0)
+    total_plans_list.append({
+        'item_code': code,
+        'planned_qty': d_qty + i_qty
+    })
+total_usage_df = pd.DataFrame(total_plans_list) if total_plans_list else pd.DataFrame(columns=['item_code', 'planned_qty'])
+
+if not total_usage_df.empty:
+    usage_sum = total_usage_df.groupby('item_code')['planned_qty'].sum().reset_index()
     agg_df = agg_df.merge(usage_sum, on='item_code', how='left')
     agg_df['planned_qty'] = agg_df['planned_qty'].fillna(0).astype(int)
 else:
@@ -219,6 +257,33 @@ item_status_map = {f"{row['division']}_{row['item_code']}": row['status'] for _,
 # 품목별 사용예정/실가용재고 맵 (전체 테이블용 - division_itemcode 복합 키 적용)
 item_planned_map = {f"{row['division']}_{row['item_code']}": row['planned_qty'] for _, row in agg_df.iterrows()}
 item_actual_map = {f"{row['division']}_{row['item_code']}": row['actual_stock'] for _, row in agg_df.iterrows()}
+
+# --- BOM 구성 정보 빌드 ---
+parent_bom_map = {}
+child_bom_map = {}
+
+if not bom_df_raw.empty and not item_df_raw.empty:
+    item_names_for_bom = item_df_raw.set_index('item_code')['item_name'].to_dict()
+    
+    # parent별 그룹화 (제품 -> 구성 부자재)
+    for parent_code, group in bom_df_raw.groupby('parent_item_code'):
+        parts = []
+        for _, r in group.iterrows():
+            c_code = r['child_item_code']
+            c_name = item_names_for_bom.get(c_code, c_code)
+            qty = r['quantity']
+            parts.append(f"{c_name}({c_code}) x{qty}")
+        parent_bom_map[parent_code] = ", ".join(parts)
+        
+    # child별 그룹화 (부자재 -> 상위 완제품)
+    for child_code, group in bom_df_raw.groupby('child_item_code'):
+        parts = []
+        for _, r in group.iterrows():
+            p_code = r['parent_item_code']
+            p_name = item_names_for_bom.get(p_code, p_code)
+            qty = r['quantity']
+            parts.append(f"{p_name}({p_code}) 소요량:{qty}")
+        child_bom_map[child_code] = ", ".join(parts)
 
 # 품절/부족/과잉 KPI 카드는 상품 카테고리 중 본사 재고만 집계
 avail_product_df = avail_df[(avail_df['category'] == '상품') & (avail_df['division'] == '본사')]
@@ -400,7 +465,19 @@ def display_inventory_table(target_df, key_suffix=""):
     # 정렬 복구 및 임시 컬럼 삭제
     res_df = res_df.drop(columns=['total_planned', '_temp_sort'])
     
-    cols_to_show = ['status', 'exp_status', 'item_code', 'item_name_spec', 'stock_qty', 'planned_qty', 'actual_stock', 'warehouse_name', 'expiration_date', 'category', 'inventory_cost']
+    # BOM 구성 정보 적용
+    def get_bom_info(row):
+        cat = row.get('category')
+        code = row.get('item_code')
+        if cat == "제품":
+            return parent_bom_map.get(code, "-")
+        elif cat == "부재료":
+            return child_bom_map.get(code, "-")
+        return "-"
+    
+    res_df['bom_info'] = res_df.apply(get_bom_info, axis=1)
+    
+    cols_to_show = ['status', 'exp_status', 'item_code', 'item_name_spec', 'stock_qty', 'planned_qty', 'actual_stock', 'bom_info', 'warehouse_name', 'expiration_date', 'category', 'inventory_cost']
     if 'activity_status' in res_df.columns:
         cols_to_show.insert(2, 'activity_status')
         res_df['activity_status'] = res_df['activity_status'].fillna('알수없음')
@@ -431,6 +508,7 @@ def display_inventory_table(target_df, key_suffix=""):
             "stock_qty": st.column_config.NumberColumn("ERP 재고", format="%,d"),
             "planned_qty": st.column_config.NumberColumn("사용 예정", format="%,d"),
             "actual_stock": st.column_config.NumberColumn("실 가용재고", format="%,d"),
+            "bom_info": "제품별 부자재 구성정보",
             "warehouse_name": "창고명", "expiration_date": "유효기간", "category": "분류",
             "inventory_cost": st.column_config.NumberColumn("재고비용", format="₩%,d")
         },
@@ -527,25 +605,43 @@ if st.session_state.kpi_selected:
         summary['planned_qty'] = ("본사_" + summary['item_code']).map(item_planned_map).fillna(0).astype(int)
         summary['actual_stock'] = summary['stock_qty'] - summary['planned_qty']
         
+        # item_code -> category 매핑
+        item_cat_map = {}
+        if not item_df_raw.empty:
+            item_cat_map = item_df_raw.set_index('item_code')['category'].to_dict()
+            
+        def get_bom_info_summary(row):
+            code = row.get('item_code')
+            cat = item_cat_map.get(code, "-")
+            if cat == "제품":
+                return parent_bom_map.get(code, "-")
+            elif cat == "부재료":
+                return child_bom_map.get(code, "-")
+            return "-"
+            
+        summary['bom_info'] = summary.apply(get_bom_info_summary, axis=1)
+
         if is_excess:
             summary = summary.sort_values(by='actual_stock', ascending=False)
-            cols_to_show = ['status', 'item_code', 'item_name_spec', 'stock_qty', 'excess_threshold', 'planned_qty', 'actual_stock']
+            cols_to_show = ['status', 'item_code', 'item_name_spec', 'stock_qty', 'excess_threshold', 'planned_qty', 'actual_stock', 'bom_info']
             col_config = {
                 "status": "상태", "item_code": "품목코드", "item_name_spec": "품목명[규격]",
                 "stock_qty": st.column_config.NumberColumn("ERP 재고", format="%,d"),
                 "excess_threshold": st.column_config.NumberColumn("과잉 기준", format="%,d"),
                 "planned_qty": st.column_config.NumberColumn("사용 예정", format="%,d"),
-                "actual_stock": st.column_config.NumberColumn("실 가용재고", format="%,d")
+                "actual_stock": st.column_config.NumberColumn("실 가용재고", format="%,d"),
+                "bom_info": "제품별 부자재 구성정보"
             }
         else:
             summary = summary.sort_values(by='actual_stock')
-            cols_to_show = ['status', 'item_code', 'item_name_spec', 'stock_qty', 'safety_stock', 'planned_qty', 'actual_stock']
+            cols_to_show = ['status', 'item_code', 'item_name_spec', 'stock_qty', 'safety_stock', 'planned_qty', 'actual_stock', 'bom_info']
             col_config = {
                 "status": "상태", "item_code": "품목코드", "item_name_spec": "품목명[규격]",
                 "stock_qty": st.column_config.NumberColumn("ERP 재고", format="%,d"),
                 "safety_stock": st.column_config.NumberColumn("안전 재고", format="%,d"),
                 "planned_qty": st.column_config.NumberColumn("사용 예정", format="%,d"),
-                "actual_stock": st.column_config.NumberColumn("실 가용재고", format="%,d")
+                "actual_stock": st.column_config.NumberColumn("실 가용재고", format="%,d"),
+                "bom_info": "제품별 부자재 구성정보"
             }
         
         # --- 요약 지표(Metric) 표시 ---
