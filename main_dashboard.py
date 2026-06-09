@@ -810,7 +810,8 @@ else:
         })
     else:
         pg = st.navigation({
-            "현장": [site_page], 
-            "재고": [warehouse_page, warehouse_settings_page]
+            "계획": [plan_mgmt_page],
+            "현장": [site_page],
+            "재고": [warehouse_page]
         })
     pg.run()
