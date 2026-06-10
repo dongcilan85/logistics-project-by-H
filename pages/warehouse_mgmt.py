@@ -360,6 +360,9 @@ def render_usage_plan_ui(item_code, item_name, key_suffix):
                     supabase.table("usage_plans").delete().eq("id", del_id).execute()
                     st.success("✅ 삭제 완료! 대시보드를 새로고침합니다.")
                     time.sleep(0.8)
+                    # 💡 팝업 무한 반복 방지를 위해 드롭다운 선택 해제
+                    if f"ms_{key_suffix}" in st.session_state:
+                        st.session_state[f"ms_{key_suffix}"] = []
                     st.rerun()
                 except Exception as e:
                     st.error(f"삭제 처리 오류: {e}")
@@ -394,6 +397,9 @@ def render_usage_plan_ui(item_code, item_name, key_suffix):
                         supabase.table("usage_plans").insert(new_plan).execute()
                         st.success("✅ 사용계획이 등록되었습니다!")
                         time.sleep(0.8)
+                        # 💡 팝업 무한 반복 방지를 위해 드롭다운 선택 해제
+                        if f"ms_{key_suffix}" in st.session_state:
+                            st.session_state[f"ms_{key_suffix}"] = []
                         st.rerun()
                     except Exception as e:
                         st.error(f"등록 처리 오류: {e}")
@@ -524,18 +530,14 @@ def display_inventory_table(target_df, key_suffix=""):
         use_container_width=True, hide_index=True
     )
     
-    # 단일 품목이 선택되었을 때만 사용계획 관리 버튼 표시
+    # 단일 품목이 선택되었을 때만 사용계획 팝업 즉시 실행
     if selected_items and len(selected_items) == 1:
         selected_name = selected_items[0]
         # res_df에 해당 품목이 있을 때
         matched = res_df[res_df['item_name_spec'] == selected_name]
         if not matched.empty:
             sel_code = matched.iloc[0]['item_code']
-            st.write("")
-            col_btn, _ = st.columns([2, 3])
-            with col_btn:
-                if st.button(f"📝 `{selected_name}` 사용계획 관리 (팝업)", type="primary", use_container_width=True, key=f"btn_modal_{key_suffix}"):
-                    render_usage_plan_ui(sel_code, selected_name, key_suffix)
+            render_usage_plan_ui(sel_code, selected_name, key_suffix)
 
 # 발주 필요 부자재 집계 (본사만 대상)
 sub_material_df = avail_df[(avail_df['category'] == "부재료") & (avail_df['division'] == '본사')].copy()
