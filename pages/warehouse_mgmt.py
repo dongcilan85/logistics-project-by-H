@@ -130,12 +130,19 @@ def load_comprehensive_data():
         except:
             bom_df = pd.DataFrame(columns=['parent_item_code', 'child_item_code', 'quantity'])
             
-        return inv_df, usage_df, bom_df, item_df
+        # inventory_history 테이블 데이터 로드
+        try:
+            hist_res = supabase.table("inventory_history").select("*").order("record_date", ascending=True).execute()
+            hist_df = pd.DataFrame(hist_res.data) if hist_res.data else pd.DataFrame()
+        except:
+            hist_df = pd.DataFrame()
+            
+        return inv_df, usage_df, bom_df, item_df, hist_df
     except Exception as e:
         st.error(f"데이터 로드 중 오류: {e}")
-        return pd.DataFrame(), pd.DataFrame(columns=['item_code', 'planned_qty']), pd.DataFrame(columns=['parent_item_code', 'child_item_code', 'quantity']), pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame(columns=['item_code', 'planned_qty']), pd.DataFrame(columns=['parent_item_code', 'child_item_code', 'quantity']), pd.DataFrame(), pd.DataFrame()
  
-inv_df_raw, usage_df_raw, bom_df_raw, item_df_raw = load_comprehensive_data()
+inv_df_raw, usage_df_raw, bom_df_raw, item_df_raw, hist_df_raw = load_comprehensive_data()
 df = inv_df_raw.copy()
 
 if df.empty:
@@ -186,6 +193,68 @@ if not df.empty and 'expiration_date' in df.columns:
 else:
     df['exp_status'] = "⭕ 해당없음"
     df['rem_days'] = 9999
+
+# -------------------------------------------------------------
+# 2-2. 재고 이력 기반 수요 분석 및 통계 헬퍼 함수
+# -------------------------------------------------------------
+def calculate_demand_metrics(item_code, hist_df_target, lead_time_days=14, z_score=1.65):
+    import math
+    if hist_df_target.empty:
+        return {
+            "total_out_qty": 0, "total_in_qty": 0, "daily_avg_usage": 0.0,
+            "daily_std_usage": 0.0, "recommended_safety_stock": 0, "reorder_point": 0,
+            "history_days": 0
+        }
+        
+    icode_history = hist_df_target[hist_df_target['item_code'] == item_code].copy()
+    if icode_history.empty:
+        return {
+            "total_out_qty": 0, "total_in_qty": 0, "daily_avg_usage": 0.0,
+            "daily_std_usage": 0.0, "recommended_safety_stock": 0, "reorder_point": 0,
+            "history_days": 0
+        }
+        
+    # 일자별 변동량 합산 및 현재고 최댓값 집계
+    daily_hist = icode_history.groupby('record_date').agg({
+        'diff_qty': 'sum',
+        'curr_qty': 'max'
+    }).reset_index()
+    
+    out_records = daily_hist[daily_hist['diff_qty'] < 0]
+    in_records = daily_hist[daily_hist['diff_qty'] > 0]
+    
+    total_out_qty = abs(out_records['diff_qty'].sum())
+    total_in_qty = in_records['diff_qty'].sum()
+    
+    daily_hist['record_date'] = pd.to_datetime(daily_hist['record_date'])
+    min_date = daily_hist['record_date'].min()
+    max_date = daily_hist['record_date'].max()
+    history_days = max(1, (max_date - min_date).days)
+    
+    # 일평균 소모량 = 총 소모량 / 전체 수집 기간 일수
+    daily_avg_usage = total_out_qty / history_days if history_days > 0 else 0.0
+    
+    # 소모가 일어난 날(출고량) 기준 표준편차 계산
+    if len(out_records) > 1:
+        daily_std_usage = abs(out_records['diff_qty']).std()
+    else:
+        daily_std_usage = 0.0
+        
+    # 추천 안전재고 = Z * 표준편차 * sqrt(리드타임)
+    recommended_safety_stock = int(math.ceil(z_score * daily_std_usage * math.sqrt(lead_time_days)))
+    
+    # 재주문점(ROP) = (일평균 소모량 * 리드타임) + 안전재고
+    reorder_point = int(math.ceil((daily_avg_usage * lead_time_days) + recommended_safety_stock))
+    
+    return {
+        "total_out_qty": int(total_out_qty),
+        "total_in_qty": int(total_in_qty),
+        "daily_avg_usage": round(daily_avg_usage, 2),
+        "daily_std_usage": round(daily_std_usage, 2),
+        "recommended_safety_stock": recommended_safety_stock,
+        "reorder_point": reorder_point,
+        "history_days": history_days
+    }
 
 # -------------------------------------------------------------
 # 3. 가용/비가용 데이터 분리 및 KPI
@@ -690,7 +759,7 @@ st.divider()
 # -------------------------------------------------------------
 # 5. 재고 탭 영역
 # -------------------------------------------------------------
-tab1, tab_exp, tab2, tab4, tab5, tab_bom = st.tabs(["📊 전체 재고", "🗓️ 유효기간 분석", "🛠️ 부재료", "🔥 이슈(품절/부족)", "📈 과잉재고", "🔗 제품별 부자재 구성정보"])
+tab1, tab_exp, tab2, tab4, tab5, tab_bom, tab_analysis = st.tabs(["📊 전체 재고", "🗓️ 유효기간 분석", "🛠️ 부재료", "🔥 이슈(품절/부족)", "📈 과잉재고", "🔗 제품별 부자재 구성정보", "📈 재고 추이 및 분석"])
 
 with tab1:
     filter_opt = st.radio("재고 유형 선택", ["전체", "가용재고", "비가용재고"], horizontal=True, label_visibility="collapsed")
@@ -869,6 +938,164 @@ with tab_bom:
                     st.info("등록된 BOM 데이터가 없습니다.")
     else:
         st.info("등록된 완제품(제품) 품목이 없거나, 최근 3개월간 소모/판매 기록이 있는 품목이 없습니다.")
+
+
+with tab_analysis:
+    st.subheader("📈 재고 추이 및 수요 분석")
+    st.caption("💡 수집된 변동 이력 데이터를 바탕으로 품목별 재고 잔량 추이, 입출고 흐름 및 통계적 추천 안전재고를 분석합니다.")
+    
+    if not hist_df_raw.empty:
+        # 분석 대상 품목 목록 준비 (item_code + item_name_spec 조합)
+        active_items = hist_df_raw.groupby('item_code').agg({
+            'item_name_spec': 'first'
+        }).reset_index()
+        
+        active_items['display_name'] = active_items.apply(
+            lambda r: f"{r['item_name_spec']} ({r['item_code']})", axis=1
+        )
+        
+        selected_display = st.selectbox(
+            "🔍 분석할 품목 선택",
+            options=active_items['display_name'].tolist(),
+            index=0,
+            key="analysis_item_select"
+        )
+        
+        if selected_display:
+            # 선택된 품목코드 추출
+            sel_item_code = active_items[active_items['display_name'] == selected_display].iloc[0]['item_code']
+            sel_item_name = active_items[active_items['display_name'] == selected_display].iloc[0]['item_name_spec']
+            
+            # 해당 품목의 이력 필터링
+            item_hist = hist_df_raw[hist_df_raw['item_code'] == sel_item_code].copy()
+            
+            # record_date 정렬 및 그룹화 (하루 단위 합산)
+            item_hist['record_date'] = pd.to_datetime(item_hist['record_date']).dt.strftime('%Y-%m-%d')
+            daily_summary = item_hist.groupby('record_date').agg({
+                'curr_qty': 'max',
+                'diff_qty': 'sum'
+            }).reset_index().sort_values(by='record_date')
+            
+            # -------------------------------------------------------------
+            # A. Plotly 시계열 차트 그리기
+            # -------------------------------------------------------------
+            import plotly.graph_objects as go
+            from plotly.subplots import make_subplots
+            
+            # Subplot 생성: 위는 Line Chart(재고 잔량), 아래는 Bar Chart(변동량)
+            fig = make_subplots(
+                rows=2, cols=1,
+                shared_xaxes=True,
+                vertical_spacing=0.15,
+                subplot_titles=("📦 일별 ERP 재고 잔량 추이", "🔄 일별 재고 변동량 (입고 / 출고)"),
+                row_heights=[0.6, 0.4]
+            )
+            
+            # 1. 재고 잔량 추이 (Line)
+            fig.add_trace(
+                go.Scatter(
+                    x=daily_summary['record_date'],
+                    y=daily_summary['curr_qty'],
+                    mode='lines+markers',
+                    name='ERP 재고 잔량',
+                    line=dict(color='#4A90D9', width=3),
+                    marker=dict(size=6)
+                ),
+                row=1, col=1
+            )
+            
+            # 2. 재고 변동량 (Bar - 입고/출고 색 구분)
+            colors = ['#2ECC71' if val > 0 else '#E74C3C' for val in daily_summary['diff_qty']]
+            fig.add_trace(
+                go.Bar(
+                    x=daily_summary['record_date'],
+                    y=daily_summary['diff_qty'],
+                    name='변동량',
+                    marker_color=colors,
+                    showlegend=False
+                ),
+                row=2, col=1
+            )
+            
+            fig.update_layout(
+                height=550,
+                showlegend=True,
+                margin=dict(l=20, r=20, t=50, b=20),
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)'
+            )
+            fig.update_xaxes(showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+            fig.update_yaxes(showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+            
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # -------------------------------------------------------------
+            # B. 통계 및 안전재고 분석 카드
+            # -------------------------------------------------------------
+            st.write("")
+            st.markdown("#### 📊 수요 및 안전재고 분석 결과")
+            
+            metrics = calculate_demand_metrics(sel_item_code, hist_df_raw, lead_time_days=14, z_score=1.65)
+            
+            # 품목 마스터의 현재 안전재고 조회
+            current_safety = 0
+            if not item_df_raw.empty:
+                item_master_match = item_df_raw[item_df_raw['item_code'] == sel_item_code]
+                if not item_master_match.empty:
+                    current_safety = int(item_master_match.iloc[0].get('safety_stock', 0))
+            
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("🗓️ 분석 대상 기간", f"{metrics['history_days']} 일")
+            c2.metric("📥 누적 입고량", f"{metrics['total_in_qty']:,} 개")
+            c3.metric("📤 누적 소모량", f"{metrics['total_out_qty']:,} 개")
+            c4.metric("📉 일평균 소모량", f"{metrics['daily_avg_usage']:,} 개/일")
+            
+            st.write("")
+            
+            sc1, sc2, sc3 = st.columns(3)
+            with sc1:
+                st.info(f"**현재 설정 안전재고**\n\n### `{current_safety:,}` 개")
+            with sc2:
+                # 통계적 안전재고 제안
+                rec_safety = metrics['recommended_safety_stock']
+                st.success(f"**💡 통계적 추천 안전재고**\n\n### `{rec_safety:,}` 개")
+                st.caption(f"기준: 리드타임 14일, 신뢰수준 95% (변동폭 σ: {metrics['daily_std_usage']})")
+            with sc3:
+                # ROP 산출
+                rop = metrics['reorder_point']
+                # 현재고 조회 (본사 기준)
+                current_stock = 0
+                agg_hq = agg_df[agg_df['division'] == '본사']
+                matched_stock = agg_hq[agg_hq['item_code'] == sel_item_code]
+                if not matched_stock.empty:
+                    current_stock = int(matched_stock.iloc[0]['stock_qty'])
+                
+                if current_stock <= rop:
+                    st.error(f"**🚨 발주 권장 (재주문점 도달)**\n\n### ROP: `{rop:,}` 개")
+                    st.caption(f"현재 본사 재고 `{current_stock:,}`개가 재주문점 이하입니다.")
+                else:
+                    st.warning(f"**🟢 재고 수준 양호**\n\n### ROP: `{rop:,}` 개")
+                    st.caption(f"현재 본사 재고 `{current_stock:,}`개 (재주문점까지 `{current_stock - rop:,}`개 남음)")
+            
+            # -------------------------------------------------------------
+            # C. Supabase 반영 기능
+            # -------------------------------------------------------------
+            st.divider()
+            col_update, _ = st.columns([2, 2])
+            with col_update:
+                if st.button("⚙️ 추천 안전재고를 품목 마스터에 즉시 반영", type="primary", use_container_width=True):
+                    with st.spinner("품목 마스터 안전재고 업데이트 중..."):
+                        try:
+                            # Supabase item_master 테이블 업데이트
+                            # division='본사' 및 item_code 기준으로 업데이트 실행
+                            supabase.table("item_master").update({"safety_stock": rec_safety}).eq("division", "본사").eq("item_code", sel_item_code).execute()
+                            st.success(f"✅ `{sel_item_name}`의 안전재고가 `{rec_safety:,}`개로 성공적으로 업데이트되었습니다!")
+                            time.sleep(1)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"안전재고 업데이트 오류: {e}")
+    else:
+        st.info("누적된 재고 변동 이력 데이터가 없습니다. RPA를 통해 재고 데이터가 주기적으로 적재되면 분석 차트가 나타납니다.")
 
 # --- 이전 [단일 행 선택 방식] 백업 주석 ---
 # (원복 필요 시 아래 코드를 다시 적용할 수 있습니다)
