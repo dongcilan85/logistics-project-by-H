@@ -318,8 +318,11 @@ unavail_wh_count = unavail_df['warehouse_name'].nunique() if not unavail_df.empt
 # -------------------------------------------------------------
 # 4. 사용계획(출고예정) UI 및 데이터 필터링 유틸리티
 # -------------------------------------------------------------
+@st.dialog("📝 사용계획 등록 및 관리")
 def render_usage_plan_ui(item_code, item_name, key_suffix):
-    st.markdown(f"### 📝 `{item_name}` 사용계획 관리")
+    st.markdown(f"**📦 대상 품목:** `{item_name}` (`{item_code}`)")
+    st.caption("💡 이 품목의 출고 예정(사용계획) 일정을 등록하거나 삭제할 수 있습니다. 완료 시 자동으로 대시보드에 반영됩니다.")
+    st.write("")
     
     # 기존 계획 목록 조회
     try:
@@ -346,18 +349,26 @@ def render_usage_plan_ui(item_code, item_name, key_suffix):
         
         # 삭제 폼
         with st.expander("🗑️ 등록된 사용계획 삭제"):
-            del_id = st.selectbox("삭제할 내역 선택", item_plans['id'].tolist(), format_func=lambda x: item_plans[item_plans['id'] == x]['description'].values[0], key=f"del_{key_suffix}")
-            if st.button("선택 내역 삭제", type="primary", key=f"btn_del_{key_suffix}"):
-                supabase.table("usage_plans").delete().eq("id", del_id).execute()
-                st.success("✅ 삭제 완료! 대시보드를 새로고침합니다.")
-                time.sleep(1)
-                st.rerun()
+            del_id = st.selectbox(
+                "삭제할 내역 선택", 
+                item_plans['id'].tolist(), 
+                format_func=lambda x: item_plans[item_plans['id'] == x]['description'].values[0], 
+                key=f"del_{key_suffix}"
+            )
+            if st.button("선택 내역 삭제", type="primary", use_container_width=True, key=f"btn_del_{key_suffix}"):
+                try:
+                    supabase.table("usage_plans").delete().eq("id", del_id).execute()
+                    st.success("✅ 삭제 완료! 대시보드를 새로고침합니다.")
+                    time.sleep(0.8)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"삭제 처리 오류: {e}")
     else:
         st.info("등록된 사용계획(출고예정)이 없습니다.")
 
     # 신규 등록 폼
     with st.expander("➕ 신규 사용계획 등록", expanded=True):
-        with st.form(key=f"form_plan_{key_suffix}"):
+        with st.form(key=f"form_plan_{key_suffix}", clear_on_submit=True):
             f_desc = st.text_input("사용 목적 (예: A현장 자재 출고, 샘플 발송 등)", max_chars=100)
             c1, c2, c3 = st.columns(3)
             with c1:
@@ -365,8 +376,8 @@ def render_usage_plan_ui(item_code, item_name, key_suffix):
             with c2:
                 f_date = st.date_input("사용 예정일")
             with c3:
-                f_creator = st.text_input("작성자", max_chars=20, placeholder="미입력 시 admin")
-            f_submit = st.form_submit_button("등록하기")
+                f_creator = st.text_input("작성자", max_chars=20, placeholder="admin")
+            f_submit = st.form_submit_button("등록하기", use_container_width=True)
             
             if f_submit:
                 if not f_desc.strip():
@@ -379,10 +390,13 @@ def render_usage_plan_ui(item_code, item_name, key_suffix):
                         "due_date": str(f_date),
                         "created_by": f_creator.strip() if f_creator.strip() else "admin"
                     }
-                    supabase.table("usage_plans").insert(new_plan).execute()
-                    st.success("✅ 사용계획이 등록되었습니다! 대시보드를 새로고침합니다.")
-                    time.sleep(1)
-                    st.rerun()
+                    try:
+                        supabase.table("usage_plans").insert(new_plan).execute()
+                        st.success("✅ 사용계획이 등록되었습니다!")
+                        time.sleep(0.8)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"등록 처리 오류: {e}")
 
 def display_inventory_table(target_df, key_suffix=""):
     if target_df.empty:
@@ -510,15 +524,18 @@ def display_inventory_table(target_df, key_suffix=""):
         use_container_width=True, hide_index=True
     )
     
-    # 단일 품목이 선택되었을 때만 하단에 사용계획 UI 표시
+    # 단일 품목이 선택되었을 때만 사용계획 관리 버튼 표시
     if selected_items and len(selected_items) == 1:
         selected_name = selected_items[0]
         # res_df에 해당 품목이 있을 때
         matched = res_df[res_df['item_name_spec'] == selected_name]
         if not matched.empty:
             sel_code = matched.iloc[0]['item_code']
-            st.divider()
-            render_usage_plan_ui(sel_code, selected_name, key_suffix)
+            st.write("")
+            col_btn, _ = st.columns([2, 3])
+            with col_btn:
+                if st.button(f"📝 `{selected_name}` 사용계획 관리 (팝업)", type="primary", use_container_width=True, key=f"btn_modal_{key_suffix}"):
+                    render_usage_plan_ui(sel_code, selected_name, key_suffix)
 
 # 발주 필요 부자재 집계 (본사만 대상)
 sub_material_df = avail_df[(avail_df['category'] == "부재료") & (avail_df['division'] == '본사')].copy()
