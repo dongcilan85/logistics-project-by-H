@@ -151,6 +151,11 @@ if df.empty:
 today = datetime.now(KST).date()
 
 def analyze_expiration(row):
+    # 💡 [요구사항] 날짜 유형(date_type)이 '제조일자'인 품목은 "🟢 정상"으로 판정
+    d_type = row.get('date_type')
+    if pd.notna(d_type) and str(d_type).strip() == '제조일자':
+        return "🟢 정상", 9999
+        
     val = row.get('expiration_date')
     if pd.isna(val) or not val or str(val).strip() == '해당없음':
         return "⭕ 유효기간 없음", 9999
