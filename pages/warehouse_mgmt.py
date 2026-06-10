@@ -159,7 +159,10 @@ def analyze_expiration(row):
         exp_date = pd.to_datetime(val).date()
         diff_days = (exp_date - today).days
         
-        if diff_days < 365:
+        # 💡 [요구사항] 유통기한이 지난 품목은 '🚨 만료'로 반환
+        if diff_days < 0:
+            return "🚨 만료", diff_days
+        elif diff_days < 365:
             return "🔴 1년 미만", diff_days
         elif diff_days < 548: # 365일 ~ 547일
             return "🟡 1년 ~ 1.5년", diff_days
@@ -188,9 +191,9 @@ unavail_df = df[df['is_available'] == False].copy()
 avail_asset = avail_df['inventory_cost'].sum()
 unavail_asset = unavail_df['inventory_cost'].sum()
 
-# 유효기간 임박(1년 미만) - 가용 기준 (제조일자 품목 제외, 본사만 대상)
+# 유효기간 임박(1년 미만) 및 만료 - 가용 기준 (제조일자 품목 제외, 본사만 대상)
 _date_type = avail_df['date_type'] if 'date_type' in avail_df.columns else pd.Series('유효기간', index=avail_df.index)
-urgent_avail = avail_df[(avail_df['exp_status'] == "🔴 1년 미만") & (_date_type != '제조일자') & (avail_df['division'] == '본사')]
+urgent_avail = avail_df[(avail_df['exp_status'].isin(["🚨 만료", "🔴 1년 미만"])) & (_date_type != '제조일자') & (avail_df['division'] == '본사')]
 urgent_count = len(urgent_avail)
 urgent_asset = urgent_avail['inventory_cost'].sum()
 
