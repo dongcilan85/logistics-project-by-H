@@ -430,7 +430,14 @@ def render_site_control(task):
     with st.container():
         # 행 1: 현장명 | 인원 N명 | 타이머
         r1_c1, r1_c2, r1_c3 = st.columns([3, 3, 4])
-        with r1_c1: st.write(f"🚩 **{task['session_name']}**")
+        
+        # 메모가 존재하는지 검사하여 🚩 옆에 📝 표시 추가
+        has_note = False
+        if task.get('work_history'):
+            has_note = any(isinstance(i, dict) and i.get('type') == 'note' and i.get('content') for i in task['work_history'])
+        note_indicator = " 📝" if has_note else ""
+        
+        with r1_c1: st.write(f"🚩 **{task['session_name']}{note_indicator}**")
         with r1_c2: st.write(f"👥 인원 {task['workers']}명")
         
         total_sec = task['accumulated_seconds']
@@ -439,8 +446,8 @@ def render_site_control(task):
         h, m, s = int(total_sec // 3600), int((total_sec % 3600) // 60), int(total_sec % 60)
         with r1_c3: st.write(f"{'⏱️' if task['status'] == 'running' else '⏸️'} {h:02d}:{m:02d}:{s:02d}")
         
-        # 행 2: 수정 | 정지/재개 | 종료 (균등 배치)
-        r2_c1, r2_c2, r2_c3 = st.columns(3)
+        # 행 2: 수정 | 정지/재개 | 종료 | 메모 (균등 배치)
+        r2_c1, r2_c2, r2_c3, r2_c4 = st.columns(4)
         
         with r2_c1:
             with st.expander("정보수정"):
@@ -522,6 +529,11 @@ def render_site_control(task):
             # 래퍼 제거 및 일반 버튼 사용 (CSS에서 위치로 색상 지정)
             if st.button("종료", key=f"e_{task['id']}", use_container_width=True):
                 st.session_state.trigger_finish_dialog = (task, task['workers'])
+                st.rerun()
+        
+        with r2_c4:
+            if st.button("메모", key=f"note_btn_{task['id']}", use_container_width=True):
+                st.session_state.trigger_note_dialog = task
                 st.rerun()
         
         st.divider()
@@ -671,21 +683,21 @@ def render_cat_detail():
         else:
             for root in root_tasks:
                 # 메모 미리보기 추출 (헤더 표시용)
-                root_note = next((i['content'] for i in (root.get('work_history', []) or []) if isinstance(i, dict) and i.get('type') == 'note'), "")
-                header_note = f" | 📝 {root_note[:15]}..." if root_note else ""
+                # 메모가 작성된 현장의 개수를 파악하여 헤더에 표시
+                notes_count = 0
+                for t in all_tasks:
+                    if t.get('parent_id') == root['id'] or t['id'] == root['id']:
+                        has_n = any(isinstance(i, dict) and i.get('type') == 'note' and i.get('content') for i in (t.get('work_history') or []))
+                        if has_n:
+                            notes_count += 1
+                header_note = f" | 📝 메모 {notes_count}건" if notes_count > 0 else ""
                 
                 # 작업 그룹명 변경 및 접기/펼치기(expander) 적용
                 with st.expander(f"🛠️ {cat} #{root['id']}{header_note}", expanded=True):
-                    # 통합 요약행: 목표수량 | [N]건 | 메모입력
-                    s_c1, s_c2, s_c3 = st.columns([2, 5, 3])
+                    # 통합 요약행: 목표수량 | [N]건
+                    s_c1, s_c2 = st.columns([3, 7])
                     with s_c1: st.write("**목표수량**")
                     with s_c2: st.markdown(f'<span class="qty-text">[{root["quantity"]:,}]건</span>', unsafe_allow_html=True)
-                    with s_c3:
-                        st.markdown('<div class="white-button">', unsafe_allow_html=True)
-                        if st.button("메모입력", key=f"note_root_{root['id']}", use_container_width=True):
-                            st.session_state.trigger_note_dialog = root
-                            st.rerun()
-                        st.markdown('</div>', unsafe_allow_html=True)
                     st.divider()
                     
                     render_site_control(root)
