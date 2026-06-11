@@ -271,6 +271,7 @@ def confirm_finish_dialog(task, curr_w):
             history = task.get('work_history', []) or []
             final_h = [i for i in history if isinstance(i, dict) and 'man_seconds' in i]
             
+            # 1. 닫히는 현장의 최종 공수 누적 및 상태 변경 (대기 상태로 돌입)
             total_sec = task['accumulated_seconds']
             if task['status'] == "running":
                 started_at = safe_parse_dt(task['last_started_at'])
@@ -339,22 +340,40 @@ def confirm_finish_dialog(task, curr_w):
 @st.dialog("🚀 작업 생성")
 def create_task_dialog(cat):
     st.write(f"### '{cat}' 작업 시작")
-    sites = get_site_names()
-    if sites:
-        place = st.selectbox("현장명", options=sites)
-    else:
-        st.warning("⚠️ 등록된 현장이 없습니다. [카테고리 관리]에서 현장을 먼저 등록해주세요.")
-        place = st.text_input("현장명 (직접 입력)", placeholder="현장명을 입력하세요")
     
-    workers = st.number_input("인원", min_value=1, value=1)
-    qty = st.number_input("목표수량", min_value=0, value=0)
-    if st.button("🚀 시작", key="start_new_task_btn", use_container_width=True, type="primary"):
-        if not place: st.error("현장명을 선택/입력해 주세요.")
+    # st.dialog 내부 입력 값 조작 시 클릭 유실 방지 및 고유 키 충돌 방지를 위해 st.form 도입
+    with st.form(key=f"create_task_form_{cat}", clear_on_submit=False):
+        sites = get_site_names()
+        if sites:
+            place = st.selectbox("현장명", options=sites)
         else:
-            supabase.table("active_tasks").insert({
-                "session_name": place, "task_type": cat, "workers": workers, "quantity": qty,
-                "status": "running", "last_started_at": datetime.now(KST).isoformat(), "accumulated_seconds": 0
-            }).execute(); st.rerun()
+            st.warning("⚠️ 등록된 현장이 없습니다. [카테고리 관리]에서 현장을 먼저 등록해주세요.")
+            place = st.text_input("현장명 (직접 입력)", placeholder="현장명을 입력하세요")
+        
+        workers = st.number_input("인원", min_value=1, value=1)
+        qty = st.number_input("목표수량", min_value=0, value=0)
+        
+        submit_btn = st.form_submit_button("🚀 시작", use_container_width=True, type="primary")
+        
+        if submit_btn:
+            if not place:
+                st.error("현장명을 선택/입력해 주세요.")
+            else:
+                try:
+                    supabase.table("active_tasks").insert({
+                        "session_name": place,
+                        "task_type": cat,
+                        "workers": workers,
+                        "quantity": qty,
+                        "status": "running",
+                        "last_started_at": datetime.now(KST).isoformat(),
+                        "accumulated_seconds": 0
+                    }).execute()
+                    st.success("작업이 성공적으로 시작되었습니다!")
+                    time.sleep(0.5)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"작업 생성 중 DB 오류 발생: {e}")
 
 @st.dialog("🏢 현장 추가")
 def add_site_dialog(parent_task):
@@ -386,6 +405,21 @@ if st.session_state.get('trigger_note_dialog'):
     root_to_note = st.session_state.trigger_note_dialog
     del st.session_state['trigger_note_dialog']
     note_dialog(root_to_note)
+
+if st.session_state.get('trigger_create_task'):
+    cat_to_create = st.session_state.trigger_create_task
+    del st.session_state['trigger_create_task']
+    create_task_dialog(cat_to_create)
+
+if st.session_state.get('trigger_add_site'):
+    parent_to_add = st.session_state.trigger_add_site
+    del st.session_state['trigger_add_site']
+    add_site_dialog(parent_to_add)
+
+if st.session_state.get('trigger_finish_dialog'):
+    task_to_finish, curr_w = st.session_state.trigger_finish_dialog
+    del st.session_state['trigger_finish_dialog']
+    confirm_finish_dialog(task_to_finish, curr_w)
 
 # --- 💡 기능 렌더러 ---
 def render_site_control(task):
@@ -486,7 +520,9 @@ def render_site_control(task):
         
         with r2_c3:
             # 래퍼 제거 및 일반 버튼 사용 (CSS에서 위치로 색상 지정)
-            if st.button("종료", key=f"e_{task['id']}", use_container_width=True): confirm_finish_dialog(task, task['workers'])
+            if st.button("종료", key=f"e_{task['id']}", use_container_width=True):
+                st.session_state.trigger_finish_dialog = (task, task['workers'])
+                st.rerun()
         
         st.divider()
 
@@ -655,7 +691,9 @@ def render_cat_detail():
                     render_site_control(root)
                     children = [t for t in all_tasks if t.get('parent_id') == root['id']]
                     for child in children: render_site_control(child)
-                    if st.button("➕ 현장 추가", key=f"add_site_{root['id']}", use_container_width=True): add_site_dialog(root)
+                    if st.button("➕ 현장 추가", key=f"add_site_{root['id']}", use_container_width=True):
+                        st.session_state.trigger_add_site = root
+                        st.rerun()
     except Exception as e: st.error(f"데이터 로드 오류: {e}")
 
     # --- 💡 순정 Expander 상태 영구 보존용 안전한 스크립트 주입 ---
@@ -699,7 +737,8 @@ def render_cat_detail():
     st.markdown('<div class="footer-anchor"></div>', unsafe_allow_html=True)
     with st.container():
         if st.button("🚀 신규 작업 생성 (+)", key="footer_create_btn", use_container_width=True, type="primary"): 
-            create_task_dialog(cat)
+            st.session_state.trigger_create_task = cat
+            st.rerun()
 
 # --- 💡 라우팅 ---
 if st.session_state.view == "cat_list": render_cat_selector()
