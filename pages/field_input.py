@@ -433,8 +433,13 @@ def render_site_control(task):
         
         # 메모가 존재하는지 검사하여 🚩 옆에 📝 표시 추가
         has_note = False
+        note_content = ""
         if task.get('work_history'):
-            has_note = any(isinstance(i, dict) and i.get('type') == 'note' and i.get('content') for i in task['work_history'])
+            for i in task['work_history']:
+                if isinstance(i, dict) and i.get('type') == 'note' and i.get('content'):
+                    has_note = True
+                    note_content = i['content']
+                    break
         note_indicator = " 📝" if has_note else ""
         
         with r1_c1: st.write(f"🚩 **{task['session_name']}{note_indicator}**")
@@ -445,6 +450,10 @@ def render_site_control(task):
             total_sec += (datetime.now(KST) - safe_parse_dt(task['last_started_at'])).total_seconds()
         h, m, s = int(total_sec // 3600), int((total_sec % 3600) // 60), int(total_sec % 60)
         with r1_c3: st.write(f"{'⏱️' if task['status'] == 'running' else '⏸️'} {h:02d}:{m:02d}:{s:02d}")
+        
+        # 현장별 메모 미리보기 노출 (행 1 아래 st.caption)
+        if has_note and note_content:
+            st.caption(f"💬 **메모**: {note_content}")
         
         # 행 2: 수정 | 정지/재개 | 종료 | 메모 (균등 배치)
         r2_c1, r2_c2, r2_c3, r2_c4 = st.columns(4)
