@@ -40,21 +40,33 @@ def set_config(key, value):
 def get_admin_password():
     return get_config("admin_password", "admin123")
 
+def get_staff_password():
+    return get_config("staff_password", "staff123")
+
 @st.dialog("🔐 PW 변경")
 def change_password_dialog():
-    actual_pw = get_admin_password()
-    st.write("보안을 위해 현재 비밀번호 확인 후 새 비밀번호를 입력해주세요.")
+    admin_pw = get_admin_password()
+    st.write("보안을 위해 **최고 관리자 비밀번호**를 먼저 대조합니다.")
     with st.form("pw_dialog_form", clear_on_submit=True):
-        curr_pw = st.text_input("현재 비밀번호", type="password")
+        curr_pw = st.text_input("최고 관리자 비밀번호 확인", type="password")
+        
+        st.divider()
+        pw_target = st.radio("변경할 대상 선택", ["최고 관리자(Admin)", "일반 실무자(Staff)"], horizontal=True)
+        
         new_pw = st.text_input("새 비밀번호", type="password")
         conf_pw = st.text_input("새 비밀번호 확인", type="password")
+        
         if st.form_submit_button("변경사항 저장", use_container_width=True):
-            if curr_pw != actual_pw: st.error("현재 비밀번호 불일치")
-            elif new_pw != conf_pw: st.error("새 비밀번호 불일치")
-            elif len(new_pw) < 4: st.warning("4자 이상 입력")
+            if curr_pw != admin_pw: 
+                st.error("최고 관리자 비밀번호 불일치")
+            elif new_pw != conf_pw: 
+                st.error("새 비밀번호 확인 불일치")
+            elif len(new_pw) < 4: 
+                st.warning("4자 이상 입력해 주세요.")
             else:
-                supabase.table("system_config").update({"value": new_pw}).eq("key", "admin_password").execute()
-                st.success("변경 완료!"); time.sleep(1); st.rerun()
+                target_key = "admin_password" if pw_target == "최고 관리자(Admin)" else "staff_password"
+                supabase.table("system_config").upsert({"key": target_key, "value": new_pw}).execute()
+                st.success("비밀번호 변경 완료!"); time.sleep(1); st.rerun()
 
 @st.dialog("📝 작업 노트 (관리자)")
 def note_dialog(task):
@@ -726,9 +738,17 @@ def login_screen():
             with st.form("login_form", border=False):
                 pw = st.text_input("비밀번호", type="password")
                 if st.form_submit_button("접속", use_container_width=True, type="primary"):
-                    if pw == get_admin_password(): st.session_state.role = "Admin"; st.rerun()
-                    elif pw == "": st.session_state.role = "Staff"; st.rerun()
-                    else: st.error("비밀번호 불일치")
+                    if pw == get_admin_password(): 
+                        st.session_state.role = "Admin"
+                        st.rerun()
+                    elif pw == get_staff_password(): 
+                        st.session_state.role = "Staff"
+                        st.rerun()
+                    elif pw == "": 
+                        st.session_state.role = "Guest"
+                        st.rerun()
+                    else: 
+                        st.error("비밀번호 불일치")
 
 
 if st.session_state.role is None:
@@ -808,10 +828,14 @@ else:
             "현장": [site_page],
             "재고": [warehouse_page, warehouse_settings_page]
         })
-    else:
+    elif st.session_state.role == "Staff":
         pg = st.navigation({
             "계획": [plan_mgmt_page],
             "현장": [site_page],
             "재고": [warehouse_page]
+        })
+    else:
+        pg = st.navigation({
+            "현장": [site_page]
         })
     pg.run()
