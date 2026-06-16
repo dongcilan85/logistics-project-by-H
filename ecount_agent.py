@@ -361,10 +361,15 @@ def process_inventory_excel(dl_path, is_hub=False):
             if is_hub and wh_name_final != "[HUB] 용인 창고":
                 continue
 
+            item_name_spec_val = str(row.get(name_col, '')).strip()
+            if is_hub:
+                import re
+                item_name_spec_val = re.sub(r'\[.*?\]', '', item_name_spec_val).strip()
+
             upload_data.append({
                 "warehouse_name": wh_name_final,
                 "item_code": str(row.get(code_col, '')).strip(),
-                "item_name_spec": str(row.get(name_col, '')).strip(),
+                "item_name_spec": item_name_spec_val,
                 "category": clean_cat,
                 "expiration_date": exp_date,
                 "stock_qty": float(row.get('calc_qty', 0)),
