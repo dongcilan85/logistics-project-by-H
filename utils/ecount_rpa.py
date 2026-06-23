@@ -567,16 +567,34 @@ class EcountRPA:
             return False, str(e)
 
     def close(self):
+        self._log("🧹 RPA 리소스 해제 및 브라우저 종료 시도...")
+        try:
+            if self.page:
+                self.page.close()
+        except Exception as e:
+            self._log(f"  ⚠️ page 종료 중 오류: {e}")
+            
         try:
             if self._context:
                 self._context.close()
-        except Exception:
-            pass
+        except Exception as e:
+            self._log(f"  ⚠️ context 종료 중 오류: {e}")
+            
+        try:
+            if self._browser:
+                self._browser.close()
+        except Exception as e:
+            self._log(f"  ⚠️ browser 종료 중 오류: {e}")
+            
         try:
             if self._pw:
                 self._pw.stop()
-        except Exception:
-            pass
-        self._context = None
-        self._pw = None
+        except Exception as e:
+            self._log(f"  ⚠️ playwright stop 중 오류: {e}")
+            
         self.page = None
+        self._context = None
+        self._browser = None
+        self._pw = None
+        self._log("✅ RPA 리소스 해제 완료")
+

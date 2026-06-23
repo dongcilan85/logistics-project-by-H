@@ -10,8 +10,37 @@ import time
 import requests
 import pandas as pd
 import logging
+import atexit
+import signal
 from datetime import datetime, timezone, timedelta
 from utils.ecount_rpa import EcountRPA
+
+# 활성화된 RPA 인스턴스를 관리하기 위한 전역 셋
+active_rpa_instances = set()
+
+def cleanup_active_rpa():
+    if active_rpa_instances:
+        log(f"🧹 [프로세스 종료] 잔존하는 {len(active_rpa_instances)}개의 RPA 브라우저 인스턴스를 강제 종료합니다.")
+        for rpa in list(active_rpa_instances):
+            try:
+                rpa.close()
+            except Exception as e:
+                log(f"  ⚠️ RPA 인스턴스 종료 중 에러: {e}")
+        active_rpa_instances.clear()
+
+# atexit 등록
+atexit.register(cleanup_active_rpa)
+
+# 시그널 핸들러 등록
+def signal_handler(signum, frame):
+    log(f"🚨 [시그널 수신] 종료 시그널({signum}) 수신. 리소스를 정리합니다.")
+    cleanup_active_rpa()
+    sys.exit(0)
+
+# Windows 환경에서 사용 가능한 종료 시그널 등록
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
+
 
 # Windows CP949 콘솔에서 이모지/한글 출력 시 크래시 방지
 try:
@@ -119,6 +148,7 @@ def execute_rpa(task="all"):
 
         log("🖥️ [3단계] 크롬 브라우저를 실행합니다... (잠시만 기다려 주세요)")
         rpa = EcountRPA(com_code, user_id, user_pw, dl_path, headless=is_headless, status_cb=lambda m: db_set("rpa_message", m[:100]))
+        active_rpa_instances.add(rpa)
 
         try:
             db_set("rpa_message", "이카운트 로그인 시도 중...")
@@ -186,6 +216,7 @@ def execute_rpa(task="all"):
         finally:
             log("본사 브라우저를 종료합니다.")
             rpa.close()
+            active_rpa_instances.discard(rpa)
 
         # --- 허브(Hub) 계정 수집 로직 ---
         hub_com = db_get("hub_com_code")
@@ -196,6 +227,7 @@ def execute_rpa(task="all"):
             log("🏢 [허브] 허브 계정 설정이 확인되어 추가 수집을 시작합니다.")
             
             hub_rpa = EcountRPA(hub_com, hub_id, hub_pw, dl_path, headless=is_headless, status_cb=lambda m: db_set("rpa_message", f"[Hub] {m[:80]}"))
+            active_rpa_instances.add(hub_rpa)
             
             try:
                 db_set("rpa_message", "[Hub] 허브 계정 로그인 시도 중...")
@@ -219,6 +251,7 @@ def execute_rpa(task="all"):
             finally:
                 log("허브 브라우저를 종료합니다.")
                 hub_rpa.close()
+                active_rpa_instances.discard(hub_rpa)
         else:
             # 허브 계정이 없어서 본사만 수행한 경우에도 idle로 초기화 (잠시 후 상태창 닫히게)
             import time
