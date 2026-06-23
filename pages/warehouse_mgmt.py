@@ -132,7 +132,7 @@ def load_comprehensive_data():
             
         # inventory_history 테이블 데이터 로드
         try:
-            hist_res = supabase.table("inventory_history").select("*").order("record_date", ascending=True).execute()
+            hist_res = supabase.table("inventory_history").select("*").order("record_date", desc=False).execute()
             hist_df = pd.DataFrame(hist_res.data) if hist_res.data else pd.DataFrame()
         except:
             hist_df = pd.DataFrame()
