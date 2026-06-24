@@ -956,24 +956,23 @@ with tab_analysis:
         
         # 1. 다중 품목 선택을 위한 Form 구성 (검색어 입력 및 조회 누를 때만 업데이트)
         with st.form("analysis_search_form"):
-            default_selections = st.session_state.get('selected_analysis_items', [active_items['display_name'].iloc[0]] if not active_items.empty else [])
+            default_selections = st.session_state.get('selected_analysis_items', [])
             valid_defaults = [x for x in default_selections if x in active_items['display_name'].tolist()]
             
             selected_displays = st.multiselect(
                 "🔍 분석할 품목 선택 (다중 선택 가능, 검색어 입력 가능)",
                 options=active_items['display_name'].tolist(),
-                default=valid_defaults if valid_defaults else (active_items['display_name'].tolist()[:1] if not active_items.empty else []),
+                default=valid_defaults,
                 key="analysis_item_multiselect"
             )
             
             submit_search = st.form_submit_button("🔍 조회하기", type="primary", use_container_width=True)
             if submit_search:
                 st.session_state['selected_analysis_items'] = selected_displays
+                st.rerun()
                 
         # 렌더링할 품목 목록 추출
         selected_items_to_render = st.session_state.get('selected_analysis_items', [])
-        if not selected_items_to_render and not active_items.empty:
-            selected_items_to_render = [active_items['display_name'].iloc[0]]
             
         if selected_items_to_render:
             # 선택된 품목 코드와 이름 파싱
@@ -1222,6 +1221,8 @@ with tab_analysis:
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"안전재고 업데이트 오류: {e}")
+        else:
+            st.info("💡 분석할 품목을 상단 검색창에서 선택한 후 [조회하기] 버튼을 클릭해 주세요.")
     else:
         st.info("누적된 재고 변동 이력 데이터가 없습니다. RPA를 통해 재고 데이터가 주기적으로 적재되면 분석 차트가 나타납니다.")
 
