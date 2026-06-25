@@ -964,6 +964,11 @@ with tab_analysis:
     )
     
     if not hist_df_raw.empty:
+        # division 컬럼 누락 및 결측치 방지 안전장치
+        if 'division' not in hist_df_raw.columns:
+            hist_df_raw['division'] = '본사'
+        hist_df_raw['division'] = hist_df_raw['division'].fillna('본사')
+        
         # 데이터 분기 필터링
         if "월별" in view_unit:
             hist_df_filtered = hist_df_raw[hist_df_raw['division'].str.endswith('_월별', na=False)].copy()
