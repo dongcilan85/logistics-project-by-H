@@ -845,7 +845,7 @@ def process_item_master_excel(dl_path, is_hub=False):
 
 
 def process_inventory_movement_excel(dl_path, is_hub=False):
-    """재고변동표 엑셀을 파싱하여 품목별 월평균 사용량 계산 후 item_master 업데이트
+    """재고변동표 엑셀을 파싱하여 품목별 월평균 사용량 계산 후 item_master 업데이트 및 월별 이력 적재
     
     엑셀 구조:
     - 2행: 헤더 (품목코드, 품목명, 규격, 일자, 입고수량, 출고수량, 잔량)
@@ -854,10 +854,18 @@ def process_inventory_movement_excel(dl_path, is_hub=False):
     - 최근 3개월 출고수량 합산 ÷ 3 = 월평균
     """
     db_set("rpa_message", "재고변동표 파싱 중...")
-    import glob, re as _re
+    import glob, re as _re, calendar
     from collections import defaultdict
     from dateutil.relativedelta import relativedelta
     
+    def get_month_end_date(date_str):
+        try:
+            y, m = map(int, date_str.split('/'))
+            last_day = calendar.monthrange(y, m)[1]
+            return f"{y:04d}-{m:02d}-{last_day:02d}"
+        except:
+            return None
+            
     try:
         files = glob.glob(os.path.join(dl_path, "*재고변동*.xlsx"))
         if not files:
@@ -881,7 +889,7 @@ def process_inventory_movement_excel(dl_path, is_hub=False):
         df = pd.read_excel(target_file, header=header_row_idx)
         df.columns = [str(c).strip() for c in df.columns]
 
-        # 컨럼 탐색
+        # 컬럼 탐색
         def find_col(keywords):
             cols_clean = {col: str(col).replace(' ', '').replace('\n', '') for col in df.columns}
             for kw in keywords:
@@ -891,15 +899,17 @@ def process_inventory_movement_excel(dl_path, is_hub=False):
             return None
 
         code_col = find_col(['품목코드', 'ItemCode'])
+        name_col = find_col(['품목명', 'ItemName'])
         date_col = find_col(['일자', 'Date'])
         in_col = find_col(['입고수량', '입고'])
         out_col = find_col(['출고수량', '출고'])
+        bal_col = find_col(['잔량', '기말잔량', '잔고', '기말재고'])
 
         if not code_col or not date_col or not out_col:
-            log(f"❌ 필수 컨럼 없음: code={code_col}, date={date_col}, out={out_col}")
+            log(f"❌ 필수 컬럼 없음: code={code_col}, date={date_col}, out={out_col}")
             return
 
-        log(f"  컨럼 매핑: 품목코드={code_col}, 일자={date_col}, 입고={in_col}, 출고={out_col}")
+        log(f"  컬럼 매핑: 품목코드={code_col}, 품목명={name_col}, 일자={date_col}, 입고={in_col}, 출고={out_col}, 잔량={bal_col}")
 
         # 기준 산정
         now = datetime.now(KST)
@@ -917,32 +927,78 @@ def process_inventory_movement_excel(dl_path, is_hub=False):
         # 품목별 집계 및 최근 활동 월 추적
         item_outgoing_monthly = defaultdict(lambda: defaultdict(int))
         item_latest_activity = {}  # 품목코드 -> 가장 최근 활동(입고/출고) 월
+        monthly_history_entries = [] # inventory_history에 업로드할 월별 데이터 리스트
         date_pattern = _re.compile(r'^\d{4}/\d{2}$')
 
         for _, row in df.iterrows():
             code = str(row.get(code_col, '')).strip()
-            if not code or not _re.match(r'^[A-Za-z0-9]+$', code):
+            if not code or not _re.match(r'^[A-Za-z0-9_.-]+$', code): # 대시나 언더바 등 포함할 수도 있으므로 러프하게 변경
                 continue
 
             date_val = str(row.get(date_col, '')).strip()
             if not date_pattern.match(date_val):
                 continue
 
+            name_val = str(row.get(name_col, '')).strip() if name_col and pd.notna(row.get(name_col)) else ""
             in_qty = pd.to_numeric(row.get(in_col, 0), errors='coerce') if in_col else 0
             out_qty = pd.to_numeric(row.get(out_col, 0), errors='coerce')
-            has_activity = (pd.notna(in_qty) and in_qty > 0) or (pd.notna(out_qty) and out_qty > 0)
+            bal_qty = pd.to_numeric(row.get(bal_col, 0), errors='coerce') if bal_col else 0
+            
+            in_qty = in_qty if pd.notna(in_qty) else 0
+            out_qty = out_qty if pd.notna(out_qty) else 0
+            bal_qty = bal_qty if pd.notna(bal_qty) else 0
+            
+            has_activity = (in_qty > 0) or (out_qty > 0)
 
             # 활동 월 기록
             if has_activity:
                 if code not in item_latest_activity or date_val > item_latest_activity[code]:
                     item_latest_activity[code] = date_val
 
-            # 12개월 사용량을 위한 출고 집계
+            # 12개월 사용량을 위한 출고 집계 및 월별 이력 수집
             if date_val in months_history:
-                if pd.notna(out_qty) and out_qty > 0:
+                if out_qty > 0:
                     item_outgoing_monthly[code][date_val] += int(out_qty)
+                    
+                end_date = get_month_end_date(date_val)
+                if end_date:
+                    diff_val = in_qty - out_qty
+                    monthly_history_entries.append({
+                        "division": f"{'허브' if is_hub else '본사'}_월별",
+                        "record_date": end_date,
+                        "item_code": code,
+                        "item_name_spec": name_val,
+                        "curr_qty": float(bal_qty),
+                        "diff_qty": float(diff_val)
+                    })
 
         log(f"  총 활동 품목(최근 1년): {len(item_latest_activity)}건 / 12개월 출고 집계 품목: {len(item_outgoing_monthly)}건")
+        
+        # 월별 이력 DB 적재
+        target_division = f"{'허브' if is_hub else '본사'}_월별"
+        if monthly_history_entries:
+            log(f"📊 [월별 이력] 기존 {target_division} 데이터 삭제 중...")
+            del_resp = requests.delete(
+                f"{SUPABASE_URL}/rest/v1/inventory_history?division=eq.{target_division}",
+                headers=HEADERS
+            )
+            if del_resp.status_code not in (200, 204):
+                log(f"  ⚠️ 기존 월별 데이터 삭제 실패: {del_resp.status_code} {del_resp.text}")
+                
+            log(f"📊 [월별 이력] 신규 {len(monthly_history_entries)}건 업로드 중...")
+            success_upload = 0
+            for i in range(0, len(monthly_history_entries), 500):
+                chunk = monthly_history_entries[i:i+500]
+                post_resp = requests.post(
+                    f"{SUPABASE_URL}/rest/v1/inventory_history",
+                    headers=HEADERS,
+                    json=chunk
+                )
+                if post_resp.status_code in (200, 201):
+                    success_upload += len(chunk)
+                else:
+                    log(f"  ⚠️ 월별 데이터 업로드 오류: {post_resp.status_code} {post_resp.text[:200]}")
+            log(f"✅ [월별 이력] {success_upload}건 DB 적재 완료 ({target_division})")
 
         # DB에서 기존 item 읽기 (전체 품목을 대상으로 상태 업데이트)
         db_set("rpa_message", "품목 상태 및 안전재고 계산 중...")
