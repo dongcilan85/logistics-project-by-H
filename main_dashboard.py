@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta, timezone
 import time
 import io
+import os
 from utils.style import apply_premium_style, get_chart_colors
 
 # 1. 페이지 설정 (최상단 고정)
@@ -39,21 +40,33 @@ def set_config(key, value):
 def get_admin_password():
     return get_config("admin_password", "admin123")
 
+def get_staff_password():
+    return get_config("staff_password", "staff123")
+
 @st.dialog("🔐 PW 변경")
 def change_password_dialog():
-    actual_pw = get_admin_password()
-    st.write("보안을 위해 현재 비밀번호 확인 후 새 비밀번호를 입력해주세요.")
+    admin_pw = get_admin_password()
+    st.write("보안을 위해 **최고 관리자 비밀번호**를 먼저 대조합니다.")
     with st.form("pw_dialog_form", clear_on_submit=True):
-        curr_pw = st.text_input("현재 비밀번호", type="password")
+        curr_pw = st.text_input("최고 관리자 비밀번호 확인", type="password")
+        
+        st.divider()
+        pw_target = st.radio("변경할 대상 선택", ["최고 관리자(Admin)", "일반 실무자(Staff)"], horizontal=True)
+        
         new_pw = st.text_input("새 비밀번호", type="password")
         conf_pw = st.text_input("새 비밀번호 확인", type="password")
+        
         if st.form_submit_button("변경사항 저장", use_container_width=True):
-            if curr_pw != actual_pw: st.error("현재 비밀번호 불일치")
-            elif new_pw != conf_pw: st.error("새 비밀번호 불일치")
-            elif len(new_pw) < 4: st.warning("4자 이상 입력")
+            if curr_pw != admin_pw: 
+                st.error("최고 관리자 비밀번호 불일치")
+            elif new_pw != conf_pw: 
+                st.error("새 비밀번호 확인 불일치")
+            elif len(new_pw) < 4: 
+                st.warning("4자 이상 입력해 주세요.")
             else:
-                supabase.table("system_config").update({"value": new_pw}).eq("key", "admin_password").execute()
-                st.success("변경 완료!"); time.sleep(1); st.rerun()
+                target_key = "admin_password" if pw_target == "최고 관리자(Admin)" else "staff_password"
+                supabase.table("system_config").upsert({"key": target_key, "value": new_pw}).execute()
+                st.success("비밀번호 변경 완료!"); time.sleep(1); st.rerun()
 
 @st.dialog("📝 작업 노트 (관리자)")
 def note_dialog(task):
@@ -491,7 +504,7 @@ def show_admin_dashboard():
             st.markdown("### 📈 실적 분석 리포트")
             d_col1, d_col2 = st.columns([3, 1])
             with d_col1: st.write(f"기준: **{view_option}** | 시급: **{hourly_wage:,}원**")
-            with d_col2: st.download_button(label="📥 리포트 다운로드", data=output.getvalue(), file_name=f"IWP_Report_{datetime.now().strftime('%Y%m%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+            with d_col2: st.download_button(label="📥 리포트 다운로드", data=output.getvalue(), file_name=f"IWP_Report_{datetime.now(KST).strftime('%Y%m%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
             k1, k2, k3, k4 = st.columns(4)
             with k1: st.metric("누적 총 건수", f"{int(df['quantity'].sum()):,} 건")
@@ -725,20 +738,85 @@ def login_screen():
             with st.form("login_form", border=False):
                 pw = st.text_input("비밀번호", type="password")
                 if st.form_submit_button("접속", use_container_width=True, type="primary"):
-                    if pw == get_admin_password(): st.session_state.role = "Admin"; st.rerun()
-                    elif pw == "": st.session_state.role = "Staff"; st.rerun()
-                    else: st.error("비밀번호 불일치")
+                    if pw == get_admin_password(): 
+                        st.session_state.role = "Admin"
+                        st.rerun()
+                    elif pw == get_staff_password(): 
+                        st.session_state.role = "Staff"
+                        st.rerun()
+                    elif pw == "": 
+                        st.session_state.role = "Guest"
+                        st.rerun()
+                    else: 
+                        st.error("비밀번호 불일치")
 
 
 if st.session_state.role is None:
-    st.navigation([st.Page(login_screen, title="로그인", icon="🔒")]).run()
+    st.navigation([st.Page(login_screen, title="로그인", icon="🔒", url_path="login")]).run()
 else:
     # 💡 메뉴 통합: 생산 예측과 계획 관리를 하나로 합침
-    admin_main = st.Page(show_admin_dashboard, title="통합 대시보드", icon="📊")
-    plan_mgmt_page = st.Page("pages/planning_mgmt.py", title="생산 계획 관리", icon="📅") 
-    cat_page = st.Page("pages/category_mgmt.py", title="카테고리 관리", icon="📁")
-    site_page = st.Page("pages/field_input.py", title="현장 기록", icon="📝")
+    admin_main = st.Page(show_admin_dashboard, title="통합 대시보드", icon="📊", url_path="dashboard")
+    plan_mgmt_page = st.Page("pages/planning_mgmt.py", title="생산 계획 관리", icon="📅", url_path="planning")
+    cat_page = st.Page("pages/category_mgmt.py", title="카테고리 관리", icon="📁", url_path="category")
+    site_page = st.Page("pages/field_input.py", title="현장 기록", icon="🚩", url_path="field")
+    warehouse_page = st.Page("pages/warehouse_mgmt.py", title="재고관리", icon="📦", url_path="warehouse")
+    warehouse_settings_page = st.Page("pages/warehouse_settings.py", title="재고관리 환경설정", icon="⚙️", url_path="warehouse_settings")
     
+    # --- [사이드바: RPA 제어 섹션 - Admin 전용] ---
+    if st.session_state.role == "Admin":
+        st.sidebar.divider()
+        st.sidebar.subheader("🔄 ERP 동기화")
+
+        @st.fragment(run_every=1)
+        def show_rpa_controls():
+            rpa_status = get_config("rpa_status", "idle")
+            rpa_msg = get_config("rpa_message", "대기 중")
+
+            # 하트비트 기반 자동 복구: 에이전트가 2분 이상 무응답이면 상태 리셋
+            if rpa_status in ("running", "pending"):
+                heartbeat = get_config("agent_heartbeat", "")
+                if heartbeat:
+                    try:
+                        hb_time = datetime.fromisoformat(heartbeat)
+                        now = datetime.now(KST)
+                        if (now - hb_time).total_seconds() > 120:
+                            set_config("rpa_status", "failed")
+                            set_config("rpa_trigger", "idle")
+                            rpa_status = "failed"
+                            rpa_msg = "⚠️ 에이전트 응답 없음 (자동 복구)"
+                    except Exception:
+                        pass
+
+            # 완료/실패 상태면 idle로 자동 복귀 (트리거 버튼 즉시 활성화)
+            if rpa_status in ("completed", "failed"):
+                last_msg = rpa_msg  # 마지막 메시지 보존
+                set_config("rpa_status", "idle")
+                rpa_status = "idle"
+                rpa_msg = f"✅ {last_msg}" if "실패" not in last_msg and "에러" not in last_msg else f"⚠️ {last_msg}"
+
+            status_icon = "🟢" if rpa_status == "idle" else "🟡" if rpa_status == "pending" else "🔵" if rpa_status == "running" else "🔴"
+            st.info(f"{status_icon} **상태**: {rpa_msg}")
+
+            if rpa_status in ("idle", "completed", "failed"):
+                if st.button("🚀 전체 데이터 수집", use_container_width=True, type="primary"):
+                    set_config("rpa_trigger", "all")
+                    set_config("rpa_status", "pending")
+                    st.success("전체 수집 명령 전달됨!"); time.sleep(1); st.rerun()
+
+                if st.button("📦 품목마스터", use_container_width=True):
+                    set_config("rpa_trigger", "item_master")
+                    set_config("rpa_status", "pending"); st.rerun()
+                if st.button("🔄 관리항목별 수집", use_container_width=True):
+                    set_config("rpa_trigger", "warehouse_inventory")
+                    set_config("rpa_status", "pending"); st.rerun()
+            else:
+                if st.button("🛑 수집 중단 요청", use_container_width=True):
+                    set_config("rpa_trigger", "idle")
+                    set_config("rpa_status", "idle"); st.rerun()
+
+        with st.sidebar:
+            show_rpa_controls()
+
     st.sidebar.divider()
     sc1, sc2 = st.sidebar.columns(2)
     if sc1.button("🔓 로그아웃", use_container_width=True): st.session_state.role = None; st.rerun()
@@ -747,8 +825,17 @@ else:
     if st.session_state.role == "Admin":
         pg = st.navigation({
             "관리실": [admin_main, plan_mgmt_page, cat_page],
-            "현장": [site_page]
+            "현장": [site_page],
+            "재고": [warehouse_page, warehouse_settings_page]
+        })
+    elif st.session_state.role == "Staff":
+        pg = st.navigation({
+            "계획": [plan_mgmt_page],
+            "현장": [site_page],
+            "재고": [warehouse_page]
         })
     else:
-        pg = st.navigation({"현장": [site_page]})
+        pg = st.navigation({
+            "현장": [site_page]
+        })
     pg.run()

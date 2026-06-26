@@ -1,3 +1,13 @@
-﻿chromatic-force-484406-q0-cb8c0a09c16b.json
+chromatic-force-484406-q0-cb8c0a09c16b.json
 logistics_logs.db
 .streamlit/secrets.toml
+agent_log.txt
+agent_log.*.txt
+*.old
+*.log
+chrome_profile/
+chrome_profile_pw/
+__pycache__/
+*.pyc
+Ecount_stocks/
+search_out.txt
