@@ -779,7 +779,8 @@ else:
                     try:
                         hb_time = datetime.fromisoformat(heartbeat)
                         now = datetime.now(KST)
-                        if (now - hb_time).total_seconds() > 120:
+                        # 허용 오차를 300초(5분)로 늘리고 시간 차이의 절대값 비교 적용 (서버 시차 방어)
+                        if abs((now - hb_time).total_seconds()) > 300:
                             set_config("rpa_status", "failed")
                             set_config("rpa_trigger", "idle")
                             rpa_status = "failed"
