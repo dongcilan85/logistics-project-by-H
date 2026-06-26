@@ -130,10 +130,12 @@ def load_comprehensive_data():
         except:
             bom_df = pd.DataFrame(columns=['parent_item_code', 'child_item_code', 'quantity'])
             
-        # inventory_history 테이블 데이터 로드
+        # inventory_history 테이블 데이터 로드 (최신 데이터 우선 10,000개 로드 후 날짜 정렬)
         try:
-            hist_res = supabase.table("inventory_history").select("*").order("record_date", desc=False).execute()
+            hist_res = supabase.table("inventory_history").select("*").order("record_date", desc=True).limit(10000).execute()
             hist_df = pd.DataFrame(hist_res.data) if hist_res.data else pd.DataFrame()
+            if not hist_df.empty:
+                hist_df = hist_df.sort_values(by="record_date", ascending=True)
         except:
             hist_df = pd.DataFrame()
             
@@ -1022,17 +1024,23 @@ with tab_analysis:
         if not hist_df_filtered.empty:
             hist_df_filtered['division'] = hist_df_filtered['warehouse_name'].str.replace('_월별', '')
             
-            # 💡 [요구사항] 단종 품목(activity_status == '폐기요청') 및 품목구분이 제품(category == '제품')인 품목 필터링 제외
+            # 💡 [요구사항] 단종 품목(폐기요청/단종) 및 제품([제품]/제품)인 품목을 품목코드 기준으로 안전하게 일괄 제외 필터링
             if not item_df_raw.empty:
-                item_meta = item_df_raw[['division', 'item_code', 'category', 'activity_status']].copy()
-                hist_df_filtered = hist_df_filtered.merge(item_meta, on=['division', 'item_code'], how='left')
-                hist_df_filtered['category'] = hist_df_filtered['category'].fillna('')
-                hist_df_filtered['activity_status'] = hist_df_filtered['activity_status'].fillna('')
+                # 1. 제외할 제품 품목 코드 수집 ('제품' 단어가 카테고리에 들어간 모든 품목)
+                exclude_product_codes = item_df_raw[
+                    item_df_raw['category'].astype(str).str.contains("제품", na=False)
+                ]['item_code'].unique()
                 
-                hist_df_filtered = hist_df_filtered[
-                    (hist_df_filtered['category'] != '제품') & 
-                    (hist_df_filtered['activity_status'] != '폐기요청')
-                ].copy()
+                # 2. 제외할 단종 품목 코드 수집 ('폐기요청' 또는 '단종' 단어가 상태에 들어간 모든 품목)
+                exclude_discontinued_codes = item_df_raw[
+                    item_df_raw['activity_status'].astype(str).str.contains("폐기요청|단종", na=False)
+                ]['item_code'].unique()
+                
+                # 3. 제외 대상 품목 코드 전체 합집합
+                exclude_codes = set(exclude_product_codes).union(set(exclude_discontinued_codes))
+                
+                # 4. 품목 코드 기준으로 필터링 적용
+                hist_df_filtered = hist_df_filtered[~hist_df_filtered['item_code'].isin(exclude_codes)].copy()
                 
             if not hist_df_filtered.empty:
                 # 분석 대상 품목 목록 준비 (item_code + item_name_spec 조합)
