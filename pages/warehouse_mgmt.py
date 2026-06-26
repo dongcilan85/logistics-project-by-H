@@ -952,33 +952,18 @@ with tab_bom:
 
 
 with tab_analysis:
-    st.subheader("📈 재고 추이 및 수요 분석")
-    st.caption("💡 수집된 변동 이력 데이터를 바탕으로 품목별 재고 잔량 추이, 입출고 흐름 및 통계적 추천 안전재고를 분석합니다.")
-    
-    # 0. 분석 시간 단위 선택
-    view_unit = st.radio(
-        "⏰ 분석 시간 단위 선택",
-        ["일별 추이 (실시간 누적)", "월별 추이 (RPA 변동표 기반 1년치)"],
-        horizontal=True,
-        key="analysis_view_unit"
-    )
+    st.subheader("📈 월간 재고 추이 및 수요 분석")
+    st.caption("💡 RPA 재고변동표(최근 1년치) 데이터를 바탕으로 품목별 월간 재고 잔량 추이, 입출고 흐름 및 통계적 추천 안전재고를 분석합니다.")
     
     if not hist_df_raw.empty:
-        # division 컬럼 누락 및 결측치 방지 안전장치
-        if 'division' not in hist_df_raw.columns:
-            hist_df_raw['division'] = '본사'
-        hist_df_raw['division'] = hist_df_raw['division'].fillna('본사')
+        # warehouse_name 기반 월별 데이터 필터링
+        hist_df_filtered = hist_df_raw[hist_df_raw['warehouse_name'].str.endswith('_월별', na=False)].copy()
         
-        # 데이터 분기 필터링
-        if "월별" in view_unit:
-            hist_df_filtered = hist_df_raw[hist_df_raw['division'].str.endswith('_월별', na=False)].copy()
-            # 본사/허브 매칭 호환을 위해 division 명칭에서 '_월별' 제거
-            hist_df_filtered['division'] = hist_df_filtered['division'].str.replace('_월별', '')
-        else:
-            hist_df_filtered = hist_df_raw[~hist_df_raw['division'].str.endswith('_월별', na=False)].copy()
-            
-        # 분석 대상 품목 목록 준비 (item_code + item_name_spec 조합)
+        # division 컬럼 누락 및 결측치 방지 안전장치
         if not hist_df_filtered.empty:
+            hist_df_filtered['division'] = hist_df_filtered['warehouse_name'].str.replace('_월별', '')
+            
+            # 분석 대상 품목 목록 준비 (item_code + item_name_spec 조합)
             active_items = hist_df_filtered.groupby('item_code').agg({
                 'item_name_spec': 'first'
             }).reset_index()
@@ -987,7 +972,7 @@ with tab_analysis:
                 lambda r: f"{r['item_name_spec']} ({r['item_code']})", axis=1
             )
             
-            # 1. 다중 품목 선택을 위한 Form 구성 (검색어 입력 및 조회 누를 때만 업데이트)
+            # 1. 다중 품목 선택을 위한 Form 구성
             with st.form("analysis_search_form"):
                 default_selections = st.session_state.get('selected_analysis_items', [])
                 valid_defaults = [x for x in default_selections if x in active_items['display_name'].tolist()]
@@ -1034,16 +1019,14 @@ with tab_analysis:
                         'diff_qty': 'sum'
                     }).reset_index().sort_values(by='record_date')
                     
-                    x_axis_col = 'record_date'
-                    if "월별" in view_unit:
-                        daily_summary['display_date'] = pd.to_datetime(daily_summary['record_date']).dt.strftime('%Y-%m')
-                        x_axis_col = 'display_date'
+                    daily_summary['display_date'] = pd.to_datetime(daily_summary['record_date']).dt.strftime('%Y-%m')
+                    x_axis_col = 'display_date'
                         
                     fig = make_subplots(
                         rows=2, cols=1,
                         shared_xaxes=True,
                         vertical_spacing=0.15,
-                        subplot_titles=(f"📦 [단일] {sel_item_name} {view_unit.split(' ')[0]} ERP 재고 잔량 추이", "🔄 변동량 (입고 / 출고)"),
+                        subplot_titles=(f"📦 [단일] {sel_item_name} 월간 ERP 재고 잔량 추이", "🔄 월간 재고 변동량 (입고 / 출고)"),
                         row_heights=[0.6, 0.4]
                     )
                     
@@ -1087,7 +1070,7 @@ with tab_analysis:
                         rows=2, cols=1,
                         shared_xaxes=True,
                         vertical_spacing=0.15,
-                        subplot_titles=(f"📦 품목별 {view_unit.split(' ')[0]} ERP 재고 잔량 추이 비교", "🔄 품목별 변동량 비교"),
+                        subplot_titles=("📦 품목별 월간 ERP 재고 잔량 추이 비교", "🔄 품목별 월간 재고 변동량 비교"),
                         row_heights=[0.6, 0.4]
                     )
                     
@@ -1101,10 +1084,8 @@ with tab_analysis:
                             'diff_qty': 'sum'
                         }).reset_index().sort_values(by='record_date')
                         
-                        x_axis_col = 'record_date'
-                        if "월별" in view_unit:
-                            daily_summary['display_date'] = pd.to_datetime(daily_summary['record_date']).dt.strftime('%Y-%m')
-                            x_axis_col = 'display_date'
+                        daily_summary['display_date'] = pd.to_datetime(daily_summary['record_date']).dt.strftime('%Y-%m')
+                        x_axis_col = 'display_date'
                             
                         # 1. 재고 잔량 추이 (Line)
                         fig.add_trace(
@@ -1149,7 +1130,7 @@ with tab_analysis:
                 # B. 전체 분석 요약 테이블 (다중 가시성 확보)
                 # -------------------------------------------------------------
                 st.write("")
-                st.markdown("### 📊 선택 품목 수요 및 안전재고 분석 요약")
+                st.markdown("### 📊 선택 품목 월간 수요 및 안전재고 분석 요약")
                 
                 summary_rows = []
                 for code, name in selected_codes:
@@ -1267,7 +1248,7 @@ with tab_analysis:
             else:
                 st.info("💡 분석할 품목을 상단 검색창에서 선택한 후 [조회하기] 버튼을 클릭해 주세요.")
         else:
-            st.info("선택한 시간 단위에 해당하는 데이터가 없습니다. RPA를 통해 재고 데이터가 주기적으로 적재되면 분석 차트가 나타납니다.")
+            st.info("RPA 변동표 기반의 월별 데이터가 아직 DB에 존재하지 않습니다. 에이전트 수집을 진행해 주세요.")
     else:
         st.info("누적된 재고 변동 이력 데이터가 없습니다. RPA를 통해 재고 데이터가 주기적으로 적재되면 분석 차트가 나타납니다.")
 

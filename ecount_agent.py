@@ -964,7 +964,7 @@ def process_inventory_movement_excel(dl_path, is_hub=False):
                 if end_date:
                     diff_val = in_qty - out_qty
                     monthly_history_entries.append({
-                        "division": f"{'허브' if is_hub else '본사'}_월별",
+                        "warehouse_name": f"{'허브' if is_hub else '본사'}_월별",
                         "record_date": end_date,
                         "item_code": code,
                         "item_name_spec": name_val,
@@ -979,7 +979,7 @@ def process_inventory_movement_excel(dl_path, is_hub=False):
         if monthly_history_entries:
             log(f"📊 [월별 이력] 기존 {target_division} 데이터 삭제 중...")
             del_resp = requests.delete(
-                f"{SUPABASE_URL}/rest/v1/inventory_history?division=eq.{target_division}",
+                f"{SUPABASE_URL}/rest/v1/inventory_history?warehouse_name=eq.{target_division}",
                 headers=HEADERS
             )
             if del_resp.status_code not in (200, 204):
