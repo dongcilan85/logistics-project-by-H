@@ -268,6 +268,65 @@ def calculate_demand_metrics(item_code, hist_df_target, lead_time_days=14, z_sco
     }
 
 # -------------------------------------------------------------
+# 2-3. 전체 품목 수요 분석 일괄 계산 및 엑셀 다운로드 파일 생성 (캐싱 지원)
+# -------------------------------------------------------------
+@st.cache_data(ttl=600)
+def generate_total_analysis_excel(hist_df_filtered, item_df_raw, agg_df):
+    import io
+    
+    if hist_df_filtered.empty:
+        return None
+        
+    active_items = hist_df_filtered.groupby('item_code').agg({
+        'item_name_spec': 'first'
+    }).reset_index()
+    
+    summary_rows = []
+    for _, row in active_items.iterrows():
+        code = row['item_code']
+        name = row['item_name_spec']
+        metrics = calculate_demand_metrics(code, hist_df_filtered, lead_time_days=14, z_score=1.65)
+        
+        # 현재 설정 안전재고 조회
+        current_safety = 0
+        if not item_df_raw.empty:
+            item_master_match = item_df_raw[item_df_raw['item_code'] == code]
+            if not item_master_match.empty:
+                current_safety = int(item_master_match.iloc[0].get('safety_stock', 0))
+                
+        # 현재고 조회 (본사 기준)
+        current_stock = 0
+        agg_hq = agg_df[agg_df['division'] == '본사']
+        matched_stock = agg_hq[agg_hq['item_code'] == code]
+        if not matched_stock.empty:
+            current_stock = int(matched_stock.iloc[0]['stock_qty'])
+            
+        rop = metrics['reorder_point']
+        status = "발주 필요" if current_stock <= rop else "양호"
+        
+        summary_rows.append({
+            "품목코드": code,
+            "품목명": name,
+            "분석기간(일)": metrics['history_days'],
+            "누적 입고량": metrics['total_in_qty'],
+            "누적 소모량": metrics['total_out_qty'],
+            "일평균 소모량": round(metrics['daily_avg_usage'], 2),
+            "현재 안전재고": current_safety,
+            "추천 안전재고": metrics['recommended_safety_stock'],
+            "재주문점(ROP)": rop,
+            "현재고(본사)": current_stock,
+            "상태": status
+        })
+        
+    summary_df = pd.DataFrame(summary_rows)
+    
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        summary_df.to_excel(writer, index=False, sheet_name='전체품목 수요분석')
+        
+    return output.getvalue()
+
+# -------------------------------------------------------------
 # 3. 가용/비가용 데이터 분리 및 KPI
 # -------------------------------------------------------------
 avail_df = df[df['is_available'] == True].copy()
@@ -988,6 +1047,20 @@ with tab_analysis:
                 if submit_search:
                     st.session_state['selected_analysis_items'] = selected_displays
                     st.rerun()
+                    
+            # 2. 전체 품목 분석 데이터 엑셀 다운로드 기능
+            excel_data = generate_total_analysis_excel(hist_df_filtered, item_df_raw, agg_df)
+            if excel_data:
+                col_dl, _ = st.columns([2, 2])
+                with col_dl:
+                    st.download_button(
+                        label="📥 전체 품목 수요 분석 결과 엑셀 다운로드",
+                        data=excel_data,
+                        file_name=f"{datetime.now(KST).strftime('%Y%m%d')}_IWP_전체품목_수요분석_리포트.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
+            st.write("")
                     
             # 렌더링할 품목 목록 추출
             selected_items_to_render = st.session_state.get('selected_analysis_items', [])
