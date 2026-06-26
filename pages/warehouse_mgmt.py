@@ -1022,135 +1022,83 @@ with tab_analysis:
         if not hist_df_filtered.empty:
             hist_df_filtered['division'] = hist_df_filtered['warehouse_name'].str.replace('_월별', '')
             
-            # 분석 대상 품목 목록 준비 (item_code + item_name_spec 조합)
-            active_items = hist_df_filtered.groupby('item_code').agg({
-                'item_name_spec': 'first'
-            }).reset_index()
-            
-            active_items['display_name'] = active_items.apply(
-                lambda r: f"{r['item_name_spec']} ({r['item_code']})", axis=1
-            )
-            
-            # 1. 다중 품목 선택을 위한 Form 구성
-            with st.form("analysis_search_form"):
-                default_selections = st.session_state.get('selected_analysis_items', [])
-                valid_defaults = [x for x in default_selections if x in active_items['display_name'].tolist()]
+            # 💡 [요구사항] 단종 품목(activity_status == '폐기요청') 및 품목구분이 제품(category == '제품')인 품목 필터링 제외
+            if not item_df_raw.empty:
+                item_meta = item_df_raw[['division', 'item_code', 'category', 'activity_status']].copy()
+                hist_df_filtered = hist_df_filtered.merge(item_meta, on=['division', 'item_code'], how='left')
+                hist_df_filtered['category'] = hist_df_filtered['category'].fillna('')
+                hist_df_filtered['activity_status'] = hist_df_filtered['activity_status'].fillna('')
                 
-                selected_displays = st.multiselect(
-                    "🔍 분석할 품목 선택 (다중 선택 가능, 검색어 입력 가능)",
-                    options=active_items['display_name'].tolist(),
-                    default=valid_defaults,
-                    key="analysis_item_multiselect"
+                hist_df_filtered = hist_df_filtered[
+                    (hist_df_filtered['category'] != '제품') & 
+                    (hist_df_filtered['activity_status'] != '폐기요청')
+                ].copy()
+                
+            if not hist_df_filtered.empty:
+                # 분석 대상 품목 목록 준비 (item_code + item_name_spec 조합)
+                active_items = hist_df_filtered.groupby('item_code').agg({
+                    'item_name_spec': 'first'
+                }).reset_index()
+                
+                active_items['display_name'] = active_items.apply(
+                    lambda r: f"{r['item_name_spec']} ({r['item_code']})", axis=1
                 )
-                
-                submit_search = st.form_submit_button("🔍 조회하기", type="primary", use_container_width=True)
-                if submit_search:
-                    st.session_state['selected_analysis_items'] = selected_displays
-                    st.rerun()
+            
+                # 1. 다중 품목 선택을 위한 Form 구성
+                with st.form("analysis_search_form"):
+                    default_selections = st.session_state.get('selected_analysis_items', [])
+                    valid_defaults = [x for x in default_selections if x in active_items['display_name'].tolist()]
                     
-            # 2. 전체 품목 분석 데이터 엑셀 다운로드 기능
-            excel_data = generate_total_analysis_excel(hist_df_filtered, item_df_raw, agg_df)
-            if excel_data:
-                col_dl, _ = st.columns([2, 2])
-                with col_dl:
-                    st.download_button(
-                        label="📥 전체 품목 수요 분석 결과 엑셀 다운로드",
-                        data=excel_data,
-                        file_name=f"{datetime.now(KST).strftime('%Y%m%d')}_IWP_전체품목_수요분석_리포트.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True
+                    selected_displays = st.multiselect(
+                        "🔍 분석할 품목 선택 (다중 선택 가능, 검색어 입력 가능)",
+                        options=active_items['display_name'].tolist(),
+                        default=valid_defaults,
+                        key="analysis_item_multiselect"
                     )
-            st.write("")
                     
-            # 렌더링할 품목 목록 추출
-            selected_items_to_render = st.session_state.get('selected_analysis_items', [])
-                
-            if selected_items_to_render:
-                # 선택된 품목 코드와 이름 파싱
-                selected_codes = []
-                for s_disp in selected_items_to_render:
-                    match = active_items[active_items['display_name'] == s_disp]
-                    if not match.empty:
-                        selected_codes.append((match.iloc[0]['item_code'], match.iloc[0]['item_name_spec']))
+                    submit_search = st.form_submit_button("🔍 조회하기", type="primary", use_container_width=True)
+                    if submit_search:
+                        st.session_state['selected_analysis_items'] = selected_displays
+                        st.rerun()
                         
-                # -------------------------------------------------------------
-                # A. Plotly 시계열 차트 그리기
-                # -------------------------------------------------------------
-                import plotly.graph_objects as go
-                from plotly.subplots import make_subplots
-                import plotly.express as px
-                
-                if len(selected_codes) == 1:
-                    # -------------------------------------------------------------
-                    # 단일 품목 분석 (기존의 정밀 이중 Subplot 유지)
-                    # -------------------------------------------------------------
-                    sel_item_code, sel_item_name = selected_codes[0]
-                    item_hist = hist_df_filtered[hist_df_filtered['item_code'] == sel_item_code].copy()
-                    item_hist['record_date'] = pd.to_datetime(item_hist['record_date']).dt.strftime('%Y-%m-%d')
-                    daily_summary = item_hist.groupby('record_date').agg({
-                        'curr_qty': 'max',
-                        'diff_qty': 'sum'
-                    }).reset_index().sort_values(by='record_date')
-                    
-                    daily_summary['display_date'] = pd.to_datetime(daily_summary['record_date']).dt.strftime('%Y-%m')
-                    x_axis_col = 'display_date'
+                # 2. 전체 품목 분석 데이터 엑셀 다운로드 기능
+                excel_data = generate_total_analysis_excel(hist_df_filtered, item_df_raw, agg_df)
+                if excel_data:
+                    col_dl, _ = st.columns([2, 2])
+                    with col_dl:
+                        st.download_button(
+                            label="📥 전체 품목 수요 분석 결과 엑셀 다운로드",
+                            data=excel_data,
+                            file_name=f"{datetime.now(KST).strftime('%Y%m%d')}_IWP_전체품목_수요분석_리포트.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True
+                        )
+                st.write("")
                         
-                    fig = make_subplots(
-                        rows=2, cols=1,
-                        shared_xaxes=True,
-                        vertical_spacing=0.15,
-                        subplot_titles=(f"📦 [단일] {sel_item_name} 월간 ERP 재고 잔량 추이", "🔄 월간 재고 변동량 (입고 / 출고)"),
-                        row_heights=[0.6, 0.4]
-                    )
+                # 렌더링할 품목 목록 추출
+                selected_items_to_render = st.session_state.get('selected_analysis_items', [])
                     
-                    fig.add_trace(
-                        go.Scatter(
-                            x=daily_summary[x_axis_col],
-                            y=daily_summary['curr_qty'],
-                            mode='lines+markers',
-                            name='ERP 재고 잔량',
-                            line=dict(color='#4A90D9', width=3),
-                            marker=dict(size=6)
-                        ),
-                        row=1, col=1
-                    )
-                    
-                    colors = ['#2ECC71' if val > 0 else '#E74C3C' for val in daily_summary['diff_qty']]
-                    fig.add_trace(
-                        go.Bar(
-                            x=daily_summary[x_axis_col],
-                            y=daily_summary['diff_qty'],
-                            name='변동량',
-                            marker_color=colors,
-                            showlegend=False
-                        ),
-                        row=2, col=1
-                    )
-                    
-                    fig.update_layout(
-                        height=550,
-                        showlegend=True,
-                        margin=dict(l=20, r=20, t=50, b=20),
-                        paper_bgcolor='rgba(0,0,0,0)',
-                        plot_bgcolor='rgba(0,0,0,0)'
-                    )
-                    
-                else:
+                if selected_items_to_render:
+                    # 선택된 품목 코드와 이름 파싱
+                    selected_codes = []
+                    for s_disp in selected_items_to_render:
+                        match = active_items[active_items['display_name'] == s_disp]
+                        if not match.empty:
+                            selected_codes.append((match.iloc[0]['item_code'], match.iloc[0]['item_name_spec']))
+                            
                     # -------------------------------------------------------------
-                    # 다중 품목 분석 (라인 비교 + Grouped Bar 비교)
+                    # A. Plotly 시계열 차트 그리기
                     # -------------------------------------------------------------
-                    fig = make_subplots(
-                        rows=2, cols=1,
-                        shared_xaxes=True,
-                        vertical_spacing=0.15,
-                        subplot_titles=("📦 품목별 월간 ERP 재고 잔량 추이 비교", "🔄 품목별 월간 재고 변동량 비교"),
-                        row_heights=[0.6, 0.4]
-                    )
+                    import plotly.graph_objects as go
+                    from plotly.subplots import make_subplots
+                    import plotly.express as px
                     
-                    colors_palette = px.colors.qualitative.Safe
-                    for idx, (code, name) in enumerate(selected_codes):
-                        color = colors_palette[idx % len(colors_palette)]
-                        item_hist = hist_df_filtered[hist_df_filtered['item_code'] == code].copy()
+                    if len(selected_codes) == 1:
+                        # -------------------------------------------------------------
+                        # 단일 품목 분석 (기존의 정밀 이중 Subplot 유지)
+                        # -------------------------------------------------------------
+                        sel_item_code, sel_item_name = selected_codes[0]
+                        item_hist = hist_df_filtered[hist_df_filtered['item_code'] == sel_item_code].copy()
                         item_hist['record_date'] = pd.to_datetime(item_hist['record_date']).dt.strftime('%Y-%m-%d')
                         daily_summary = item_hist.groupby('record_date').agg({
                             'curr_qty': 'max',
@@ -1160,113 +1108,118 @@ with tab_analysis:
                         daily_summary['display_date'] = pd.to_datetime(daily_summary['record_date']).dt.strftime('%Y-%m')
                         x_axis_col = 'display_date'
                             
-                        # 1. 재고 잔량 추이 (Line)
+                        fig = make_subplots(
+                            rows=2, cols=1,
+                            shared_xaxes=True,
+                            vertical_spacing=0.15,
+                            subplot_titles=(f"📦 [단일] {sel_item_name} 월간 ERP 재고 잔량 추이", "🔄 월간 재고 변동량 (입고 / 출고)"),
+                            row_heights=[0.6, 0.4]
+                        )
+                        
                         fig.add_trace(
                             go.Scatter(
                                 x=daily_summary[x_axis_col],
                                 y=daily_summary['curr_qty'],
                                 mode='lines+markers',
-                                name=f"{name}",
-                                line=dict(color=color, width=2.5),
-                                marker=dict(size=5)
+                                name='ERP 재고 잔량',
+                                line=dict(color='#4A90D9', width=3),
+                                marker=dict(size=6)
                             ),
                             row=1, col=1
                         )
                         
-                        # 2. 재고 변동량 (Bar - grouped)
+                        colors = ['#2ECC71' if val > 0 else '#E74C3C' for val in daily_summary['diff_qty']]
                         fig.add_trace(
                             go.Bar(
                                 x=daily_summary[x_axis_col],
                                 y=daily_summary['diff_qty'],
-                                name=f"{name} (변동)",
-                                marker_color=color,
-                                opacity=0.85
+                                name='변동량',
+                                marker_color=colors,
+                                showlegend=False
                             ),
                             row=2, col=1
                         )
                         
-                    fig.update_layout(
-                        height=600,
-                        barmode='group',
-                        showlegend=True,
-                        margin=dict(l=20, r=20, t=50, b=20),
-                        paper_bgcolor='rgba(0,0,0,0)',
-                        plot_bgcolor='rgba(0,0,0,0)',
-                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-                    )
-                    
-                fig.update_xaxes(showgrid=True, gridcolor='rgba(128,128,128,0.2)')
-                fig.update_yaxes(showgrid=True, gridcolor='rgba(128,128,128,0.2)')
-                st.plotly_chart(fig, use_container_width=True)
-                
-                # -------------------------------------------------------------
-                # B. 전체 분석 요약 테이블 (다중 가시성 확보)
-                # -------------------------------------------------------------
-                st.write("")
-                st.markdown("### 📊 선택 품목 월간 수요 및 안전재고 분석 요약")
-                
-                summary_rows = []
-                for code, name in selected_codes:
-                    metrics = calculate_demand_metrics(code, hist_df_filtered, lead_time_days=14, z_score=1.65)
-                    
-                    # 현재 설정 안전재고 조회
-                    current_safety = 0
-                    if not item_df_raw.empty:
-                        item_master_match = item_df_raw[item_df_raw['item_code'] == code]
-                        if not item_master_match.empty:
-                            current_safety = int(item_master_match.iloc[0].get('safety_stock', 0))
-                            
-                    # 현재고 조회 (본사 기준)
-                    current_stock = 0
-                    agg_hq = agg_df[agg_df['division'] == '본사']
-                    matched_stock = agg_hq[agg_hq['item_code'] == code]
-                    if not matched_stock.empty:
-                        current_stock = int(matched_stock.iloc[0]['stock_qty'])
-                        
-                    rop = metrics['reorder_point']
-                    status = "🚨 발주 필요" if current_stock <= rop else "🟢 양호"
-                    
-                    summary_rows.append({
-                        "품목코드": code,
-                        "품목명": name,
-                        "분석기간(일)": metrics['history_days'],
-                        "누적 입고량": metrics['total_in_qty'],
-                        "누적 소모량": metrics['total_out_qty'],
-                        "일평균 소모량": round(metrics['daily_avg_usage'], 2),
-                        "현재 안전재고": current_safety,
-                        "추천 안전재고": metrics['recommended_safety_stock'],
-                        "재주문점(ROP)": rop,
-                        "현재고(본사)": current_stock,
-                        "상태": status
-                    })
-                    
-                summary_df = pd.DataFrame(summary_rows)
-                st.dataframe(
-                    summary_df,
-                    column_config={
-                        "누적 입고량": st.column_config.NumberColumn(format="%,d"),
-                        "누적 소모량": st.column_config.NumberColumn(format="%,d"),
-                        "일평균 소모량": st.column_config.NumberColumn(format="%.2f"),
-                        "현재 안전재고": st.column_config.NumberColumn(format="%,d"),
-                        "추천 안전재고": st.column_config.NumberColumn(format="%,d"),
-                        "재주문점(ROP)": st.column_config.NumberColumn(format="%,d"),
-                        "현재고(본사)": st.column_config.NumberColumn(format="%,d"),
-                        "상태": st.column_config.TextColumn(
-                            help="현재고가 재주문점(ROP) 이하로 떨어지면 발주 필요 상태가 됩니다."
+                        fig.update_layout(
+                            height=550,
+                            showlegend=True,
+                            margin=dict(l=20, r=20, t=50, b=20),
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            plot_bgcolor='rgba(0,0,0,0)'
                         )
-                    },
-                    use_container_width=True,
-                    hide_index=True
-                )
-                
-                # -------------------------------------------------------------
-                # C. 품목별 개별 상세 카드 및 안전재고 업데이트 (접이식 UI)
-                # -------------------------------------------------------------
-                st.write("")
-                st.markdown("### 🔍 품목별 상세 분석 및 안전재고 설정")
-                
-                for code, name in selected_codes:
-                    with st.expander(f"📝 {name} ({code}) 상세 분석 및 설정 반영", expanded=(len(selected_codes) == 1)):
+                        
+                    else:
+                        # -------------------------------------------------------------
+                        # 다중 품목 분석 (라인 비교 + Grouped Bar 비교)
+                        # -------------------------------------------------------------
+                        fig = make_subplots(
+                            rows=2, cols=1,
+                            shared_xaxes=True,
+                            vertical_spacing=0.15,
+                            subplot_titles=("📦 품목별 월간 ERP 재고 잔량 추이 비교", "🔄 품목별 월간 재고 변동량 비교"),
+                            row_heights=[0.6, 0.4]
+                        )
+                        
+                        colors_palette = px.colors.qualitative.Safe
+                        for idx, (code, name) in enumerate(selected_codes):
+                            color = colors_palette[idx % len(colors_palette)]
+                            item_hist = hist_df_filtered[hist_df_filtered['item_code'] == code].copy()
+                            item_hist['record_date'] = pd.to_datetime(item_hist['record_date']).dt.strftime('%Y-%m-%d')
+                            daily_summary = item_hist.groupby('record_date').agg({
+                                'curr_qty': 'max',
+                                'diff_qty': 'sum'
+                            }).reset_index().sort_values(by='record_date')
+                            
+                            daily_summary['display_date'] = pd.to_datetime(daily_summary['record_date']).dt.strftime('%Y-%m')
+                            x_axis_col = 'display_date'
+                                
+                            # 1. 재고 잔량 추이 (Line)
+                            fig.add_trace(
+                                go.Scatter(
+                                    x=daily_summary[x_axis_col],
+                                    y=daily_summary['curr_qty'],
+                                    mode='lines+markers',
+                                    name=f"{name}",
+                                    line=dict(color=color, width=2.5),
+                                    marker=dict(size=5)
+                                ),
+                                row=1, col=1
+                            )
+                            
+                            # 2. 재고 변동량 (Bar - grouped)
+                            fig.add_trace(
+                                go.Bar(
+                                    x=daily_summary[x_axis_col],
+                                    y=daily_summary['diff_qty'],
+                                    name=f"{name} (변동)",
+                                    marker_color=color,
+                                    opacity=0.85
+                                ),
+                                row=2, col=1
+                            )
+                            
+                        fig.update_layout(
+                            height=600,
+                            barmode='group',
+                            showlegend=True,
+                            margin=dict(l=20, r=20, t=50, b=20),
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                        )
+                        
+                    fig.update_xaxes(showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+                    fig.update_yaxes(showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    # -------------------------------------------------------------
+                    # B. 전체 분석 요약 테이블 (다중 가시성 확보)
+                    # -------------------------------------------------------------
+                    st.write("")
+                    st.markdown("### 📊 선택 품목 월간 수요 및 안전재고 분석 요약")
+                    
+                    summary_rows = []
+                    for code, name in selected_codes:
                         metrics = calculate_demand_metrics(code, hist_df_filtered, lead_time_days=14, z_score=1.65)
                         
                         # 현재 설정 안전재고 조회
@@ -1276,52 +1229,120 @@ with tab_analysis:
                             if not item_master_match.empty:
                                 current_safety = int(item_master_match.iloc[0].get('safety_stock', 0))
                                 
-                        c1, c2, c3, c4 = st.columns(4)
-                        c1.metric("🗓️ 분석 대상 기간", f"{metrics['history_days']} 일")
-                        c2.metric("📥 누적 입고량", f"{metrics['total_in_qty']:,} 개")
-                        c3.metric("📤 누적 소모량", f"{metrics['total_out_qty']:,} 개")
-                        c4.metric("📉 일평균 소모량", f"{metrics['daily_avg_usage']:.2f} 개/일")
+                        # 현재고 조회 (본사 기준)
+                        current_stock = 0
+                        agg_hq = agg_df[agg_df['division'] == '본사']
+                        matched_stock = agg_hq[agg_hq['item_code'] == code]
+                        if not matched_stock.empty:
+                            current_stock = int(matched_stock.iloc[0]['stock_qty'])
+                            
+                        rop = metrics['reorder_point']
+                        status = "🚨 발주 필요" if current_stock <= rop else "🟢 양호"
                         
-                        st.write("")
-                        sc1, sc2, sc3 = st.columns(3)
-                        with sc1:
-                            st.info(f"**현재 설정 안전재고**\n\n### `{current_safety:,}` 개")
-                        with sc2:
-                            rec_safety = metrics['recommended_safety_stock']
-                            st.success(f"**💡 통계적 추천 안전재고**\n\n### `{rec_safety:,}` 개")
-                            st.caption(f"기준: 리드타임 14일, 신뢰수준 95% (변동폭 σ: {metrics['daily_std_usage']:.2f})")
-                        with sc3:
-                            rop = metrics['reorder_point']
-                            current_stock = 0
-                            agg_hq = agg_df[agg_df['division'] == '본사']
-                            matched_stock = agg_hq[agg_hq['item_code'] == code]
-                            if not matched_stock.empty:
-                                current_stock = int(matched_stock.iloc[0]['stock_qty'])
-                                
-                            if current_stock <= rop:
-                                st.error(f"**🚨 발주 권장 (재주문점 도달)**\n\n### ROP: `{rop:,}` 개")
-                                st.caption(f"현재 본사 재고 `{current_stock:,}`개가 재주문점 이하입니다.")
-                            else:
-                                st.warning(f"**🟢 재고 수준 양호**\n\n### ROP: `{rop:,}` 개")
-                                st.caption(f"현재 본사 재고 `{current_stock:,}`개 (재주문점까지 `{current_stock - rop:,}`개 남음)")
-                                
-                        st.divider()
-                        col_update, _ = st.columns([2, 2])
-                        with col_update:
-                            btn_key = f"update_safety_btn_{code}"
-                            if st.button("⚙️ 이 품목의 추천 안전재고를 마스터에 반영", type="primary", key=btn_key, use_container_width=True):
-                                with st.spinner(f"'{name}' 안전재고 업데이트 중..."):
-                                    try:
-                                        supabase.table("item_master").update({"safety_stock": rec_safety}).eq("division", "본사").eq("item_code", code).execute()
-                                        st.success(f"✅ `{name}`의 안전재고가 `{rec_safety:,}`개로 성공적으로 업데이트되었습니다!")
-                                        time.sleep(1)
-                                        st.rerun()
-                                    except Exception as e:
-                                        st.error(f"안전재고 업데이트 오류: {e}")
+                        summary_rows.append({
+                            "품목코드": code,
+                            "품목명": name,
+                            "분석기간(일)": metrics['history_days'],
+                            "누적 입고량": metrics['total_in_qty'],
+                            "누적 소모량": metrics['total_out_qty'],
+                            "일평균 소모량": round(metrics['daily_avg_usage'], 2),
+                            "현재 안전재고": current_safety,
+                            "추천 안전재고": metrics['recommended_safety_stock'],
+                            "재주문점(ROP)": rop,
+                            "현재고(본사)": current_stock,
+                            "상태": status
+                        })
+                        
+                    summary_df = pd.DataFrame(summary_rows)
+                    st.dataframe(
+                        summary_df,
+                        column_config={
+                            "누적 입고량": st.column_config.NumberColumn(format="%,d"),
+                            "누적 소모량": st.column_config.NumberColumn(format="%,d"),
+                            "일평균 소모량": st.column_config.NumberColumn(format="%.2f"),
+                            "현재 안전재고": st.column_config.NumberColumn(format="%,d"),
+                            "추천 안전재고": st.column_config.NumberColumn(format="%,d"),
+                            "재주문점(ROP)": st.column_config.NumberColumn(format="%,d"),
+                            "현재고(본사)": st.column_config.NumberColumn(format="%,d"),
+                            "상태": st.column_config.TextColumn(
+                                help="현재고가 재주문점(ROP) 이하로 떨어지면 발주 필요 상태가 됩니다."
+                            )
+                        },
+                        use_container_width=True,
+                        hide_index=True
+                    )
+                    
+                    # -------------------------------------------------------------
+                    # C. 품목별 개별 상세 카드 및 안전재고 업데이트 (접이식 UI)
+                    # -------------------------------------------------------------
+                    st.write("")
+                    st.markdown("### 🔍 품목별 상세 분석 및 안전재고 설정")
+                    
+                    for code, name in selected_codes:
+                        with st.expander(f"📝 {name} ({code}) 상세 분석 및 설정 반영", expanded=(len(selected_codes) == 1)):
+                            metrics = calculate_demand_metrics(code, hist_df_filtered, lead_time_days=14, z_score=1.65)
+                            
+                            # 현재 설정 안전재고 조회
+                            current_safety = 0
+                            if not item_df_raw.empty:
+                                item_master_match = item_df_raw[item_df_raw['item_code'] == code]
+                                if not item_master_match.empty:
+                                    current_safety = int(item_master_match.iloc[0].get('safety_stock', 0))
+                                    
+                            c1, c2, c3, c4 = st.columns(4)
+                            c1.metric("🗓️ 분석 대상 기간", f"{metrics['history_days']} 일")
+                            c2.metric("📥 누적 입고량", f"{metrics['total_in_qty']:,} 개")
+                            c3.metric("📤 누적 소모량", f"{metrics['total_out_qty']:,} 개")
+                            c4.metric("📉 일평균 소모량", f"{metrics['daily_avg_usage']:.2f} 개/일")
+                            
+                            st.write("")
+                            sc1, sc2, sc3 = st.columns(3)
+                            with sc1:
+                                st.info(f"**현재 설정 안전재고**\n\n### `{current_safety:,}` 개")
+                            with sc2:
+                                rec_safety = metrics['recommended_safety_stock']
+                                st.success(f"**💡 통계적 추천 안전재고**\n\n### `{rec_safety:,}` 개")
+                                st.caption(f"기준: 리드타임 14일, 신뢰수준 95% (변동폭 σ: {metrics['daily_std_usage']:.2f})")
+                            with sc3:
+                                rop = metrics['reorder_point']
+                                current_stock = 0
+                                agg_hq = agg_df[agg_df['division'] == '본사']
+                                matched_stock = agg_hq[agg_hq['item_code'] == code]
+                                if not matched_stock.empty:
+                                    current_stock = int(matched_stock.iloc[0]['stock_qty'])
+                                    
+                                if current_stock <= rop:
+                                    st.error(f"**🚨 발주 권장 (재주문점 도달)**\n\n### ROP: `{rop:,}` 개")
+                                    st.caption(f"현재 본사 재고 `{current_stock:,}`개가 재주문점 이하입니다.")
+                                else:
+                                    st.warning(f"**🟢 재고 수준 양호**\n\n### ROP: `{rop:,}` 개")
+                                    st.caption(f"현재 본사 재고 `{current_stock:,}`개 (재주문점까지 `{current_stock - rop:,}`개 남음)")
+                                    
+                            st.divider()
+                            col_update, _ = st.columns([2, 2])
+                            with col_update:
+                                btn_key = f"update_safety_btn_{code}"
+                                if st.button("⚙️ 이 품목의 추천 안전재고를 마스터에 반영", type="primary", key=btn_key, use_container_width=True):
+                                    with st.spinner(f"'{name}' 안전재고 업데이트 중..."):
+                                        try:
+                                            supabase.table("item_master").update({"safety_stock": rec_safety}).eq("division", "본사").eq("item_code", code).execute()
+                                            st.success(f"✅ `{name}`의 안전재고가 `{rec_safety:,}`개로 성공적으로 업데이트되었습니다!")
+                                            time.sleep(1)
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"안전재고 업데이트 오류: {e}")
+                else:
+                    st.info("💡 분석할 품목을 상단 검색창에서 선택한 후 [조회하기] 버튼을 클릭해 주세요.")
+            
+            # 💡 [필터링 후] else 블록 (들여쓰기 12칸)
             else:
-                st.info("💡 분석할 품목을 상단 검색창에서 선택한 후 [조회하기] 버튼을 클릭해 주세요.")
+                st.info("분석 가능한 원자재/부자재 월별 데이터가 아직 DB에 존재하지 않거나, 단종 및 제품 품목 제외 후 남은 대상이 없습니다.")
+        
+        # 💡 [필터링 전] else 블록 (들여쓰기 8칸)
         else:
             st.info("RPA 변동표 기반의 월별 데이터가 아직 DB에 존재하지 않습니다. 에이전트 수집을 진행해 주세요.")
+            
+    # 💡 [이력 데이터 전무] else 블록 (들여쓰기 4칸)
     else:
         st.info("누적된 재고 변동 이력 데이터가 없습니다. RPA를 통해 재고 데이터가 주기적으로 적재되면 분석 차트가 나타납니다.")
 
