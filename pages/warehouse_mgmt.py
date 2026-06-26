@@ -130,9 +130,9 @@ def load_comprehensive_data():
         except:
             bom_df = pd.DataFrame(columns=['parent_item_code', 'child_item_code', 'quantity'])
             
-        # inventory_history 테이블 데이터 로드 (최신 데이터 우선 10,000개 로드 후 날짜 정렬)
+        # inventory_history 테이블 데이터 로드 (월별 데이터만 필터링하여 최신 데이터 로드 후 날짜 정렬)
         try:
-            hist_res = supabase.table("inventory_history").select("*").order("record_date", desc=True).limit(10000).execute()
+            hist_res = supabase.table("inventory_history").select("*").like("warehouse_name", "%_월별").order("record_date", desc=True).limit(1000).execute()
             hist_df = pd.DataFrame(hist_res.data) if hist_res.data else pd.DataFrame()
             if not hist_df.empty:
                 hist_df = hist_df.sort_values(by="record_date", ascending=True)
