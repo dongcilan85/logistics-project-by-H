@@ -163,6 +163,102 @@ try:
         time.sleep(1)
         st.rerun()
 
+    # --- [UI/기능: 창고 엑셀 업로드/다운로드] ---
+    st.markdown("---")
+    col_wh_dl, col_wh_ul = st.columns([1, 2])
+    with col_wh_dl:
+        st.markdown("#### 📥 창고 데이터 다운로드")
+        if not wh_df.empty:
+            wh_export_df = wh_df[["warehouse_code", "warehouse_name", "is_available"]].rename(columns={
+                "warehouse_code": "창고코드",
+                "warehouse_name": "창고명",
+                "is_available": "가용여부"
+            })
+            wh_export_df["가용여부"] = wh_export_df["가용여부"].apply(lambda x: "가용" if x else "불가")
+            
+            import io
+            wh_buffer = io.BytesIO()
+            with pd.ExcelWriter(wh_buffer, engine='openpyxl') as writer:
+                wh_export_df.to_excel(writer, index=False, sheet_name="창고코드_리터치")
+            st.download_button(
+                label="📥 현재 창고 엑셀 다운로드",
+                data=wh_buffer.getvalue(),
+                file_name=f"IWP_warehouse_codes_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="wh_dl_btn"
+            )
+        else:
+            st.warning("다운로드할 창고 데이터가 없습니다.")
+
+    with col_wh_ul:
+        st.markdown("#### 📤 창고 리터치 파일 업로드")
+        wh_uploaded_file = st.file_uploader("수정 완료한 창고 엑셀 파일 선택", type=["xlsx", "xls"], key="wh_uploader_final", label_visibility="collapsed")
+        if wh_uploaded_file is not None:
+            try:
+                wh_up_df = pd.read_excel(wh_uploaded_file)
+                st.write("미리보기 (첫 5줄):", wh_up_df.head(5))
+                
+                if st.button("🚀 창고 엑셀 업로드 실행", use_container_width=True, type="primary", key="wh_ul_btn"):
+                    with st.spinner("창고 데이터 처리 및 업데이트 중..."):
+                        def get_clean_col_local(keywords):
+                            for col in wh_up_df.columns:
+                                c_clean = str(col).replace(' ', '').replace('\n', '').lower()
+                                if any(k.lower() in c_clean for k in keywords):
+                                    return col
+                            return None
+                        
+                        code_col = get_clean_col_local(['창고코드', 'warehousecode', 'warehouse_code'])
+                        name_col = get_clean_col_local(['창고명', 'warehousename', 'warehouse_name'])
+                        avail_col = get_clean_col_local(['가용여부', 'isavailable', 'is_available'])
+                        
+                        if not code_col or not name_col:
+                            st.error("엑셀 파일에 필수 컬럼인 '창고코드' 및 '창고명'이 존재하지 않습니다.")
+                        else:
+                            upsert_wh_data = []
+                            exist_map = {}
+                            if not wh_df.empty:
+                                exist_map = wh_df.set_index("warehouse_code")["id"].to_dict()
+                            
+                            max_id = 0
+                            if not wh_df.empty and 'id' in wh_df.columns:
+                                valid_ids = pd.to_numeric(wh_df['id'], errors='coerce').dropna()
+                                if not valid_ids.empty:
+                                    max_id = int(valid_ids.max())
+                            
+                            for _, row in wh_up_df.iterrows():
+                                code = str(row.get(code_col, '')).strip()
+                                name = str(row.get(name_col, '')).strip()
+                                if not code or code.lower() in ('nan', 'none', '') or not name or name.lower() in ('nan', 'none', ''):
+                                    continue
+                                
+                                raw_avail = str(row.get(avail_col, '가용')).strip().lower()
+                                is_avail_val = raw_avail in ('true', '가용', '1', '1.0', 'y', 'yes', 'active')
+                                
+                                wh_item = {
+                                    "warehouse_code": code,
+                                    "warehouse_name": name,
+                                    "is_available": is_avail_val
+                                }
+                                if code in exist_map:
+                                    wh_item["id"] = int(exist_map[code])
+                                else:
+                                    max_id += 1
+                                    wh_item["id"] = max_id
+                                    
+                                upsert_wh_data.append(wh_item)
+                                
+                            if upsert_wh_data:
+                                supabase.table("warehouse_codes").upsert(upsert_wh_data).execute()
+                                st.success(f"✅ 총 {len(upsert_wh_data)}건의 창고 정보가 성공적으로 반영되었습니다!")
+                                st.cache_data.clear()
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.warning("업로드할 유효한 창고 데이터가 존재하지 않습니다.")
+            except Exception as e:
+                st.error(f"파일 처리 오류: {e}")
+
 except Exception as e:
     st.error(f"창고 로드 오류: {e}")
 
