@@ -559,22 +559,25 @@ def display_inventory_table(target_df, key_suffix=""):
         st.info("해당 조건의 데이터가 없습니다.")
         return
     wh_list = ["전체"] + sorted(target_df['warehouse_name'].unique().tolist())
-    f1, f2 = st.columns([1, 3])
-    with f1:
-        sel_wh = st.selectbox("🏢 창고 필터", wh_list, key=f"wh_{key_suffix}")
-    with f2:
-        # 품목 목록 생성 (코드 + 품목명 조합으로 검색 편의성 확보)
-        item_options = sorted(target_df['item_name_spec'].dropna().unique().tolist())
-        selected_items = st.multiselect(
-            "🔍 품목 검색 (다중 선택 가능)",
-            options=item_options,
-            default=[],
-            key=f"ms_{key_suffix}",
-            placeholder="품목명을 입력하세요..."
-        )
     
-    # 💡 [요구사항] 테이블 컬럼별 상세 교차 필터링 기능 추가 (접이식 패널 적용)
-    with st.expander("🔍 상세 조건 필터링 (상태 ｜ 유효기간 ｜ 분류)", expanded=False):
+    # 💡 [요구사항] 창고, 품목검색 및 교차 필터를 하나의 접이식 패널로 통합하여 UI 공간 극대화
+    with st.expander("🔍 재고 조건 필터링 (창고 ｜ 품목 ｜ 상태 ｜ 유효기간 ｜ 분류)", expanded=False):
+        f1, f2 = st.columns([1, 3])
+        with f1:
+            sel_wh = st.selectbox("🏢 창고 필터", wh_list, key=f"wh_{key_suffix}")
+        with f2:
+            # 품목 목록 생성 (코드 + 품목명 조합으로 검색 편의성 확보)
+            item_options = sorted(target_df['item_name_spec'].dropna().unique().tolist())
+            selected_items = st.multiselect(
+                "🔍 품목 검색 (다중 선택 가능)",
+                options=item_options,
+                default=[],
+                key=f"ms_{key_suffix}",
+                placeholder="품목명을 입력하세요..."
+            )
+            
+        st.divider()
+        
         f_col1, f_col2, f_col3 = st.columns(3)
         with f_col1:
             status_opts = ["✅ 정상", "⚠️ 부족", "❌ 품절"]
