@@ -160,6 +160,11 @@ if df.empty:
 today = datetime.now(KST).date()
 
 def analyze_expiration(row):
+    # 💡 [요구사항] 부재료 카테고리는 유효기간 관리 비대상 처리 ("⭕ 해당없음" 반환)
+    cat = row.get('category')
+    if pd.notna(cat) and str(cat).strip() == '부재료':
+        return "⭕ 해당없음", 9999
+
     # 💡 [요구사항] 날짜 유형(date_type)이 '제조일자'인 품목은 "🟢 정상"으로 판정
     d_type = row.get('date_type')
     if pd.notna(d_type) and str(d_type).strip() == '제조일자':
@@ -167,7 +172,7 @@ def analyze_expiration(row):
         
     val = row.get('expiration_date')
     if pd.isna(val) or not val or str(val).strip() == '해당없음':
-        return "⭕ 유효기간 없음", 9999
+        return "⭕ 해당없음", 9999
     
     try:
         exp_date = pd.to_datetime(val).date()
@@ -189,7 +194,7 @@ def analyze_expiration(row):
         else: # 730일 이상
             return "🔵 2년 이상", diff_days
     except:
-        return "⭕ 유효기간 없음", 9999
+        return "⭕ 해당없음", 9999
 
 # 유효기간 등급 부여
 if not df.empty and 'expiration_date' in df.columns:
