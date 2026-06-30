@@ -744,7 +744,7 @@ def process_item_master_excel(dl_path, is_hub=False):
                     excluded_codes.append(code)
                     continue
             else:
-                if cat_val not in ('상품', '제품', '부재료'):
+                if cat_val not in ('상품', '제품', '부재료', '반제품'):
                     excluded_codes.append(code)
                     continue
                 
