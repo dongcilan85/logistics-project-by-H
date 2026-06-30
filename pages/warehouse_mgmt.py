@@ -761,16 +761,20 @@ if 'kpi_selected' not in st.session_state:
 c1, c2, c3, c4 = st.columns(4)
 with c1:
     if st.button(f"🔴 유효기간 임박\n{urgent_count} 건", use_container_width=True):
-        st.session_state.kpi_selected = "urgent"
+        st.session_state.kpi_selected = None if st.session_state.kpi_selected == "urgent" else "urgent"
+        st.rerun()
 with c2:
     if st.button(f"❌ 품절/부족 재고\n{sold_out_count + low_stock_count} 건", use_container_width=True):
-        st.session_state.kpi_selected = "issue"
+        st.session_state.kpi_selected = None if st.session_state.kpi_selected == "issue" else "issue"
+        st.rerun()
 with c3:
     if st.button(f"📈 과잉 재고\n{excess_stock_count} 건", use_container_width=True):
-        st.session_state.kpi_selected = "excess"
+        st.session_state.kpi_selected = None if st.session_state.kpi_selected == "excess" else "excess"
+        st.rerun()
 with c4:
     if st.button(f"🛠️ 발주 필요 부자재\n{reorder_sub_count} 건", use_container_width=True):
-        st.session_state.kpi_selected = "reorder_sub"
+        st.session_state.kpi_selected = None if st.session_state.kpi_selected == "reorder_sub" else "reorder_sub"
+        st.rerun()
 
 # --- KPI 카드 클릭 시 간소화 테이블 표시 ---
 if st.session_state.kpi_selected:
