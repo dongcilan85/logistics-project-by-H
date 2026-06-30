@@ -573,6 +573,18 @@ def display_inventory_table(target_df, key_suffix=""):
             placeholder="품목명을 입력하세요..."
         )
     
+    # 💡 [요구사항] 테이블 컬럼별 상세 교차 필터링 기능 추가
+    f_col1, f_col2, f_col3 = st.columns(3)
+    with f_col1:
+        status_opts = ["✅ 정상", "⚠️ 부족", "❌ 품절"]
+        sel_status = st.multiselect("🚦 상태 필터", status_opts, default=[], key=f"status_{key_suffix}", placeholder="전체")
+    with f_col2:
+        exp_opts = sorted([x for x in target_df['exp_status'].dropna().unique().tolist() if x])
+        sel_exp = st.multiselect("📅 유효기간 등급 필터", exp_opts, default=[], key=f"exp_{key_suffix}", placeholder="전체")
+    with f_col3:
+        cat_opts = sorted([x for x in target_df['category'].dropna().unique().tolist() if x])
+        sel_cat = st.multiselect("🗂️ 분류 필터", cat_opts, default=[], key=f"cat_{key_suffix}", placeholder="전체")
+    
     res_df = target_df.copy()
     if 'division' in res_df.columns:
         res_df['division'] = res_df['division'].fillna("본사").astype(str)
@@ -643,6 +655,14 @@ def display_inventory_table(target_df, key_suffix=""):
     # 정렬 복구 및 임시 컬럼 삭제
     res_df = res_df.drop(columns=['total_planned', '_temp_sort'])
     
+    # 💡 상세 교차 필터 적용 (요약 지표 및 테이블 출력 전에 반영)
+    if sel_status:
+        res_df = res_df[res_df['status'].isin(sel_status)]
+    if sel_exp:
+        res_df = res_df[res_df['exp_status'].isin(sel_exp)]
+    if sel_cat:
+        res_df = res_df[res_df['category'].isin(sel_cat)]
+        
     cols_to_show = ['status', 'exp_status', 'item_code', 'item_name_spec', 'stock_qty', 'planned_qty', 'actual_stock', 'warehouse_name', 'expiration_date', 'category', 'inventory_cost']
     if 'activity_status' in res_df.columns:
         cols_to_show.insert(2, 'activity_status')
