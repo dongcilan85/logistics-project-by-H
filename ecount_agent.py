@@ -243,7 +243,14 @@ def execute_rpa(task="all"):
                         process_inventory_excel(dl_path, is_hub=True)
 
                     if task in ("all", "item_master"):
-                        log("ℹ️ [허브] 허브는 단순 재고현황만 수집하므로 품목마스터 및 변동표 수집을 건너뜁니다.")
+                        log("📦 [허브] 품목 마스터 수집 시작...")
+                        db_set("rpa_message", "[Hub] 품목 마스터 수집 중...")
+                        success_item, item_file = hub_rpa.get_item_master_excel()
+                        if success_item:
+                            log("📊 [동기화] 허브 품목 마스터 → DB 업로드 중...")
+                            process_item_master_excel(dl_path, is_hub=True)
+                        else:
+                            log(f"⚠️ [허브] 품목 마스터 수집 건너뜀: {item_file}", level="warning")
 
                     log("✅ [허브 완료] 허브 재고 수집 및 동기화가 끝났습니다.")
                     db_set("rpa_status", "idle")
