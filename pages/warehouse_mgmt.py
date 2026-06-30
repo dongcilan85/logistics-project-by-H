@@ -871,14 +871,33 @@ st.divider()
 tab1, tab_exp, tab2, tab4, tab5, tab_bom, tab_analysis = st.tabs(["📊 전체 재고", "🗓️ 유효기간 분석", "🛠️ 부재료", "🔥 이슈(품절/부족)", "📈 과잉재고", "🔗 제품별 부자재 구성정보", "📈 재고 추이 및 분석"])
 
 with tab1:
-    filter_opt = st.radio("재고 유형 선택", ["전체", "가용재고", "비가용재고"], horizontal=True, label_visibility="collapsed")
-    if filter_opt == "전체":
-        display_inventory_table(df, "all_total")
-    elif filter_opt == "가용재고":
-        display_inventory_table(avail_df, "all_avail")
-    else:
-        st.warning(f"비가용 창고 {unavail_wh_count}개 / 총 ₩{unavail_asset:,.0f} 상당의 재고가 보관 중입니다.")
-        display_inventory_table(unavail_df, "all_unavail")
+    # 💡 [요구사항] 본사재고와 허브재고를 구분해서 필터링할 수 있는 소속 구분 필터 신설
+    col_opt1, col_opt2 = st.columns(2)
+    with col_opt1:
+        filter_div = st.radio("🏢 소속 구분 선택", ["전체", "본사", "허브"], horizontal=True, key="div_filter_tab1")
+    with col_opt2:
+        filter_opt = st.radio("📦 재고 유형 선택", ["전체", "가용재고", "비가용재고"], horizontal=True, key="type_filter_tab1")
+        
+    target_data = df.copy()
+    
+    # 1. 소속 구분 필터 적용
+    if filter_div == "본사":
+        target_data = target_data[target_data['division'] == '본사']
+    elif filter_div == "허브":
+        target_data = target_data[target_data['division'] == '허브']
+        
+    # 2. 가용/비가용 필터 적용
+    if filter_opt == "가용재고":
+        target_data = target_data[target_data['is_available'] == True]
+    elif filter_opt == "비가용재고":
+        target_data = target_data[target_data['is_available'] == False]
+        
+    if filter_opt == "비가용재고":
+        unavail_wh_c = target_data['warehouse_name'].nunique() if not target_data.empty else 0
+        unavail_ass = target_data['inventory_cost'].sum() if not target_data.empty else 0
+        st.warning(f"비가용 창고 {unavail_wh_c}개 / 총 ₩{unavail_ass:,.0f} 상당의 재고가 보관 중입니다.")
+        
+    display_inventory_table(target_data, "all_combined")
 with tab_exp:
     st.subheader("🚨 유효기간별 재고 현황")
     st.info("유효기간 1.5년 미만 재고를 우선적으로 관리해 주세요.")
