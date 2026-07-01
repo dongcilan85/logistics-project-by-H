@@ -531,7 +531,7 @@ def process_warehouse_inventory_files(dl_path, warehouses):
     price_map = {}
     try:
         r = requests.get(
-            f"{SUPABASE_URL}/rest/v1/item_master?select=item_code,category,unit_price",
+            f"{SUPABASE_URL}/rest/v1/item_master?select=item_code,category,unit_price&division=eq.본사",
             headers=HEADERS, timeout=10
         )
         if r.status_code == 200:
