@@ -707,6 +707,45 @@ def display_inventory_table(target_df, key_suffix=""):
         key=f"df_{key_suffix}"
     )
     
+    # 💡 [요구사항] 화면상 컬럼 순서 및 한글화 엑셀 추출 기능 (열 너비 자동조정 포함)
+    import io
+    excel_buffer = io.BytesIO()
+    col_rename_excel = {
+        "status": "상태", "exp_status": "유효기간 등급", "activity_status": "활성도",
+        "item_code": "품목코드", "item_name_spec": "품목명[규격]",
+        "stock_qty": "ERP 재고", "planned_qty": "사용 예정", "actual_stock": "실 가용재고",
+        "warehouse_name": "창고명", "expiration_date": "유효기간", "category": "분류",
+        "inventory_cost": "재고비용"
+    }
+    export_df_excel = disp_df.rename(columns=col_rename_excel)
+    
+    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+        export_df_excel.to_excel(writer, index=False, sheet_name="재고현황")
+        workbook = writer.book
+        worksheet = writer.sheets["재고현황"]
+        
+        # openpyxl 기반 열 너비 자동 조정 (Auto-fit)
+        for col in worksheet.columns:
+            max_len = 0
+            col_letter = col[0].column_letter
+            for cell in col:
+                val = str(cell.value or '')
+                # 한글/특수문자 바이트 가중치 계산 (utf-8 인코딩 길이)
+                val_len = len(val.encode('utf-8'))
+                if val_len > max_len:
+                     max_len = val_len
+            # 열 너비를 최대 글자 수에 비례하여 조정 (최소 12, 양옆 버퍼 제공)
+            worksheet.column_dimensions[col_letter].width = max(max_len + 3, 12)
+            
+    st.download_button(
+        label="📥 현재 테이블 엑셀 다운로드",
+        data=excel_buffer.getvalue(),
+        file_name=f"IWP_inventory_{key_suffix}_{datetime.now().strftime('%Y%m%d')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
+        key=f"dl_excel_{key_suffix}"
+    )
+    
     # 💡 [요구사항] 체크박스(행 선택) 선택 시 사용계획 등록/조회 팝업 실행
     selected_rows = sel_event.selection.rows if hasattr(sel_event, 'selection') and hasattr(sel_event.selection, 'rows') else []
     
