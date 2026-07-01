@@ -341,6 +341,24 @@ def process_inventory_excel(dl_path, is_hub=False):
                 log(f"   - 정식 창고명 매핑: {len(wh_name_map)}건")
         except Exception as e:
             log(f"   - 정식 창고명 매핑 로드 실패: {e}", level="warning")
+            
+        # 💡 [요구사항] item_master 에서 품목별 정식 입고단가 맵 로드 (본사/허브 구분 적용)
+        master_price_map = {}
+        try:
+            p_res = requests.get(
+                f"{SUPABASE_URL}/rest/v1/item_master?select=division,item_code,unit_price",
+                headers=HEADERS, timeout=10
+            )
+            if p_res.status_code == 200:
+                for row in p_res.json():
+                    div = str(row.get('division', '')).strip()
+                    code = str(row.get('item_code', '')).strip()
+                    price = int(float(row.get('unit_price', 0) or 0))
+                    if code and div:
+                        master_price_map[f"{div}_{code}"] = price
+                log(f"   - 마스터 단가 맵 로드 완료: {len(master_price_map)}건")
+        except Exception as e:
+            log(f"   - 마스터 단가 맵 로드 실패: {e}", level="warning")
 
         # 3. 데이터 정제 (유령 데이터 및 합계 행 제거)
         def is_valid(val):
@@ -405,16 +423,26 @@ def process_inventory_excel(dl_path, is_hub=False):
             if is_hub:
                 import re
                 item_name_spec_val = re.sub(r'\[.*?\]', '', item_name_spec_val).strip()
+                
+            item_code_val = str(row.get(code_col, '')).strip()
+            stock_qty_val = float(row.get('calc_qty', 0))
+            
+            # 💡 [요구사항] 엑셀 단가가 0원 이하인 경우, 마스터에 등록된 단가로 대체 매핑
+            excel_price = float(row.get('calc_price', 0))
+            div_key = "허브" if is_hub else "본사"
+            final_price = excel_price
+            if final_price <= 0 and item_code_val:
+                final_price = master_price_map.get(f"{div_key}_{item_code_val}", 0.0)
 
             upload_data.append({
                 "warehouse_name": wh_name_final,
-                "item_code": str(row.get(code_col, '')).strip(),
+                "item_code": item_code_val,
                 "item_name_spec": item_name_spec_val,
                 "category": clean_cat,
                 "expiration_date": exp_date,
-                "stock_qty": float(row.get('calc_qty', 0)),
-                "unit_price": float(row.get('calc_price', 0)),
-                "inventory_cost": float(row.get('calc_cost', 0))
+                "stock_qty": stock_qty_val,
+                "unit_price": final_price,
+                "inventory_cost": stock_qty_val * final_price
             })
         
         if upload_data:
