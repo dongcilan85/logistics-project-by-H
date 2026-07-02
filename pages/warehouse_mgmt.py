@@ -1188,16 +1188,14 @@ with tab_analysis:
                     item_df_raw['category'].astype(str).str.contains("제품", na=False)
                 ]['item_code'].unique()
                 
-                # 2. 제외할 단종 품목 코드 수집 ('폐기요청' 또는 '단종' 단어가 상태에 들어간 모든 품목)
-                exclude_discontinued_codes = item_df_raw[
-                    item_df_raw['activity_status'].astype(str).str.contains("폐기요청|단종", na=False)
-                ]['item_code'].unique()
+                # 2. 1안/3안 필터링이 완료된 대시보드 유효 품목 코드 획득
+                valid_item_codes = df['item_code'].unique() if not df.empty else []
                 
-                # 3. 제외 대상 품목 코드 전체 합집합
-                exclude_codes = set(exclude_product_codes).union(set(exclude_discontinued_codes))
-                
-                # 4. 품목 코드 기준으로 필터링 적용
-                hist_df_filtered = hist_df_filtered[~hist_df_filtered['item_code'].isin(exclude_codes)].copy()
+                # 3. 제품군 제외 및 유효 품목만 추출하여 필터링 적용
+                hist_df_filtered = hist_df_filtered[
+                    (~hist_df_filtered['item_code'].isin(exclude_product_codes)) & 
+                    (hist_df_filtered['item_code'].isin(valid_item_codes))
+                ].copy()
                 
             if not hist_df_filtered.empty:
                 # 분석 대상 품목 목록 준비 (item_code + item_name_spec 조합)
