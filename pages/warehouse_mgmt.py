@@ -1401,7 +1401,8 @@ with tab_analysis:
                         if not matched_stock.empty:
                             current_stock = int(matched_stock.iloc[0]['stock_qty'])
                             
-                        rop = metrics['reorder_point']
+                        # 💡 [요구사항] 등록된 현재 안전재고 자체가 리드타임이 내포된 ROP 기준선이므로 직접 일치 처리
+                        rop = current_safety
                         status = "🚨 발주 필요" if current_stock <= rop else "🟢 양호"
                         
                         summary_rows.append({
