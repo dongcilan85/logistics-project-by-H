@@ -510,9 +510,11 @@ def render_usage_plan_ui(item_code, item_name, key_suffix):
                     supabase.table("usage_plans").delete().eq("id", del_id).execute()
                     st.success("✅ 삭제 완료! 대시보드를 새로고침합니다.")
                     time.sleep(0.8)
-                    # 💡 대시보드 테이블 행 선택(체크박스) 해제 처리
-                    if f"df_{key_suffix}" in st.session_state:
-                        st.session_state[f"df_{key_suffix}"] = {"selection": {"rows": [], "columns": []}}
+                    # 💡 Key Shuffling을 통해 체크박스 해제
+                    ver_key = f"df_ver_{key_suffix}"
+                    if ver_key not in st.session_state:
+                        st.session_state[ver_key] = 0
+                    st.session_state[ver_key] += 1
                     st.rerun()
                 except Exception as e:
                     st.error(f"삭제 처리 오류: {e}")
@@ -547,9 +549,11 @@ def render_usage_plan_ui(item_code, item_name, key_suffix):
                         supabase.table("usage_plans").insert(new_plan).execute()
                         st.success("✅ 사용계획이 등록되었습니다!")
                         time.sleep(0.8)
-                        # 💡 대시보드 테이블 행 선택(체크박스) 해제 처리
-                        if f"df_{key_suffix}" in st.session_state:
-                            st.session_state[f"df_{key_suffix}"] = {"selection": {"rows": [], "columns": []}}
+                        # 💡 Key Shuffling을 통해 체크박스 해제
+                        ver_key = f"df_ver_{key_suffix}"
+                        if ver_key not in st.session_state:
+                            st.session_state[ver_key] = 0
+                        st.session_state[ver_key] += 1
                         st.rerun()
                     except Exception as e:
                         st.error(f"등록 처리 오류: {e}")
@@ -699,6 +703,11 @@ def display_inventory_table(target_df, key_suffix=""):
             return ['background-color: rgba(255, 255, 0, 0.15)'] * len(row)
         return [''] * len(row)
 
+    # 💡 데이터프레임 Key Shuffling 버전 카운터 초기화
+    ver_key = f"df_ver_{key_suffix}"
+    if ver_key not in st.session_state:
+        st.session_state[ver_key] = 0
+
     sel_event = st.dataframe(
         disp_df.style.apply(style_row, axis=1),
         column_config={
@@ -713,7 +722,7 @@ def display_inventory_table(target_df, key_suffix=""):
         use_container_width=True, hide_index=True,
         on_select="rerun",
         selection_mode="single-row",
-        key=f"df_{key_suffix}"
+        key=f"df_{key_suffix}_{st.session_state[ver_key]}"
     )
     
     # 💡 [요구사항] 화면상 컬럼 순서 및 한글화 엑셀 추출 기능 (열 너비 자동조정 포함)
@@ -765,9 +774,8 @@ def display_inventory_table(target_df, key_suffix=""):
         sel_code = selected_row_data['item_code']
         sel_name = selected_row_data['item_name_spec']
         
-        # 💡 [해결책] 다이얼로그 호출 직전에 세션 선택 상태를 미리 비워둠 (무한 루프 팝업 방어)
-        if f"df_{key_suffix}" in st.session_state:
-            st.session_state[f"df_{key_suffix}"] = {"selection": {"rows": [], "columns": []}}
+        # 💡 [해결책] 세션 상태 직접 대입 에러를 우회하여 Key 버전 번호를 미리 1 올려둠 (rerun 없이 세션만 사전 업데이트)
+        st.session_state[ver_key] += 1
             
         render_usage_plan_ui(sel_code, sel_name, key_suffix)
 
