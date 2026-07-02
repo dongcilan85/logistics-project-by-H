@@ -764,6 +764,11 @@ def display_inventory_table(target_df, key_suffix=""):
         selected_row_data = disp_df.iloc[selected_idx]
         sel_code = selected_row_data['item_code']
         sel_name = selected_row_data['item_name_spec']
+        
+        # 💡 [해결책] 다이얼로그 호출 직전에 세션 선택 상태를 미리 비워둠 (무한 루프 팝업 방어)
+        if f"df_{key_suffix}" in st.session_state:
+            st.session_state[f"df_{key_suffix}"] = {"selection": {"rows": [], "columns": []}}
+            
         render_usage_plan_ui(sel_code, sel_name, key_suffix)
 
 # 발주 필요 부자재 집계 (본사만 대상)
