@@ -1182,20 +1182,30 @@ with tab_analysis:
             hist_df_filtered['division'] = hist_df_filtered['warehouse_name'].str.replace('_월별', '')
             
             # 💡 [요구사항] 단종 품목(폐기요청/단종) 및 제품([제품]/제품)인 품목을 품목코드 기준으로 안전하게 일괄 제외 필터링
+            # 💡 [요구사항] 품목마스터에 아예 없거나 N(사용여부 N 즉 폐기요청)인 품목은 분석 대상에서 완전히 제외
             if not item_df_raw.empty:
                 # 1. 제외할 제품 품목 코드 수집 ('제품' 단어가 카테고리에 들어간 모든 품목)
                 exclude_product_codes = item_df_raw[
                     item_df_raw['category'].astype(str).str.contains("제품", na=False)
                 ]['item_code'].unique()
                 
-                # 2. 1안/3안 필터링이 완료된 대시보드 유효 품목 코드 획득
+                # 2. 품목마스터에 등록되어 있으면서 사용여부가 Y(폐기요청이 아님)인 진짜 품목코드만 추출
+                active_master_codes = item_df_raw[
+                    (item_df_raw['activity_status'] != '폐기요청') & 
+                    (item_df_raw['item_code'].notna())
+                ]['item_code'].unique()
+                
+                # 3. 1안/3안 필터링이 완료된 대시보드 유효 품목 코드 획득
                 valid_item_codes = df['item_code'].unique() if not df.empty else []
                 
-                # 3. 제품군 제외 및 유효 품목만 추출하여 필터링 적용
+                # 4. 종합 필터링 (제품군 제외 + 마스터 유효코드 매핑 + 대시보드 활성코드 매핑)
                 hist_df_filtered = hist_df_filtered[
                     (~hist_df_filtered['item_code'].isin(exclude_product_codes)) & 
+                    (hist_df_filtered['item_code'].isin(active_master_codes)) &
                     (hist_df_filtered['item_code'].isin(valid_item_codes))
                 ].copy()
+            else:
+                hist_df_filtered = pd.DataFrame(columns=hist_df_filtered.columns)
                 
             if not hist_df_filtered.empty:
                 # 분석 대상 품목 목록 준비 (item_code + item_name_spec 조합)
