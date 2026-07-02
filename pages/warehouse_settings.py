@@ -279,6 +279,13 @@ with col_dl:
         dl_res = supabase.table("item_master").select("*").order("item_code").execute()
         if dl_res.data:
             dl_df = pd.DataFrame(dl_res.data)
+            
+            # 💡 [요구사항] activity_status 가 폐기요청이면 사용여부(Y/N) N, 아니면 Y
+            if 'activity_status' in dl_df.columns:
+                dl_df['use_yn'] = dl_df['activity_status'].apply(lambda x: 'N' if x == '폐기요청' else 'Y')
+            else:
+                dl_df['use_yn'] = 'Y'
+                
             col_rename = {
                 "division": "구분",
                 "item_code": "품목코드",
@@ -289,9 +296,10 @@ with col_dl:
                 "safety_stock": "안전재고",
                 "excess_threshold": "과잉기준",
                 "safety_months": "목표배수(개월)",
-                "buffer_multiplier": "버퍼배수"
+                "buffer_multiplier": "버퍼배수",
+                "use_yn": "사용여부(Y/N)"
             }
-            col_order = ["division", "item_code", "item_name", "category", "date_type", "unit_price", "safety_stock", "excess_threshold", "safety_months", "buffer_multiplier"]
+            col_order = ["division", "item_code", "item_name", "category", "date_type", "unit_price", "safety_stock", "excess_threshold", "safety_months", "buffer_multiplier", "use_yn"]
             
             # 컬럼 방어
             for col in col_order:
@@ -346,6 +354,7 @@ with col_ul:
                     excess_col = get_clean_col(['과잉기준', 'excessthreshold', 'excess_threshold'])
                     months_col = get_clean_col(['목표배수', 'safetymonths', 'safety_months'])
                     buf_col = get_clean_col(['버퍼배수', 'buffermultiplier', 'buffer_multiplier'])
+                    use_yn_col = get_clean_col(['사용여부', 'useyn', 'use_yn'])
                     
                     if not code_col:
                         st.error("엑셀 파일에 필수 컬럼인 '품목코드'가 존재하지 않습니다.")
@@ -383,6 +392,10 @@ with col_ul:
                             buf = pd.to_numeric(row.get(buf_col, 1.0), errors='coerce')
                             buf = float(buf) if pd.notna(buf) else 1.0
                             
+                            # 💡 사용여부가 N 이면 폐기요청, Y 이면 정상소진으로 활성도 맵핑
+                            use_yn_val = str(row.get(use_yn_col, 'Y')).strip().upper() if use_yn_col and pd.notnull(row.get(use_yn_col)) else "Y"
+                            act_status = "폐기요청" if use_yn_val == "N" else "정상소진"
+                            
                             upsert_data.append({
                                 "division": div,
                                 "item_code": code,
@@ -393,7 +406,8 @@ with col_ul:
                                 "safety_stock": safety,
                                 "excess_threshold": excess,
                                 "safety_months": months,
-                                "buffer_multiplier": buf
+                                "buffer_multiplier": buf,
+                                "activity_status": act_status
                             })
                         
                         if upsert_data:

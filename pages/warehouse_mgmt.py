@@ -147,6 +147,29 @@ def load_comprehensive_data():
 inv_df_raw, usage_df_raw, bom_df_raw, item_df_raw, hist_df_raw = load_comprehensive_data()
 df = inv_df_raw.copy()
 
+# 💡 [요구사항] 3안: 최근 90일(3개월)간 출고(소모) 실적이 있었던 품목코드 추출
+has_recent_out = set()
+if not hist_df_raw.empty:
+    try:
+        hist_df_temp = hist_df_raw.copy()
+        hist_df_temp['record_date'] = pd.to_datetime(hist_df_temp['record_date'])
+        cutoff_date = datetime.now() - timedelta(days=90)
+        # diff_qty < 0 이 출고 실적임
+        recent_out_records = hist_df_temp[(hist_df_temp['record_date'] >= cutoff_date) & (hist_df_temp['diff_qty'] < 0)]
+        has_recent_out = set(recent_out_records['item_code'].unique())
+    except Exception as e:
+        pass
+
+# 💡 [요구사항] 1안 + 3안 중복 제외 필터링
+# 1안: activity_status == '폐기요청' (엑셀에서 사용여부 N)
+# 3안: stock_qty <= 0 이고 최근 3개월간 출고 실적이 없는 품목
+if not df.empty:
+    exclude_mask = (
+        (df['activity_status'] == '폐기요청') | 
+        ((df['stock_qty'] <= 0) & (~df['item_code'].isin(has_recent_out)))
+    )
+    df = df[~exclude_mask]
+
 if df.empty:
     st.info("💡 수집된 재고 데이터가 없습니다. 에이전트를 통해 수집을 먼저 진행해 주세요.")
     if st.button("🔄 지금 데이터 수집 요청하기", type="primary"):
