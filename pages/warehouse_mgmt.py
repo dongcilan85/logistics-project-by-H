@@ -398,38 +398,19 @@ if not bom_df_raw.empty and parent_plans:
             bom_qty = int(row_bom['quantity'])
             indirect_plans[child_code] += planned_qty * bom_qty
 
-# 💡 [요구사항] 2. 완제품(제품) 재고 부족에 따른 부자재 잠재 소요량 계산 (SCM 역산)
-scm_indirect_plans = defaultdict(int)
-if not bom_df_raw.empty and not item_df_raw.empty and not avail_df.empty:
-    parent_items = item_df_raw[(item_df_raw['category'] == '제품') & (item_df_raw['division'] == '본사')]
-    for _, p_row in parent_items.iterrows():
-        p_code = p_row['item_code']
-        p_safety = int(p_row.get('safety_stock', 0) or 0)
-        p_stock = avail_df[(avail_df['item_code'] == p_code) & (avail_df['division'] == '본사')]['stock_qty'].sum()
-        p_plan = parent_plans.get(p_code, 0)
-        p_actual = p_stock - p_plan
-        p_shortage = p_safety - p_actual
-        if p_shortage > 0:
-            children = bom_df_raw[bom_df_raw['parent_item_code'] == p_code]
-            for _, row_bom in children.iterrows():
-                child_code = row_bom['child_item_code']
-                bom_qty = int(row_bom['quantity'])
-                scm_indirect_plans[child_code] += p_shortage * bom_qty
-
-# 3. 총 사용 예정 수량 = 직접 사용 예정 수량 + 간접 소요량 + 완제품 부족에 따른 잠재 소요량
+# 2. 총 사용 예정 수량 = 직접 사용 예정 수량 + 간접 소요량 (완제품 출고 계획 연동)
 direct_plans = {}
 if not usage_df_raw.empty:
     direct_plans = usage_df_raw.groupby('item_code')['planned_qty'].sum().to_dict()
 
-all_item_codes = set(list(direct_plans.keys()) + list(indirect_plans.keys()) + list(scm_indirect_plans.keys()))
+all_item_codes = set(list(direct_plans.keys()) + list(indirect_plans.keys()))
 total_plans_list = []
 for code in all_item_codes:
     d_qty = direct_plans.get(code, 0)
     i_qty = indirect_plans.get(code, 0)
-    scm_qty = scm_indirect_plans.get(code, 0)
     total_plans_list.append({
         'item_code': code,
-        'planned_qty': d_qty + i_qty + scm_qty
+        'planned_qty': d_qty + i_qty
     })
 total_usage_df = pd.DataFrame(total_plans_list) if total_plans_list else pd.DataFrame(columns=['item_code', 'planned_qty'])
 
@@ -676,6 +657,11 @@ def display_inventory_table(target_df, key_suffix=""):
     # 품목별 잔여 예정 수량 추적
     rem_plan_dict = {}
     
+    # 💡 [요구사항] 본사 완제품(제품)의 실시간 ERP 현재고 매핑 빌드
+    parent_stocks = {}
+    if not avail_df.empty:
+        parent_stocks = avail_df[(avail_df['category'] == '제품') & (avail_df['division'] == '본사')].groupby('item_code')['stock_qty'].sum().to_dict()
+    
     for idx, row in res_df.iterrows():
         icode = row['item_code']
         sqty = row['stock_qty']
@@ -696,8 +682,19 @@ def display_inventory_table(target_df, key_suffix=""):
         else:
             allocated = 0
             
+        # 💡 [요구사항] 완제품 재고에 내포된 부자재 환산 재고 크레딧 계산 (가상 재고 합산)
+        credit_qty = 0
+        if row.get('category') == '부재료' and not bom_df_raw.empty:
+            parents = bom_df_raw[bom_df_raw['child_item_code'] == icode]
+            for _, bom_row in parents.iterrows():
+                p_code = bom_row['parent_item_code']
+                bom_qty = int(bom_row['quantity'])
+                p_stock = parent_stocks.get(p_code, 0)
+                credit_qty += p_stock * bom_qty
+                
         allocated_plans.append(allocated)
-        actual_stocks.append(sqty - allocated)
+        # 실 가용재고 = 물리적재고(sqty) + 완제품 내포 부자재재고(credit_qty) - 사용예정량(allocated)
+        actual_stocks.append(sqty + credit_qty - allocated)
         
     res_df['planned_qty'] = allocated_plans
     res_df['actual_stock'] = actual_stocks
