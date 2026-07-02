@@ -667,7 +667,15 @@ def display_inventory_table(target_df, key_suffix=""):
     if sel_cat:
         res_df = res_df[res_df['category'].isin(sel_cat)]
         
-    cols_to_show = ['status', 'exp_status', 'item_code', 'item_name_spec', 'stock_qty', 'planned_qty', 'actual_stock', 'warehouse_name', 'expiration_date', 'category', 'inventory_cost']
+    # 💡 [요구사항] 마스터 단가를 복합 키(소속_품목코드)로 정확히 매핑하여 unit_price 컬럼 신설 및 inventory_cost 재계산
+    item_price_map = {}
+    if not item_df_raw.empty:
+        item_price_map = {f"{row['division']}_{row['item_code']}": int(float(row.get('unit_price', 0) or 0)) for _, row in item_df_raw.iterrows()}
+    div_col = res_df['division'] if 'division' in res_df.columns else pd.Series("본사", index=res_df.index)
+    res_df['unit_price'] = (div_col + "_" + res_df['item_code']).map(item_price_map).fillna(0).astype(int)
+    res_df['inventory_cost'] = res_df['stock_qty'] * res_df['unit_price']
+        
+    cols_to_show = ['status', 'exp_status', 'item_code', 'item_name_spec', 'stock_qty', 'planned_qty', 'actual_stock', 'warehouse_name', 'expiration_date', 'category', 'unit_price', 'inventory_cost']
     if 'activity_status' in res_df.columns:
         cols_to_show.insert(2, 'activity_status')
         res_df['activity_status'] = res_df['activity_status'].fillna('알수없음')
@@ -699,6 +707,7 @@ def display_inventory_table(target_df, key_suffix=""):
             "planned_qty": st.column_config.NumberColumn("사용 예정", format="%,d"),
             "actual_stock": st.column_config.NumberColumn("실 가용재고", format="%,d"),
             "warehouse_name": "창고명", "expiration_date": "유효기간", "category": "분류",
+            "unit_price": st.column_config.NumberColumn("입고단가", format="₩%,d"),
             "inventory_cost": st.column_config.NumberColumn("재고비용", format="₩%,d")
         },
         use_container_width=True, hide_index=True,
@@ -715,6 +724,7 @@ def display_inventory_table(target_df, key_suffix=""):
         "item_code": "품목코드", "item_name_spec": "품목명[규격]",
         "stock_qty": "ERP 재고", "planned_qty": "사용 예정", "actual_stock": "실 가용재고",
         "warehouse_name": "창고명", "expiration_date": "유효기간", "category": "분류",
+        "unit_price": "입고단가",
         "inventory_cost": "재고비용"
     }
     export_df_excel = disp_df.rename(columns=col_rename_excel)
