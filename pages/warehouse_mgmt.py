@@ -1385,6 +1385,31 @@ with tab_analysis:
                     fig.update_yaxes(showgrid=True, gridcolor='rgba(128,128,128,0.2)')
                     st.plotly_chart(fig, use_container_width=True)
                     
+                    # 💡 [요구사항] 선택 품목 추천 안전재고 일괄 반영 버튼 신설
+                    st.write("")
+                    col_bulk, _ = st.columns([2, 2])
+                    with col_bulk:
+                        bulk_btn_label = f"🚀 선택한 {len(selected_codes)}개 품목 추천 안전재고 일괄 반영"
+                        if st.button(bulk_btn_label, type="primary", use_container_width=True, key="bulk_safety_reflect"):
+                            with st.spinner("마스터 DB 일괄 반영 중..."):
+                                try:
+                                    bulk_updates = []
+                                    for code, name in selected_codes:
+                                        metrics = calculate_demand_metrics(code, hist_df_filtered, lead_time_days=14, z_score=1.65)
+                                        rec_safety = metrics['recommended_safety_stock']
+                                        bulk_updates.append({
+                                            "division": "본사",
+                                            "item_code": code,
+                                            "safety_stock": rec_safety
+                                        })
+                                    if bulk_updates:
+                                        supabase.table("item_master").upsert(bulk_updates).execute()
+                                        st.success(f"✅ 총 {len(bulk_updates)}건의 추천 안전재고가 일괄 반영되었습니다! 새로고침합니다.")
+                                        time.sleep(1)
+                                        st.rerun()
+                                except Exception as e:
+                                    st.error(f"일괄 반영 실패: {e}")
+                    
                     # -------------------------------------------------------------
                     # B. 전체 분석 요약 테이블 (다중 가시성 확보)
                     # -------------------------------------------------------------
