@@ -375,19 +375,38 @@ if not bom_df_raw.empty and parent_plans:
             bom_qty = int(row_bom['quantity'])
             indirect_plans[child_code] += planned_qty * bom_qty
 
-# 2. 총 사용 예정 수량 = 직접 사용 예정 수량 + 간접 소요량
+# 💡 [요구사항] 2. 완제품(제품) 재고 부족에 따른 부자재 잠재 소요량 계산 (SCM 역산)
+scm_indirect_plans = defaultdict(int)
+if not bom_df_raw.empty and not item_df_raw.empty and not avail_df.empty:
+    parent_items = item_df_raw[(item_df_raw['category'] == '제품') & (item_df_raw['division'] == '본사')]
+    for _, p_row in parent_items.iterrows():
+        p_code = p_row['item_code']
+        p_safety = int(p_row.get('safety_stock', 0) or 0)
+        p_stock = avail_df[(avail_df['item_code'] == p_code) & (avail_df['division'] == '본사')]['stock_qty'].sum()
+        p_plan = parent_plans.get(p_code, 0)
+        p_actual = p_stock - p_plan
+        p_shortage = p_safety - p_actual
+        if p_shortage > 0:
+            children = bom_df_raw[bom_df_raw['parent_item_code'] == p_code]
+            for _, row_bom in children.iterrows():
+                child_code = row_bom['child_item_code']
+                bom_qty = int(row_bom['quantity'])
+                scm_indirect_plans[child_code] += p_shortage * bom_qty
+
+# 3. 총 사용 예정 수량 = 직접 사용 예정 수량 + 간접 소요량 + 완제품 부족에 따른 잠재 소요량
 direct_plans = {}
 if not usage_df_raw.empty:
     direct_plans = usage_df_raw.groupby('item_code')['planned_qty'].sum().to_dict()
 
-all_item_codes = set(list(direct_plans.keys()) + list(indirect_plans.keys()))
+all_item_codes = set(list(direct_plans.keys()) + list(indirect_plans.keys()) + list(scm_indirect_plans.keys()))
 total_plans_list = []
 for code in all_item_codes:
     d_qty = direct_plans.get(code, 0)
     i_qty = indirect_plans.get(code, 0)
+    scm_qty = scm_indirect_plans.get(code, 0)
     total_plans_list.append({
         'item_code': code,
-        'planned_qty': d_qty + i_qty
+        'planned_qty': d_qty + i_qty + scm_qty
     })
 total_usage_df = pd.DataFrame(total_plans_list) if total_plans_list else pd.DataFrame(columns=['item_code', 'planned_qty'])
 
@@ -779,9 +798,9 @@ def display_inventory_table(target_df, key_suffix=""):
             
         render_usage_plan_ui(sel_code, sel_name, key_suffix)
 
-# 발주 필요 부자재 집계 (본사만 대상)
+# 발주 필요 부자재 집계 (본사만 대상 - ⚠️ 부족 및 ❌ 품절 상태 품목 일괄 포함)
 sub_material_df = avail_df[(avail_df['category'] == "부재료") & (avail_df['division'] == '본사')].copy()
-reorder_sub_codes = agg_df[(agg_df['status'] == "⚠️ 부족") & (agg_df['division'] == '본사')]['item_code']
+reorder_sub_codes = agg_df[(agg_df['status'].isin(["⚠️ 부족", "❌ 품절"])) & (agg_df['division'] == '본사')]['item_code']
 reorder_sub_df = sub_material_df[sub_material_df['item_code'].isin(reorder_sub_codes)]
 reorder_sub_count = reorder_sub_df['item_code'].nunique()
 
