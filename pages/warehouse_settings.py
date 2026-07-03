@@ -286,9 +286,9 @@ with col_dl:
             else:
                 dl_df['use_yn'] = 'Y'
                 
-            # 💡 [요구사항] 절대수량 오염 방지 및 과잉배수 기본 5배 치환
+            # 💡 [요구사항] 절대수량 오염 방지 및 과잉배수 기본 5배 정수 치환 (DB integer 타입 호환용)
             if 'excess_threshold' in dl_df.columns:
-                dl_df['excess_threshold'] = dl_df['excess_threshold'].apply(lambda x: float(x or 5.0) if float(x or 5.0) <= 20.0 else 5.0)
+                dl_df['excess_threshold'] = dl_df['excess_threshold'].apply(lambda x: int(float(x or 5.0)) if float(x or 5.0) <= 20.0 else 5)
                 
             col_rename = {
                 "division": "구분",
@@ -387,17 +387,18 @@ with col_ul:
                             safety = pd.to_numeric(row.get(safety_col, 0), errors='coerce')
                             safety = int(safety) if pd.notna(safety) else 0
                             
-                            # 💡 과잉배수는 float 실수 배수형태로 변환 및 기본값 5.0 적용
-                            excess = pd.to_numeric(row.get(excess_col, 5.0), errors='coerce')
-                            excess = float(excess) if pd.notna(excess) else 5.0
-                            if excess > 20.0:  # 혹시 500개 같은 기존 수량이 들어있으면 5.0배로 방어 적용
-                                excess = 5.0
+                            # 💡 과잉배수는 DB integer 컬럼 형식에 맞도록 정수 배수형태로 변환 및 기본값 5 적용
+                            excess = pd.to_numeric(row.get(excess_col, 5), errors='coerce')
+                            excess = int(float(excess)) if pd.notna(excess) else 5
+                            if excess > 20:  # 혹시 500개 같은 기존 수량이 들어있으면 5배로 방어 적용
+                                excess = 5
                             
                             months = pd.to_numeric(row.get(months_col, 2.0), errors='coerce')
                             months = float(months) if pd.notna(months) else 2.0
                             
-                            buf = pd.to_numeric(row.get(buf_col, 1.0), errors='coerce')
-                            buf = float(buf) if pd.notna(buf) else 1.0
+                            # 💡 buffer_multiplier(버퍼배수) 역시 DB integer 컬럼 형식에 맞도록 정수 변환 및 기본값 1 적용
+                            buf = pd.to_numeric(row.get(buf_col, 1), errors='coerce')
+                            buf = int(float(buf)) if pd.notna(buf) else 1
                             
                             # 💡 사용여부가 N 이면 폐기요청, Y 이면 정상소진으로 활성도 맵핑
                             use_yn_val = str(row.get(use_yn_col, 'Y')).strip().upper() if use_yn_col and pd.notnull(row.get(use_yn_col)) else "Y"
