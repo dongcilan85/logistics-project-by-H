@@ -438,7 +438,7 @@ try:
     item_df = pd.DataFrame(item_res.data) if item_res.data else pd.DataFrame(columns=["item_code", "item_name", "category", "date_type", "unit_price", "monthly_avg_usage", "safety_months", "buffer_multiplier", "safety_stock", "excess_threshold"])
 
     # 표시 전에 dtype 정규화 — data_editor가 텍스트 컬럼에 NaN/혼합타입이 섞이면 셀을 빈칸으로 그리는 케이스가 있어 명시적으로 문자열로 캐스팅한다.
-    for _c in ("item_code", "item_name", "category", "date_type"):
+    for _c in ("item_code", "item_name", "category", "date_type", "activity_status"):
         if _c in item_df.columns:
             item_df[_c] = item_df[_c].fillna("").astype(str)
     for _c in ("unit_price", "monthly_avg_usage", "safety_months", "buffer_multiplier", "safety_stock", "excess_threshold"):
@@ -453,6 +453,13 @@ try:
     if "buffer_multiplier" not in item_df.columns:
         item_df["buffer_multiplier"] = 1.0
     item_df["buffer_multiplier"] = item_df["buffer_multiplier"].replace(0, 1.0).astype(float)
+
+    # 💡 [요구사항] activity_status 값을 사용자가 직관적으로 편집할 수 있게 Y/N 컬럼으로 연동 구성
+    if "activity_status" in item_df.columns:
+        item_df["use_yn"] = item_df["activity_status"].apply(lambda x: "N" if str(x).strip() in ("폐기요청", "소진요청") else "Y")
+    else:
+        item_df["use_yn"] = "Y"
+    item_df["use_yn"] = pd.Categorical(item_df["use_yn"], categories=["Y", "N"])
 
     # 카테고리를 pd.Categorical로 명시적 변환하면 Streamlit이 옵션 매핑 오류 없이 정확하게 Selectbox로 렌더링함
     valid_categories = ["상품", "제품", "부재료", "원재료", "반제품", "무형상품", "일반"]
@@ -493,6 +500,7 @@ try:
             "item_code": st.column_config.TextColumn("품목 코드", required=True),
             "item_name": st.column_config.TextColumn("품목 명칭"),
             "category": st.column_config.SelectboxColumn("카테고리"),
+            "use_yn": st.column_config.SelectboxColumn("사용여부"),
             "date_type": st.column_config.SelectboxColumn("날짜유형"),
             "unit_price": st.column_config.NumberColumn("입고단가", format="%d"),
             "monthly_avg_usage": st.column_config.NumberColumn("월평균사용", format="%d", disabled=True),
@@ -502,13 +510,13 @@ try:
             "excess_threshold": st.column_config.NumberColumn("과잉기준", format="%d"),
             "updated_at": None,
         },
-        column_order=["division", "item_code", "item_name", "category", "date_type", "unit_price", "monthly_avg_usage", "safety_months", "buffer_multiplier", "safety_stock", "excess_threshold"],
+        column_order=["division", "item_code", "item_name", "category", "use_yn", "date_type", "unit_price", "monthly_avg_usage", "safety_months", "buffer_multiplier", "safety_stock", "excess_threshold"],
         num_rows="dynamic",
         use_container_width=True,
         key="item_editor_final",
         hide_index=True
     )
-    st.caption("💡 안전재고 수동 튜닝: 목표배수(개월)와 버퍼배수를 수정 후 저장하세요.")
+    st.caption("💡 안전재고 수동 튜닝: 사용여부(Y/N)와 목표배수(개월), 버퍼배수를 수정 후 저장하세요.")
 
     if st.button("💾 품목 마스터 저장", use_container_width=True):
         with st.status("품목 데이터 저장 중...") as status:
@@ -537,11 +545,16 @@ try:
                     else:
                         excess_threshold = int(excess_val)
 
+                    # 사용여부(Y/N) 값 역매핑 변환
+                    use_yn_val = str(row.get('use_yn', 'Y')).strip().upper()
+                    act_status = "폐기요청" if use_yn_val == "N" else "정상소진"
+
                     upsert_items.append({
                         "division": str(row.get('division', '본사')).strip(),
                         "item_code": str(row['item_code']).strip(),
                         "item_name": str(row.get('item_name', '')).strip(),
                         "category": str(row.get('category', '일반')),
+                        "activity_status": act_status,
                         "date_type": str(row.get('date_type', '유효기간')),
                         "unit_price": int(float(row.get('unit_price', 0))),
                         "monthly_avg_usage": monthly_avg,
