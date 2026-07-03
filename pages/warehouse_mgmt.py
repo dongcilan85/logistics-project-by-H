@@ -728,6 +728,12 @@ def display_inventory_table(target_df, key_suffix=""):
     res_df['unit_price'] = (div_col + "_" + res_df['item_code']).map(item_price_map).fillna(0).astype(int)
     res_df['inventory_cost'] = res_df['stock_qty'] * res_df['unit_price']
     
+    # 💡 [요구사항] 마스터 월평균사용량을 복합 키(소속_품목코드)로 정확히 매핑하여 monthly_avg_usage 컬럼 신설
+    item_usage_map = {}
+    if not item_df_raw.empty:
+        item_usage_map = {f"{row['division']}_{row['item_code']}": int(float(row.get('monthly_avg_usage', 0) or 0)) for _, row in item_df_raw.iterrows()}
+    res_df['monthly_avg_usage'] = (div_col + "_" + res_df['item_code']).map(item_usage_map).fillna(0).astype(int)
+    
     # 💡 [방어 코드] 만약 res_df 에 excess_threshold 컬럼이 유실된 경우 품목 마스터에서 복합 키(소속_품목코드) 기준으로 안전하게 매핑 주입
     if 'excess_threshold' not in res_df.columns:
         excess_map = {}
@@ -739,7 +745,7 @@ def display_inventory_table(target_df, key_suffix=""):
         # 💡 [요구사항] 절대수량 오염 방지 및 과잉배수(int) 20배 이하 한정 연동 (DB integer 타입 호환용)
         res_df['excess_threshold'] = res_df['excess_threshold'].apply(lambda x: int(float(x or 5.0)) if float(x or 5.0) <= 20.0 else 5)
         
-    cols_to_show = ['status', 'exp_status', 'item_code', 'item_name_spec', 'stock_qty', 'planned_qty', 'actual_stock', 'warehouse_name', 'expiration_date', 'category', 'excess_threshold', 'unit_price', 'inventory_cost']
+    cols_to_show = ['status', 'exp_status', 'item_code', 'item_name_spec', 'stock_qty', 'planned_qty', 'actual_stock', 'monthly_avg_usage', 'warehouse_name', 'expiration_date', 'category', 'excess_threshold', 'unit_price', 'inventory_cost']
     if 'activity_status' in res_df.columns:
         cols_to_show.insert(2, 'activity_status')
         res_df['activity_status'] = res_df['activity_status'].fillna('알수없음')
@@ -775,6 +781,7 @@ def display_inventory_table(target_df, key_suffix=""):
             "stock_qty": st.column_config.NumberColumn("ERP 재고", format="%,d"),
             "planned_qty": st.column_config.NumberColumn("사용 예정", format="%,d"),
             "actual_stock": st.column_config.NumberColumn("실 가용재고", format="%,d"),
+            "monthly_avg_usage": st.column_config.NumberColumn("월평균사용량", format="%,d"),
             "warehouse_name": "창고명", "expiration_date": "유효기간", "category": "분류",
             "excess_threshold": st.column_config.NumberColumn("과잉배수", format="%.1f배"),
             "unit_price": st.column_config.NumberColumn("입고단가", format="₩%,d"),
@@ -793,6 +800,7 @@ def display_inventory_table(target_df, key_suffix=""):
         "status": "상태", "exp_status": "유효기간 등급", "activity_status": "활성도",
         "item_code": "품목코드", "item_name_spec": "품목명[규격]",
         "stock_qty": "ERP 재고", "planned_qty": "사용 예정", "actual_stock": "실 가용재고",
+        "monthly_avg_usage": "월평균사용량",
         "warehouse_name": "창고명", "expiration_date": "유효기간", "category": "분류",
         "excess_threshold": "과잉배수",
         "unit_price": "입고단가",
@@ -927,10 +935,13 @@ if st.session_state.kpi_selected:
         
         # 💡 [요구사항] 본사 품목 단가 매핑 및 재고 비용 연산 추가
         item_price_map_summary = {}
+        item_usage_map_summary = {}
         if not item_df_raw.empty:
             item_price_map_summary = item_df_raw[item_df_raw['division'] == '본사'].set_index('item_code')['unit_price'].to_dict()
+            item_usage_map_summary = item_df_raw[item_df_raw['division'] == '본사'].set_index('item_code')['monthly_avg_usage'].to_dict()
         summary['unit_price'] = summary['item_code'].map(item_price_map_summary).fillna(0).astype(int)
         summary['inventory_cost'] = summary['stock_qty'] * summary['unit_price']
+        summary['monthly_avg_usage'] = summary['item_code'].map(item_usage_map_summary).fillna(0).astype(int)
         
         # item_code -> category 매핑
         item_cat_map = {}
@@ -952,11 +963,12 @@ if st.session_state.kpi_selected:
             }
         else:
             summary = summary.sort_values(by='actual_stock')
-            cols_to_show = ['status', 'item_code', 'item_name_spec', 'stock_qty', 'safety_stock', 'planned_qty', 'actual_stock']
+            cols_to_show = ['status', 'item_code', 'item_name_spec', 'stock_qty', 'safety_stock', 'monthly_avg_usage', 'planned_qty', 'actual_stock']
             col_config = {
                 "status": "상태", "item_code": "품목코드", "item_name_spec": "품목명[규격]",
                 "stock_qty": st.column_config.NumberColumn("ERP 재고", format="%,d"),
                 "safety_stock": st.column_config.NumberColumn("안전 재고", format="%,d"),
+                "monthly_avg_usage": st.column_config.NumberColumn("월평균사용량", format="%,d"),
                 "planned_qty": st.column_config.NumberColumn("사용 예정", format="%,d"),
                 "actual_stock": st.column_config.NumberColumn("실 가용재고", format="%,d")
             }
