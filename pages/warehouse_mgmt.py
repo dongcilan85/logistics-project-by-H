@@ -932,13 +932,16 @@ if st.session_state.kpi_selected:
             
         if is_excess:
             summary = summary.sort_values(by='actual_stock', ascending=False)
-            cols_to_show = ['status', 'item_code', 'item_name_spec', 'stock_qty', 'excess_threshold', 'planned_qty', 'actual_stock']
+            # 💡 [요구사항] 절대수량 오염 방지 및 과잉배수(int) 20배 이하 한정 연동 (DB integer 타입 호환용)
+            summary['excess_threshold'] = summary['excess_threshold'].apply(lambda x: int(float(x or 5.0)) if float(x or 5.0) <= 20.0 else 5)
+            
+            cols_to_show = ['status', 'item_code', 'item_name_spec', 'stock_qty', 'actual_stock', 'safety_stock', 'excess_threshold']
             col_config = {
                 "status": "상태", "item_code": "품목코드", "item_name_spec": "품목명[규격]",
                 "stock_qty": st.column_config.NumberColumn("ERP 재고", format="%,d"),
-                "excess_threshold": st.column_config.NumberColumn("과잉 기준", format="%,d"),
-                "planned_qty": st.column_config.NumberColumn("사용 예정", format="%,d"),
-                "actual_stock": st.column_config.NumberColumn("실 가용재고", format="%,d")
+                "actual_stock": st.column_config.NumberColumn("실가용재고", format="%,d"),
+                "safety_stock": st.column_config.NumberColumn("안전재고", format="%,d"),
+                "excess_threshold": st.column_config.NumberColumn("과잉기준(배수)", format="%d배")
             }
         else:
             summary = summary.sort_values(by='actual_stock')
