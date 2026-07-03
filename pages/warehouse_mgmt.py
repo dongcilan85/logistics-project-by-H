@@ -132,12 +132,29 @@ def load_comprehensive_data():
             
         # inventory_history 테이블 데이터 로드 (월별 데이터만 필터링하여 최신 데이터 로드 후 날짜 정렬)
         try:
-            # 💡 [요구사항] 품목 수가 많아질 때 1년치(12개월) 월별 이력이 잘리는 것을 방지하기 위해 조회 제한을 10,000건으로 대폭 확장
-            hist_res = supabase.table("inventory_history").select("*").like("warehouse_name", "%_월별").order("record_date", desc=True).limit(10000).execute()
-            hist_df = pd.DataFrame(hist_res.data) if hist_res.data else pd.DataFrame()
+            # 💡 [요구사항] Supabase(PostgREST)의 기본 1,000건 리턴 제한을 우회하기 위해 range() 페이지네이션으로 데이터 누적 로드
+            all_data = []
+            chunk_size = 1000
+            offset = 0
+            while True:
+                hist_res = supabase.table("inventory_history").select("*") \
+                    .like("warehouse_name", "%_월별") \
+                    .order("record_date", desc=True) \
+                    .range(offset, offset + chunk_size - 1) \
+                    .execute()
+                if not hist_res.data:
+                    break
+                all_data.extend(hist_res.data)
+                if len(hist_res.data) < chunk_size:
+                    break
+                offset += chunk_size
+                if offset >= 10000:  # 최대 10,000건 제한 안전장치
+                    break
+                    
+            hist_df = pd.DataFrame(all_data) if all_data else pd.DataFrame()
             if not hist_df.empty:
                 hist_df = hist_df.sort_values(by="record_date", ascending=True)
-        except:
+        except Exception as e:
             hist_df = pd.DataFrame()
             
         return inv_df, usage_df, bom_df, item_df, hist_df
