@@ -751,6 +751,21 @@ def process_item_master_excel(dl_path, is_hub=False):
         log(f"  품목그룹 컬럼 매핑: G1={grp1_col}, G2={grp2_col}, G3={grp3_col}")
         log(f"  엑셀 전체 컬럼: {list(df.columns)}")
         
+        # 💡 [요구사항] 기존 DB에 등록된 품목 마스터의 사용자 설정값(안전재고, 활성도, 과잉배수, 목표배수, 버퍼배수)을 조회하여 병합함으로써 덮어쓰기 유실을 완벽 방어
+        old_configs = {}
+        try:
+            target_div = "허브" if is_hub else "본사"
+            import urllib.parse
+            read_url = f"{SUPABASE_URL}/rest/v1/item_master?select=item_code,safety_stock,activity_status,safety_months,buffer_multiplier,excess_threshold&division=eq.{urllib.parse.quote(target_div)}&limit=5000"
+            r_old = requests.get(read_url, headers=HEADERS, timeout=10)
+            if r_old.status_code == 200:
+                for row_old in r_old.json():
+                    c_code = row_old.get("item_code")
+                    if c_code:
+                        old_configs[c_code] = row_old
+        except Exception as ex_load:
+            log(f"⚠️ 기존 마스터 설정값 로드 실패: {ex_load}", level="warning")
+        
         upload_data = []
         discontinued_codes = []  # 단종 품목 코드 수집
         excluded_codes = []      # 카테고리 변경 등으로 제외된 품목 코드 수집
@@ -799,12 +814,26 @@ def process_item_master_excel(dl_path, is_hub=False):
             unit_price_val = pd.to_numeric(raw_price, errors='coerce')
             unit_price = int(float(unit_price_val)) if pd.notna(unit_price_val) else 0
 
+            # 기존 사용자 설정 획득 (유실 방어)
+            old_cfg = old_configs.get(code, {})
+            safety_stock = old_cfg.get("safety_stock", 0)
+            activity_status = old_cfg.get("activity_status", "정상소진")
+            safety_months = old_cfg.get("safety_months", 2.0)
+            buffer_multiplier = old_cfg.get("buffer_multiplier", 1)
+            excess_threshold = old_cfg.get("excess_threshold", 5)
+
             upload_data.append({
                 "division": "허브" if is_hub else "본사",
                 "item_code": code,
                 "item_name": item_name,
                 "category": cat_val,
-                "unit_price": unit_price
+                "unit_price": unit_price,
+                # 사용자 설정 데이터 철벽 보존 주입
+                "safety_stock": safety_stock,
+                "activity_status": activity_status,
+                "safety_months": safety_months,
+                "buffer_multiplier": buffer_multiplier,
+                "excess_threshold": excess_threshold
             })
             
             if len(upload_data) % 500 == 0:
@@ -1088,15 +1117,11 @@ def process_inventory_movement_excel(dl_path, is_hub=False):
                 # 6개월 초과 또는 1년간 활동 없음
                 activity_status = "폐기요청"
 
+            # 💡 [요구사항] 안전재고, 활성도 등 사용자 고유 설정값을 덮어쓰지 않도록 딕셔너리에서 필드 제외 (월평균 사용량만 업데이트)
             update_data.append({
                 "division": "허브" if is_hub else "본사",
                 "item_code": code,
-                "monthly_avg_usage": int(mean_usage),
-                "safety_months": int(safety_m),
-                "buffer_multiplier": int(buffer_mult),
-                "safety_stock": safety_stock,
-                "excess_threshold": excess_threshold,
-                "activity_status": activity_status
+                "monthly_avg_usage": int(mean_usage)
             })
 
         # DB 업데이트 (upsert)
