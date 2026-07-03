@@ -426,9 +426,19 @@ agg_df['actual_stock'] = agg_df['stock_qty'] - agg_df['planned_qty']
 
 def get_status(row):
     stock = row['actual_stock']
+    safety = row.get('safety_stock', 0) or 0
+    
+    # 💡 [요구사항] excess_threshold 에 저장된 값을 배수(multiplier)로 취급!
+    multiplier = float(row.get('excess_threshold', 5.0) or 5.0)
+    # 기존 데이터에 들어있는 절대 수량(예: 500개 등)은 배수 범위(최대 20배)를 초과하므로 5.0배로 방어 적용
+    if multiplier > 20.0:
+        multiplier = 5.0
+        
+    excess_limit = safety * multiplier
+    
     if stock <= 0: return "❌ 품절"
-    if stock < row['safety_stock']: return "⚠️ 부족"
-    if stock > row['excess_threshold']: return "📈 과잉"
+    if stock < safety: return "⚠️ 부족"
+    if stock > excess_limit: return "📈 과잉"
     return "✅ 정상"
 agg_df['status'] = agg_df.apply(get_status, axis=1)
 
@@ -717,8 +727,11 @@ def display_inventory_table(target_df, key_suffix=""):
     div_col = res_df['division'] if 'division' in res_df.columns else pd.Series("본사", index=res_df.index)
     res_df['unit_price'] = (div_col + "_" + res_df['item_code']).map(item_price_map).fillna(0).astype(int)
     res_df['inventory_cost'] = res_df['stock_qty'] * res_df['unit_price']
+    
+    # 💡 [요구사항] 절대수량 오염 방지 및 과잉배수(float) 20배 이하 한정 연동
+    res_df['excess_threshold'] = res_df['excess_threshold'].apply(lambda x: float(x or 5.0) if float(x or 5.0) <= 20.0 else 5.0)
         
-    cols_to_show = ['status', 'exp_status', 'item_code', 'item_name_spec', 'stock_qty', 'planned_qty', 'actual_stock', 'warehouse_name', 'expiration_date', 'category', 'unit_price', 'inventory_cost']
+    cols_to_show = ['status', 'exp_status', 'item_code', 'item_name_spec', 'stock_qty', 'planned_qty', 'actual_stock', 'warehouse_name', 'expiration_date', 'category', 'excess_threshold', 'unit_price', 'inventory_cost']
     if 'activity_status' in res_df.columns:
         cols_to_show.insert(2, 'activity_status')
         res_df['activity_status'] = res_df['activity_status'].fillna('알수없음')
@@ -755,6 +768,7 @@ def display_inventory_table(target_df, key_suffix=""):
             "planned_qty": st.column_config.NumberColumn("사용 예정", format="%,d"),
             "actual_stock": st.column_config.NumberColumn("실 가용재고", format="%,d"),
             "warehouse_name": "창고명", "expiration_date": "유효기간", "category": "분류",
+            "excess_threshold": st.column_config.NumberColumn("과잉배수", format="%.1f배"),
             "unit_price": st.column_config.NumberColumn("입고단가", format="₩%,d"),
             "inventory_cost": st.column_config.NumberColumn("재고비용", format="₩%,d")
         },
@@ -772,6 +786,7 @@ def display_inventory_table(target_df, key_suffix=""):
         "item_code": "품목코드", "item_name_spec": "품목명[규격]",
         "stock_qty": "ERP 재고", "planned_qty": "사용 예정", "actual_stock": "실 가용재고",
         "warehouse_name": "창고명", "expiration_date": "유효기간", "category": "분류",
+        "excess_threshold": "과잉배수",
         "unit_price": "입고단가",
         "inventory_cost": "재고비용"
     }

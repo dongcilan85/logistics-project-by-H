@@ -286,6 +286,10 @@ with col_dl:
             else:
                 dl_df['use_yn'] = 'Y'
                 
+            # 💡 [요구사항] 절대수량 오염 방지 및 과잉배수 기본 5배 치환
+            if 'excess_threshold' in dl_df.columns:
+                dl_df['excess_threshold'] = dl_df['excess_threshold'].apply(lambda x: float(x or 5.0) if float(x or 5.0) <= 20.0 else 5.0)
+                
             col_rename = {
                 "division": "구분",
                 "item_code": "품목코드",
@@ -294,7 +298,7 @@ with col_dl:
                 "date_type": "날짜유형",
                 "unit_price": "입고단가",
                 "safety_stock": "안전재고",
-                "excess_threshold": "과잉기준",
+                "excess_threshold": "과잉배수(안전재고의N배)",
                 "safety_months": "목표배수(개월)",
                 "buffer_multiplier": "버퍼배수",
                 "use_yn": "사용여부(Y/N)"
@@ -351,7 +355,7 @@ with col_ul:
                     date_type_col = get_clean_col(['날짜유형', 'datetype', 'date_type'])
                     price_col = get_clean_col(['입고단가', '단가', 'unitprice', 'unit_price'])
                     safety_col = get_clean_col(['안전재고', 'safetystock', 'safety_stock'])
-                    excess_col = get_clean_col(['과잉기준', 'excessthreshold', 'excess_threshold'])
+                    excess_col = get_clean_col(['과잉배수', '과잉기준', 'excessthreshold', 'excess_threshold'])
                     months_col = get_clean_col(['목표배수', 'safetymonths', 'safety_months'])
                     buf_col = get_clean_col(['버퍼배수', 'buffermultiplier', 'buffer_multiplier'])
                     use_yn_col = get_clean_col(['사용여부', 'useyn', 'use_yn'])
@@ -383,8 +387,11 @@ with col_ul:
                             safety = pd.to_numeric(row.get(safety_col, 0), errors='coerce')
                             safety = int(safety) if pd.notna(safety) else 0
                             
-                            excess = pd.to_numeric(row.get(excess_col, 0), errors='coerce')
-                            excess = int(excess) if pd.notna(excess) else 0
+                            # 💡 과잉배수는 float 실수 배수형태로 변환 및 기본값 5.0 적용
+                            excess = pd.to_numeric(row.get(excess_col, 5.0), errors='coerce')
+                            excess = float(excess) if pd.notna(excess) else 5.0
+                            if excess > 20.0:  # 혹시 500개 같은 기존 수량이 들어있으면 5.0배로 방어 적용
+                                excess = 5.0
                             
                             months = pd.to_numeric(row.get(months_col, 2.0), errors='coerce')
                             months = float(months) if pd.notna(months) else 2.0
