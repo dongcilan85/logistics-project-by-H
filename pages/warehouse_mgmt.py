@@ -925,6 +925,13 @@ if st.session_state.kpi_selected:
         summary['planned_qty'] = ("본사_" + summary['item_code']).map(item_planned_map).fillna(0).astype(int)
         summary['actual_stock'] = summary['stock_qty'] - summary['planned_qty']
         
+        # 💡 [요구사항] 본사 품목 단가 매핑 및 재고 비용 연산 추가
+        item_price_map_summary = {}
+        if not item_df_raw.empty:
+            item_price_map_summary = item_df_raw[item_df_raw['division'] == '본사'].set_index('item_code')['unit_price'].to_dict()
+        summary['unit_price'] = summary['item_code'].map(item_price_map_summary).fillna(0).astype(int)
+        summary['inventory_cost'] = summary['stock_qty'] * summary['unit_price']
+        
         # item_code -> category 매핑
         item_cat_map = {}
         if not item_df_raw.empty:
@@ -956,10 +963,11 @@ if st.session_state.kpi_selected:
         
         # --- 요약 지표(Metric) 표시 ---
         st.markdown("##### 📊 조회 항목 요약")
-        mc1, mc2, mc3 = st.columns(3)
+        mc1, mc2, mc3, mc4 = st.columns(4)
         mc1.metric("총 ERP 재고", f"{int(summary['stock_qty'].sum()):,}")
         mc2.metric("총 사용 예정", f"{int(summary['planned_qty'].sum()):,}")
         mc3.metric("총 실 가용재고", f"{int(summary['actual_stock'].sum()):,}")
+        mc4.metric("총 재고비용", f"₩{int(summary['inventory_cost'].sum()):,}")
                 
         disp_df = summary[cols_to_show].copy()
 
