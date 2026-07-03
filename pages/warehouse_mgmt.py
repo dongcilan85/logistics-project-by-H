@@ -1440,18 +1440,15 @@ with tab_analysis:
                         if st.button(bulk_btn_label, type="primary", use_container_width=True, key="bulk_safety_reflect"):
                             with st.spinner("마스터 DB 일괄 반영 중..."):
                                 try:
-                                    bulk_updates = []
+                                    # 💡 [요구사항] upsert 시 나머지 마스터 필드(단가, 사용여부 등) 유실 방지를 위해 개별 update 실행
+                                    updated_count = 0
                                     for code, name in selected_codes:
                                         metrics = calculate_demand_metrics(code, hist_df_filtered, lead_time_days=14, z_score=1.65)
                                         rec_safety = metrics['recommended_safety_stock']
-                                        bulk_updates.append({
-                                            "division": "본사",
-                                            "item_code": code,
-                                            "safety_stock": rec_safety
-                                        })
-                                    if bulk_updates:
-                                        supabase.table("item_master").upsert(bulk_updates).execute()
-                                        st.success(f"✅ 총 {len(bulk_updates)}건의 추천 안전재고가 일괄 반영되었습니다! 새로고침합니다.")
+                                        supabase.table("item_master").update({"safety_stock": rec_safety}).eq("division", "본사").eq("item_code", code).execute()
+                                        updated_count += 1
+                                    if updated_count > 0:
+                                        st.success(f"✅ 총 {updated_count}건의 추천 안전재고가 일괄 반영되었습니다! 새로고침합니다.")
                                         time.sleep(1)
                                         st.rerun()
                                 except Exception as e:
@@ -1467,10 +1464,10 @@ with tab_analysis:
                     for code, name in selected_codes:
                         metrics = calculate_demand_metrics(code, hist_df_filtered, lead_time_days=14, z_score=1.65)
                         
-                        # 현재 설정 안전재고 조회
+                        # 현재 설정 안전재고 조회 (본사 필터 명시 - 허브용과 구분)
                         current_safety = 0
                         if not item_df_raw.empty:
-                            item_master_match = item_df_raw[item_df_raw['item_code'] == code]
+                            item_master_match = item_df_raw[(item_df_raw['item_code'] == code) & (item_df_raw['division'] == '본사')]
                             if not item_master_match.empty:
                                 current_safety = int(item_master_match.iloc[0].get('safety_stock', 0))
                                 
@@ -1481,8 +1478,8 @@ with tab_analysis:
                         if not matched_stock.empty:
                             current_stock = int(matched_stock.iloc[0]['stock_qty'])
                             
-                        # 💡 [요구사항] 등록된 현재 안전재고 자체가 리드타임이 내포된 ROP 기준선이므로 직접 일치 처리
-                        rop = current_safety
+                        # 💡 [요구사항] 실질 ROP = 리드타임 수요(일평균 * 14일) + 현재 설정 안전재고
+                        rop = int(round(metrics['daily_avg_usage'] * 14 + current_safety))
                         status = "🚨 발주 필요" if current_stock <= rop else "🟢 양호"
                         
                         summary_rows.append({
@@ -1528,10 +1525,10 @@ with tab_analysis:
                         with st.expander(f"📝 {name} ({code}) 상세 분석 및 설정 반영", expanded=(len(selected_codes) == 1)):
                             metrics = calculate_demand_metrics(code, hist_df_filtered, lead_time_days=14, z_score=1.65)
                             
-                            # 현재 설정 안전재고 조회
+                            # 현재 설정 안전재고 조회 (본사 필터 명시 - 허브용과 구분)
                             current_safety = 0
                             if not item_df_raw.empty:
-                                item_master_match = item_df_raw[item_df_raw['item_code'] == code]
+                                item_master_match = item_df_raw[(item_df_raw['item_code'] == code) & (item_df_raw['division'] == '본사')]
                                 if not item_master_match.empty:
                                     current_safety = int(item_master_match.iloc[0].get('safety_stock', 0))
                                     
