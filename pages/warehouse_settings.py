@@ -332,104 +332,106 @@ with col_dl:
 
 with col_ul:
     st.markdown("#### 2. 리터치 파일 업로드")
-    uploaded_file = st.file_uploader("수정 완료한 엑셀 파일 선택", type=["xlsx", "xls"], key="item_master_uploader", label_visibility="collapsed")
-    if uploaded_file is not None:
-        try:
-            up_df = pd.read_excel(uploaded_file)
-            st.write("미리보기 (첫 5줄):", up_df.head(5))
-            
-            if st.button("🚀 리터치 완료 파일 업로드 실행", use_container_width=True, type="primary"):
-                with st.spinner("데이터 처리 및 업데이트 중..."):
-                    # 유연한 컬럼 매핑 유틸
-                    def get_clean_col(keywords):
-                        for col in up_df.columns:
-                            c_clean = str(col).replace(' ', '').replace('\n', '').lower()
-                            if any(k.lower() in c_clean for k in keywords):
-                                return col
-                        return None
+    
+    # 💡 [요구사항] Streamlit 특유의 버튼 클릭 시 파일 인스턴스 증발(Rerun 유실) 방지를 위해 st.form 도입
+    with st.form("master_upload_form"):
+        uploaded_file = st.file_uploader("수정 완료한 엑셀 파일 선택", type=["xlsx", "xls"], key="item_master_uploader", label_visibility="collapsed")
+        submit_upload = st.form_submit_button("🚀 리터치 완료 파일 업로드 실행", use_container_width=True, type="primary")
+        
+    if uploaded_file is not None and submit_upload:
+        with st.spinner("데이터 처리 및 업데이트 중..."):
+            try:
+                up_df = pd.read_excel(uploaded_file)
+                # 유연한 컬럼 매핑 유틸
+                def get_clean_col(keywords):
+                    for col in up_df.columns:
+                        c_clean = str(col).replace(' ', '').replace('\n', '').lower()
+                        if any(k.lower() in c_clean for k in keywords):
+                            return col
+                    return None
                     
-                    div_col = get_clean_col(['구분', 'division'])
-                    code_col = get_clean_col(['품목코드', 'itemcode', 'item_code'])
-                    name_col = get_clean_col(['품목명', 'itemname', 'item_name'])
-                    cat_col = get_clean_col(['카테고리', 'category'])
-                    date_type_col = get_clean_col(['날짜유형', 'datetype', 'date_type'])
-                    price_col = get_clean_col(['입고단가', '단가', 'unitprice', 'unit_price'])
-                    safety_col = get_clean_col(['안전재고', 'safetystock', 'safety_stock'])
-                    excess_col = get_clean_col(['과잉배수', '과잉기준', 'excessthreshold', 'excess_threshold'])
-                    months_col = get_clean_col(['목표배수', 'safetymonths', 'safety_months'])
-                    buf_col = get_clean_col(['버퍼배수', 'buffermultiplier', 'buffer_multiplier'])
-                    use_yn_col = get_clean_col(['사용여부', 'useyn', 'use_yn'])
-                    
-                    if not code_col:
-                        st.error("엑셀 파일에 필수 컬럼인 '품목코드'가 존재하지 않습니다.")
-                    else:
-                        upsert_data = []
-                        for _, row in up_df.iterrows():
-                            code = str(row.get(code_col, '')).strip()
-                            if not code or code.lower() in ('nan', 'none'): 
-                                continue
-                            
-                            # 기본 식별자 처리
-                            div = str(row.get(div_col, '본사')).strip() if div_col else "본사"
-                            if not div or div.lower() in ('nan', 'none', ''):
-                                div = "본사"
-                                
-                            name = str(row.get(name_col, '')).strip() if name_col and pd.notnull(row.get(name_col)) else ""
-                            cat = str(row.get(cat_col, '일반')).strip() if cat_col and pd.notnull(row.get(cat_col)) else "일반"
-                            date_type = str(row.get(date_type_col, '유효기간')).strip() if date_type_col and pd.notnull(row.get(date_type_col)) else "유효기간"
-                            if date_type not in ("유효기간", "제조일자"):
-                                date_type = "유효기간"
-                            
-                            # 수치형 필드 안전 정수/소수 변환
-                            price = pd.to_numeric(row.get(price_col, 0), errors='coerce')
-                            price = int(price) if pd.notna(price) else 0
-                            
-                            safety = pd.to_numeric(row.get(safety_col, 0), errors='coerce')
-                            safety = int(safety) if pd.notna(safety) else 0
-                            
-                            # 💡 과잉배수는 DB integer 컬럼 형식에 맞도록 정수 배수형태로 변환 및 기본값 5 적용
-                            excess = pd.to_numeric(row.get(excess_col, 5), errors='coerce')
-                            excess = int(float(excess)) if pd.notna(excess) else 5
-                            if excess > 20:  # 혹시 500개 같은 기존 수량이 들어있으면 5배로 방어 적용
-                                excess = 5
-                            
-                            months = pd.to_numeric(row.get(months_col, 2.0), errors='coerce')
-                            months = float(months) if pd.notna(months) else 2.0
-                            
-                            # 💡 buffer_multiplier(버퍼배수) 역시 DB integer 컬럼 형식에 맞도록 정수 변환 및 기본값 1 적용
-                            buf = pd.to_numeric(row.get(buf_col, 1), errors='coerce')
-                            buf = int(float(buf)) if pd.notna(buf) else 1
-                            
-                            # 💡 사용여부가 N 이면 폐기요청, Y 이면 정상소진으로 활성도 맵핑
-                            use_yn_val = str(row.get(use_yn_col, 'Y')).strip().upper() if use_yn_col and pd.notnull(row.get(use_yn_col)) else "Y"
-                            act_status = "폐기요청" if use_yn_val == "N" else "정상소진"
-                            
-                            upsert_data.append({
-                                "division": div,
-                                "item_code": code,
-                                "item_name": name,
-                                "category": cat,
-                                "date_type": date_type,
-                                "unit_price": price,
-                                "safety_stock": safety,
-                                "excess_threshold": excess,
-                                "safety_months": months,
-                                "buffer_multiplier": buf,
-                                "activity_status": act_status
-                            })
+                div_col = get_clean_col(['구분', 'division'])
+                code_col = get_clean_col(['품목코드', 'itemcode', 'item_code'])
+                name_col = get_clean_col(['품목명', 'itemname', 'item_name'])
+                cat_col = get_clean_col(['카테고리', 'category'])
+                date_type_col = get_clean_col(['날짜유형', 'datetype', 'date_type'])
+                price_col = get_clean_col(['입고단가', '단가', 'unitprice', 'unit_price'])
+                safety_col = get_clean_col(['안전재고', 'safetystock', 'safety_stock'])
+                excess_col = get_clean_col(['과잉배수', '과잉기준', 'excessthreshold', 'excess_threshold'])
+                months_col = get_clean_col(['목표배수', 'safetymonths', 'safety_months'])
+                buf_col = get_clean_col(['버퍼배수', 'buffermultiplier', 'buffer_multiplier'])
+                use_yn_col = get_clean_col(['사용여부', 'useyn', 'use_yn'])
+                
+                if not code_col:
+                    st.error("엑셀 파일에 필수 컬럼인 '품목코드'가 존재하지 않습니다.")
+                else:
+                    upsert_data = []
+                    for _, row in up_df.iterrows():
+                        code = str(row.get(code_col, '')).strip()
+                        if not code or code.lower() in ('nan', 'none'): 
+                            continue
                         
-                        if upsert_data:
-                            # 500건씩 청크 upsert
-                            for i in range(0, len(upsert_data), 500):
-                                chunk = upsert_data[i:i+500]
-                                supabase.table("item_master").upsert(chunk).execute()
-                            st.success(f"✅ {len(upsert_data)}건의 품목 정보가 성공적으로 반영되었습니다!")
-                            time.sleep(1)
-                            st.rerun()
-                        else:
-                            st.warning("업로드할 유효한 품목 데이터가 존재하지 않습니다.")
-        except Exception as e:
-            st.error(f"파일 처리 오류: {e}")
+                        # 기본 식별자 처리
+                        div = str(row.get(div_col, '본사')).strip() if div_col else "본사"
+                        if not div or div.lower() in ('nan', 'none', ''):
+                            div = "본사"
+                            
+                        name = str(row.get(name_col, '')).strip() if name_col and pd.notnull(row.get(name_col)) else ""
+                        cat = str(row.get(cat_col, '일반')).strip() if cat_col and pd.notnull(row.get(cat_col)) else "일반"
+                        date_type = str(row.get(date_type_col, '유효기간')).strip() if date_type_col and pd.notnull(row.get(date_type_col)) else "유효기간"
+                        if date_type not in ("유효기간", "제조일자"):
+                            date_type = "유효기간"
+                        
+                        # 수치형 필드 안전 정수/소수 변환
+                        price = pd.to_numeric(row.get(price_col, 0), errors='coerce')
+                        price = int(price) if pd.notna(price) else 0
+                        
+                        safety = pd.to_numeric(row.get(safety_col, 0), errors='coerce')
+                        safety = int(safety) if pd.notna(safety) else 0
+                        
+                        # 💡 과잉배수는 DB integer 컬럼 형식에 맞도록 정수 배수형태로 변환 및 기본값 5 적용
+                        excess = pd.to_numeric(row.get(excess_col, 5), errors='coerce')
+                        excess = int(float(excess)) if pd.notna(excess) else 5
+                        if excess > 20:  # 혹시 500개 같은 기존 수량이 들어있으면 5배로 방어 적용
+                            excess = 5
+                        
+                        months = pd.to_numeric(row.get(months_col, 2.0), errors='coerce')
+                        months = float(months) if pd.notna(months) else 2.0
+                        
+                        # 💡 buffer_multiplier(버퍼배수) 역시 DB integer 컬럼 형식에 맞도록 정수 변환 및 기본값 1 적용
+                        buf = pd.to_numeric(row.get(buf_col, 1), errors='coerce')
+                        buf = int(float(buf)) if pd.notna(buf) else 1
+                        
+                        # 💡 사용여부가 N 이면 폐기요청, Y 이면 정상소진으로 활성도 맵핑
+                        use_yn_val = str(row.get(use_yn_col, 'Y')).strip().upper() if use_yn_col and pd.notnull(row.get(use_yn_col)) else "Y"
+                        act_status = "폐기요청" if use_yn_val == "N" else "정상소진"
+                        
+                        upsert_data.append({
+                            "division": div,
+                            "item_code": code,
+                            "item_name": name,
+                            "category": cat,
+                            "date_type": date_type,
+                            "unit_price": price,
+                            "safety_stock": safety,
+                            "excess_threshold": excess,
+                            "safety_months": months,
+                            "buffer_multiplier": buf,
+                            "activity_status": act_status
+                        })
+                    
+                    if upsert_data:
+                        # 500건씩 청크 upsert
+                        for i in range(0, len(upsert_data), 500):
+                            chunk = upsert_data[i:i+500]
+                            supabase.table("item_master").upsert(chunk).execute()
+                        st.success(f"✅ {len(upsert_data)}건의 품목 정보가 성공적으로 반영되었습니다!")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.warning("업로드할 유효한 품목 데이터가 존재하지 않습니다.")
+            except Exception as e:
+                st.error(f"파일 처리 오류: {e}")
 
 try:
     item_res = supabase.table("item_master").select("*").order("item_code").execute()
