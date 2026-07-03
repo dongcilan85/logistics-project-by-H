@@ -728,8 +728,16 @@ def display_inventory_table(target_df, key_suffix=""):
     res_df['unit_price'] = (div_col + "_" + res_df['item_code']).map(item_price_map).fillna(0).astype(int)
     res_df['inventory_cost'] = res_df['stock_qty'] * res_df['unit_price']
     
-    # 💡 [요구사항] 절대수량 오염 방지 및 과잉배수(float) 20배 이하 한정 연동
-    res_df['excess_threshold'] = res_df['excess_threshold'].apply(lambda x: float(x or 5.0) if float(x or 5.0) <= 20.0 else 5.0)
+    # 💡 [방어 코드] 만약 res_df 에 excess_threshold 컬럼이 유실된 경우 품목 마스터에서 복합 키(소속_품목코드) 기준으로 안전하게 매핑 주입
+    if 'excess_threshold' not in res_df.columns:
+        excess_map = {}
+        if not item_df_raw.empty:
+            excess_map = {f"{row['division']}_{row['item_code']}": int(float(row.get('excess_threshold', 5) or 5)) for _, row in item_df_raw.iterrows()}
+        div_col = res_df['division'] if 'division' in res_df.columns else pd.Series("본사", index=res_df.index)
+        res_df['excess_threshold'] = (div_col + "_" + res_df['item_code']).map(excess_map).fillna(5).astype(int)
+    else:
+        # 💡 [요구사항] 절대수량 오염 방지 및 과잉배수(int) 20배 이하 한정 연동 (DB integer 타입 호환용)
+        res_df['excess_threshold'] = res_df['excess_threshold'].apply(lambda x: int(float(x or 5.0)) if float(x or 5.0) <= 20.0 else 5)
         
     cols_to_show = ['status', 'exp_status', 'item_code', 'item_name_spec', 'stock_qty', 'planned_qty', 'actual_stock', 'warehouse_name', 'expiration_date', 'category', 'excess_threshold', 'unit_price', 'inventory_cost']
     if 'activity_status' in res_df.columns:
