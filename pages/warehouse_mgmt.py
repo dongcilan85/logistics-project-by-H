@@ -113,6 +113,10 @@ def load_comprehensive_data():
                 inv_df['safety_stock'] = inv_df['safety_stock_master'].combine_first(inv_df['safety_stock'])
             if 'excess_threshold_master' in inv_df.columns:
                 inv_df['excess_threshold'] = inv_df['excess_threshold_master'].combine_first(inv_df['excess_threshold'])
+            if 'unit_price_master' in inv_df.columns:
+                inv_df['unit_price'] = inv_df['unit_price_master'].combine_first(inv_df['unit_price'])
+                # 💡 [요구사항] 마스터 단가가 병합되었으므로 실질 재고 자산 비용(현재고 * 단가)도 함께 최신화
+                inv_df['inventory_cost'] = inv_df['stock_qty'] * inv_df['unit_price']
         else:
             inv_df['category'] = '일반'
             inv_df['safety_stock'] = 0
