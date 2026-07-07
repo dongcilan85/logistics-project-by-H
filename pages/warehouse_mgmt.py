@@ -1107,14 +1107,26 @@ with tab_bom:
     st.caption("💡 아래 목록은 완제품(세트 품목) 리스트입니다. 각 제품명을 클릭(펼치기)하시면 해당 제품의 부자재 구성 정보와 재고 현황을 확인할 수 있습니다.")
     
     # 카테고리가 제품인 가용 재고 집계 (완제품 유니크화)
-    products_only_df = df[df['category'] == '제품'].copy()
-    if not products_only_df.empty:
-        # 💡 [요구사항] 3개월간 소모, 판매 내역 없는 건(monthly_avg_usage <= 0) 제외
-        usage_col = 'monthly_avg_usage' if 'monthly_avg_usage' in products_only_df.columns else ('monthly_avg_usage_master' if 'monthly_avg_usage_master' in products_only_df.columns else None)
-        if usage_col:
-            products_only_df[usage_col] = pd.to_numeric(products_only_df[usage_col], errors='coerce').fillna(0)
-            products_only_df = products_only_df[products_only_df[usage_col] > 0]
-            
+    # 💡 [요구사항] BOM 탭은 현재고가 0개이더라도 생산 가능 수량 역산을 지원하기 위해
+    #          재고 유실 필터(df) 대신 전체 마스터(item_df_raw) 및 창고별 데이터(inv_df_raw)를 매핑하여 구성합니다.
+    products_only_df = pd.DataFrame()
+    if not item_df_raw.empty:
+        # 단종(폐기요청)되지 않은 모든 완제품 마스터 획득
+        master_products = item_df_raw[
+            (item_df_raw['category'] == '제품') & 
+            (item_df_raw['activity_status'] != '폐기요청')
+        ].copy()
+        
+        # 원시 창고별 재고(inv_df_raw)와 조인하여 현재고 정보 매칭 (재고가 없으면 0)
+        products_only_df = master_products[['item_code', 'item_name', 'category', 'unit_price', 'activity_status']].merge(
+            inv_df_raw[['item_code', 'stock_qty', 'inventory_cost', 'warehouse_name']],
+            on='item_code',
+            how='left'
+        )
+        products_only_df['stock_qty'] = products_only_df['stock_qty'].fillna(0).astype(int)
+        products_only_df['inventory_cost'] = products_only_df['inventory_cost'].fillna(0).astype(int)
+        products_only_df['item_name_spec'] = products_only_df['item_name']
+        
         # 💡 [요구사항] 실제 BOM 정보가 등록된 완제품만 노출되도록 필터링
         if not bom_df_raw.empty:
             registered_parents = bom_df_raw['parent_item_code'].unique().tolist()
