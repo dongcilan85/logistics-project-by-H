@@ -306,8 +306,8 @@ def calculate_demand_metrics(item_code, hist_df_target, lead_time_days=14, z_sco
     # 추천 안전재고 = Z * 표준편차 * sqrt(리드타임)
     recommended_safety_stock = int(math.ceil(z_score * daily_std_usage * math.sqrt(lead_time_days)))
     
-    # 재주문점(ROP) = (일평균 소모량 * 리드타임) + 안전재고
-    reorder_point = int(math.ceil((daily_avg_usage * lead_time_days) + recommended_safety_stock))
+    # 💡 [요구사항] 유동적인 리드타임을 고려하여 추천 안전재고 자체를 추천 ROP(재주문점)로 일치 처리
+    reorder_point = recommended_safety_stock
     
     return {
         "total_out_qty": int(total_out_qty),
@@ -1497,8 +1497,8 @@ with tab_analysis:
                         if not matched_stock.empty:
                             current_stock = int(matched_stock.iloc[0]['stock_qty'])
                             
-                        # 💡 [요구사항] 실질 ROP = 리드타임 수요(일평균 * 14일) + 현재 설정 안전재고
-                        rop = int(round(metrics['daily_avg_usage'] * 14 + current_safety))
+                        # 💡 [요구사항] 유동적인 리드타임을 고려하여 안전재고 수량 그 자체를 ROP(재주문점)로 일치 처리
+                        rop = current_safety
                         status = "🚨 발주 필요" if current_stock <= rop else "🟢 양호"
                         
                         summary_rows.append({
