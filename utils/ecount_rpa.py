@@ -54,7 +54,13 @@ class EcountRPA:
 
     def _setup_browser(self):
         """브라우저 실행 + 컨텍스트 생성."""
-        os.makedirs(self.download_path, exist_ok=True)
+        # 💡 [요구사항] 네트워크 경로(UNC) 인식 실패(WinError 123 등) 시 로컬 Ecount_stocks 폴더로 안전하게 폴백
+        try:
+            os.makedirs(self.download_path, exist_ok=True)
+        except Exception:
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            self.download_path = os.path.join(base_dir, "Ecount_stocks")
+            os.makedirs(self.download_path, exist_ok=True)
 
         self._pw = sync_playwright().start()
         self._browser = self._pw.chromium.launch(

@@ -142,9 +142,13 @@ def execute_rpa(task="all"):
         if dl_path in ("NULL", "ERROR", ""):
             dl_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Ecount_stocks")
 
-        if not os.path.exists(dl_path):
-            try: os.makedirs(dl_path, exist_ok=True)
-            except: pass
+        # 💡 [요구사항] 네트워크 경로(UNC) 인식 실패(WinError 123 등) 시 로컬 Ecount_stocks 폴더로 안전하게 폴백
+        try:
+            if not os.path.exists(dl_path):
+                os.makedirs(dl_path, exist_ok=True)
+        except Exception:
+            dl_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Ecount_stocks")
+            os.makedirs(dl_path, exist_ok=True)
 
         log("🖥️ [3단계] 크롬 브라우저를 실행합니다... (잠시만 기다려 주세요)")
         rpa = EcountRPA(com_code, user_id, user_pw, dl_path, headless=is_headless, status_cb=lambda m: db_set("rpa_message", m[:100]))
