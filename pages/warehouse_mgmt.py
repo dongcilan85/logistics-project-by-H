@@ -1506,10 +1506,9 @@ with tab_analysis:
                             "누적 입고량": metrics['total_in_qty'],
                             "누적 소모량": metrics['total_out_qty'],
                             "일평균 소모량": round(metrics['daily_avg_usage'], 2),
+                            "현재고(본사)": current_stock,
                             "현재 안전재고": current_safety,
                             "추천 안전재고": metrics['recommended_safety_stock'],
-                            "재주문점(ROP)": rop,
-                            "현재고(본사)": current_stock,
                             "상태": status
                         })
                         
@@ -1520,12 +1519,11 @@ with tab_analysis:
                             "누적 입고량": st.column_config.NumberColumn(format="%,d"),
                             "누적 소모량": st.column_config.NumberColumn(format="%,d"),
                             "일평균 소모량": st.column_config.NumberColumn(format="%.2f"),
+                            "현재고(본사)": st.column_config.NumberColumn(format="%,d"),
                             "현재 안전재고": st.column_config.NumberColumn(format="%,d"),
                             "추천 안전재고": st.column_config.NumberColumn(format="%,d"),
-                            "재주문점(ROP)": st.column_config.NumberColumn(format="%,d"),
-                            "현재고(본사)": st.column_config.NumberColumn(format="%,d"),
                             "상태": st.column_config.TextColumn(
-                                help="현재고가 재주문점(ROP) 이하로 떨어지면 발주 필요 상태가 됩니다."
+                                help="현재고가 현재 안전재고 이하로 떨어지면 발주 필요 상태가 됩니다."
                             )
                         },
                         use_container_width=True,
