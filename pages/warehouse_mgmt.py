@@ -1336,8 +1336,6 @@ with tab_analysis:
                         # -------------------------------------------------------------
                         sel_item_code, sel_item_name = selected_codes[0]
                         item_hist = hist_df_filtered[hist_df_filtered['item_code'] == sel_item_code].copy()
-                        # ⚙️ 디버깅 정보 출력 (확인 후 제거 예정)
-                        st.write(f"⚙️ 디버깅 정보 (F5 새로고침 요망) - 전체 원시 이력: {len(hist_df_raw)}건 / 필터링 후 이력: {len(hist_df_filtered)}건 / 현재 품목({sel_item_code}) 이력: {len(item_hist)}건")
                         item_hist['record_date'] = pd.to_datetime(item_hist['record_date']).dt.strftime('%Y-%m-%d')
                         daily_summary = item_hist.groupby('record_date').agg({
                             'curr_qty': 'max',
