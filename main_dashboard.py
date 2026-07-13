@@ -831,9 +831,8 @@ else:
         })
     elif st.session_state.role == "Staff":
         pg = st.navigation({
-            "계획": [plan_mgmt_page],
-            "현장": [site_page],
-            "재고": [warehouse_page]
+            "재고": [warehouse_page],
+            "계획": [plan_mgmt_page]
         })
     else:
         pg = st.navigation({
