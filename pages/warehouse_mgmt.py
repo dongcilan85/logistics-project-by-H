@@ -1104,6 +1104,50 @@ with tab2:
 with tab4:
     issue_df = avail_df[avail_df['item_code'].isin(agg_df[agg_df['status'].isin(["❌ 품절", "⚠️ 부족"])]['item_code'])]
     display_inventory_table(issue_df, "issue")
+    
+    # 💡 [요구사항] 가용창고에 품절/부족이 발생한 품목에 대해, 비가용창고(불량, 보류 등)에 잠겨 있는 재고 내역을 별도로 매핑 표기
+    st.markdown("---")
+    st.markdown("### 🚨 비가용창고 재고현황 (사용 필요시 담당자와 협의 필수)")
+    
+    if not issue_df.empty and not unavail_df.empty:
+        # 가용 품절/부족이 난 품목 코드셋
+        issue_item_codes = issue_df['item_code'].unique()
+        
+        # 비가용 재고 중 이슈 품목에 해당하고 재고가 존재하는 행 필터링
+        unavail_issues = unavail_df[
+            (unavail_df['item_code'].isin(issue_item_codes)) & 
+            (unavail_df['stock_qty'] > 0)
+        ].copy()
+        
+        if not unavail_issues.empty:
+            # 표시할 컬럼 정리
+            unavail_display = unavail_issues[[
+                'division', 'warehouse_name', 'item_code', 'item_name_spec', 
+                'category', 'stock_qty', 'expiration_date', 'exp_status'
+            ]].rename(columns={
+                'division': '구분',
+                'warehouse_name': '비가용 창고명',
+                'item_code': '품목코드',
+                'item_name_spec': '품목명',
+                'category': '분류',
+                'stock_qty': '비가용 재고 수량',
+                'expiration_date': '유효기간',
+                'exp_status': '유효기간 등급'
+            })
+            
+            st.dataframe(
+                unavail_display,
+                column_config={
+                    "비가용 재고 수량": st.column_config.NumberColumn(format="%,d"),
+                    "유효기간": st.column_config.TextColumn(help="유효기간 정보를 나타냅니다.")
+                },
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.info("💡 현재 품절/부족 상태인 품목 중 비가용창고에 보관된 재고가 없습니다.")
+    else:
+        st.info("💡 현재 품절/부족 상태인 품목 중 비가용창고에 보관된 재고가 없습니다.")
 with tab5:
     excess_df = avail_df[avail_df['item_code'].isin(agg_df[agg_df['status'] == "📈 과잉"]['item_code'])]
     display_inventory_table(excess_df, "excess")
