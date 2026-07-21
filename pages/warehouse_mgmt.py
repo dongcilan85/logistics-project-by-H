@@ -913,6 +913,23 @@ div[data-testid="stHorizontalBlock"] > div > div > button[kind="secondary"]:hove
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(74, 144, 217, 0.3);
 }
+/* 활성화된 (Primary) KPI 버튼 스타일 */
+div[data-testid="stHorizontalBlock"] > div > div > button[kind="primary"] {
+    width: 100%;
+    padding: 1.2rem 0.8rem;
+    border-radius: 12px;
+    border: 2px solid #4A90D9;
+    background-color: #1f77b4 !important;
+    color: white !important;
+    font-weight: bold;
+    box-shadow: 0 6px 16px rgba(31, 119, 180, 0.4);
+    transform: translateY(-2px);
+    transition: all 0.2s ease;
+}
+div[data-testid="stHorizontalBlock"] > div > div > button[kind="primary"]:hover {
+    background-color: #1a6296 !important;
+    border-color: #4A90D9;
+}
 /* 다중 선택(multiselect) 드롭다운 항목 텍스트 줄바꿈 허용 (짤림 방지) */
 div[data-baseweb="select"] ul li {
     white-space: normal !important;
@@ -937,19 +954,19 @@ if 'kpi_selected' not in st.session_state:
 
 c1, c2, c3, c4 = st.columns(4)
 with c1:
-    if st.button(f"🔴 유효기간 임박\n{urgent_count} 건", use_container_width=True):
+    if st.button(f"🔴 유효기간 임박\n{urgent_count} 건", use_container_width=True, type="primary" if st.session_state.kpi_selected == "urgent" else "secondary"):
         st.session_state.kpi_selected = None if st.session_state.kpi_selected == "urgent" else "urgent"
         st.rerun()
 with c2:
-    if st.button(f"❌ 품절/부족 재고\n{sold_out_count + low_stock_count} 건", use_container_width=True):
+    if st.button(f"❌ 품절/부족 재고\n{sold_out_count + low_stock_count} 건", use_container_width=True, type="primary" if st.session_state.kpi_selected == "issue" else "secondary"):
         st.session_state.kpi_selected = None if st.session_state.kpi_selected == "issue" else "issue"
         st.rerun()
 with c3:
-    if st.button(f"📈 과잉 재고\n{excess_stock_count} 건", use_container_width=True):
+    if st.button(f"📈 과잉 재고\n{excess_stock_count} 건", use_container_width=True, type="primary" if st.session_state.kpi_selected == "excess" else "secondary"):
         st.session_state.kpi_selected = None if st.session_state.kpi_selected == "excess" else "excess"
         st.rerun()
 with c4:
-    if st.button(f"🛠️ 발주 필요 부자재\n{reorder_sub_count} 건", use_container_width=True):
+    if st.button(f"🛠️ 발주 필요 부자재\n{reorder_sub_count} 건", use_container_width=True, type="primary" if st.session_state.kpi_selected == "reorder_sub" else "secondary"):
         st.session_state.kpi_selected = None if st.session_state.kpi_selected == "reorder_sub" else "reorder_sub"
         st.rerun()
 
