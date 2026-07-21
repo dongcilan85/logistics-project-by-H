@@ -1119,6 +1119,35 @@ with tab4:
             (unavail_df['stock_qty'] > 0)
         ].copy()
         
+        # 💡 [요구사항] 상단 가용재고 필터 조작 시 비가용 테이블도 연동 필터링 처리
+        sel_wh = st.session_state.get("wh_issue", "전체")
+        selected_items = st.session_state.get("ms_issue", [])
+        sel_status = st.session_state.get("status_issue", [])
+        sel_exp = st.session_state.get("exp_issue", [])
+        sel_cat = st.session_state.get("cat_issue", [])
+        
+        # 1. 창고 필터링
+        if sel_wh != "전체":
+            unavail_issues = unavail_issues[unavail_issues['warehouse_name'] == sel_wh]
+            
+        # 2. 품목 검색 필터링
+        if selected_items:
+            unavail_issues = unavail_issues[unavail_issues['item_name_spec'].isin(selected_items)]
+            
+        # 3. 유효기간 등급 필터링
+        if sel_exp:
+            unavail_issues = unavail_issues[unavail_issues['exp_status'].isin(sel_exp)]
+            
+        # 4. 분류 필터링
+        if sel_cat:
+            unavail_issues = unavail_issues[unavail_issues['category'].isin(sel_cat)]
+            
+        # 5. 상태 필터링
+        if sel_status:
+            div_col_unavail = unavail_issues['division'].fillna("본사") if 'division' in unavail_issues.columns else pd.Series("본사", index=unavail_issues.index)
+            unavail_issues['status'] = (div_col_unavail + "_" + unavail_issues['item_code']).map(item_status_map).fillna("✅ 정상")
+            unavail_issues = unavail_issues[unavail_issues['status'].isin(sel_status)]
+        
         if not unavail_issues.empty:
             # 표시할 컬럼 정리
             unavail_display = unavail_issues[[
