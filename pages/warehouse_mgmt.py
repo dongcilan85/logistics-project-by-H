@@ -461,7 +461,12 @@ def get_status(row):
     
     if stock <= 0: return "❌ 품절"
     if stock < safety: return "⚠️ 부족"
-    if stock > excess_limit: return "📈 과잉"
+    
+    # 💡 [요구사항] 과잉재고(📈 과잉)는 오직 '본사' 재고에 대해서만 체킹 (허브는 과잉 체킹에서 전면 배제)
+    div = row.get('division', '본사')
+    if div == '본사' and stock > excess_limit:
+        return "📈 과잉"
+        
     return "✅ 정상"
 agg_df['status'] = agg_df.apply(get_status, axis=1)
 
@@ -1178,7 +1183,11 @@ with tab4:
     else:
         st.info("💡 현재 품절/부족 상태인 품목 중 비가용창고에 보관된 재고가 없습니다.")
 with tab5:
-    excess_df = avail_df[avail_df['item_code'].isin(agg_df[agg_df['status'] == "📈 과잉"]['item_code'])]
+    # 💡 [요구사항] 과잉재고 테이블 표출 시 본사 재고만 한정 필터링 (허브 재고 원천 차단)
+    excess_df = avail_df[
+        (avail_df['item_code'].isin(agg_df[agg_df['status'] == "📈 과잉"]['item_code'])) &
+        (avail_df['division'] == '본사')
+    ]
     display_inventory_table(excess_df, "excess")
 with tab_bom:
     st.subheader("🔗 제품별 부자재 구성정보 (BOM)")
