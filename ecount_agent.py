@@ -829,12 +829,19 @@ def process_item_master_excel(dl_path, is_hub=False):
             buffer_multiplier = old_cfg.get("buffer_multiplier", 1)
             excess_threshold = old_cfg.get("excess_threshold", 5)
 
+            brand_val = ""
+            if grp1_col:
+                brand_val = str(row.get(grp1_col, '')).strip().replace('[', '').replace(']', '').strip()
+                if brand_val.lower() in ('nan', 'none'):
+                    brand_val = ""
+
             upload_data.append({
                 "division": "허브" if is_hub else "본사",
                 "item_code": code,
                 "item_name": item_name,
                 "category": cat_val,
                 "unit_price": unit_price,
+                "brand": brand_val,
                 # 사용자 설정 데이터 철벽 보존 주입
                 "safety_stock": safety_stock,
                 "activity_status": activity_status,

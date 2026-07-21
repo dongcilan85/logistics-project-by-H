@@ -113,6 +113,8 @@ def load_comprehensive_data():
                 inv_df['safety_stock'] = inv_df['safety_stock_master'].combine_first(inv_df['safety_stock'])
             if 'excess_threshold_master' in inv_df.columns:
                 inv_df['excess_threshold'] = inv_df['excess_threshold_master'].combine_first(inv_df['excess_threshold'])
+            if 'brand_master' in inv_df.columns:
+                inv_df['brand'] = inv_df['brand_master'].combine_first(inv_df.get('brand', pd.Series(dtype='object')))
             if 'unit_price_master' in inv_df.columns:
                 inv_df['unit_price'] = inv_df['unit_price_master'].combine_first(inv_df['unit_price']).fillna(0).astype(int)
                 # 💡 [요구사항] 마스터 단가가 병합되었으므로 실질 재고 자산 비용(현재고 * 단가)도 함께 최신화 (NaN 방지 처리)
@@ -122,11 +124,13 @@ def load_comprehensive_data():
             inv_df['category'] = '일반'
             inv_df['safety_stock'] = 0
             inv_df['excess_threshold'] = 1000
+            inv_df['brand'] = '기타'
             
         inv_df['is_available'] = inv_df['is_available'].fillna(True)
         inv_df['category'] = inv_df['category'].fillna('일반')
         inv_df['safety_stock'] = inv_df['safety_stock'].fillna(0)
         inv_df['excess_threshold'] = inv_df['excess_threshold'].fillna(1000)
+        inv_df['brand'] = inv_df.get('brand', pd.Series(dtype='object')).fillna('기타')
         
         # item_bom 테이블 데이터 로드
         try:
@@ -643,7 +647,7 @@ def display_inventory_table(target_df, key_suffix=""):
             
         st.divider()
         
-        f_col1, f_col2, f_col3 = st.columns(3)
+        f_col1, f_col2, f_col3, f_col4 = st.columns(4)
         with f_col1:
             status_opts = ["✅ 정상", "⚠️ 부족", "❌ 품절"]
             sel_status = st.multiselect("🚦 상태 필터", status_opts, default=[], key=f"status_{key_suffix}", placeholder="전체")
@@ -653,10 +657,17 @@ def display_inventory_table(target_df, key_suffix=""):
         with f_col3:
             cat_opts = sorted([x for x in target_df['category'].dropna().unique().tolist() if x])
             sel_cat = st.multiselect("🗂️ 분류 필터", cat_opts, default=[], key=f"cat_{key_suffix}", placeholder="전체")
+        with f_col4:
+            brand_opts = sorted([x for x in target_df['brand'].dropna().unique().tolist() if x and str(x).strip()]) if 'brand' in target_df.columns else []
+            sel_brand = st.multiselect("🏷️ 브랜드 필터", brand_opts, default=[], key=f"brand_{key_suffix}", placeholder="전체")
     
     res_df = target_df.copy()
     if 'division' in res_df.columns:
         res_df['division'] = res_df['division'].fillna("본사").astype(str)
+        
+    # 브랜드 필터 적용
+    if 'brand' in res_df.columns and sel_brand:
+        res_df = res_df[res_df['brand'].isin(sel_brand)]
         
     if sel_wh != "전체":
         res_df = res_df[res_df['warehouse_name'] == sel_wh]
@@ -666,6 +677,8 @@ def display_inventory_table(target_df, key_suffix=""):
             group_cols.append('division')
         if 'is_available' in res_df.columns:
             group_cols.append('is_available')
+        if 'brand' in res_df.columns:
+            group_cols.append('brand')
         res_df = res_df.groupby(group_cols).agg({
             'stock_qty': 'sum',
             'safety_stock': 'max',
@@ -1130,6 +1143,7 @@ with tab4:
         sel_status = st.session_state.get("status_issue", [])
         sel_exp = st.session_state.get("exp_issue", [])
         sel_cat = st.session_state.get("cat_issue", [])
+        sel_brand = st.session_state.get("brand_issue", [])
         
         # 1. 창고 필터링
         if sel_wh != "전체":
@@ -1152,13 +1166,15 @@ with tab4:
             div_col_unavail = unavail_issues['division'].fillna("본사") if 'division' in unavail_issues.columns else pd.Series("본사", index=unavail_issues.index)
             unavail_issues['status'] = (div_col_unavail + "_" + unavail_issues['item_code']).map(item_status_map).fillna("✅ 정상")
             unavail_issues = unavail_issues[unavail_issues['status'].isin(sel_status)]
+
+        # 6. 브랜드 필터링
+        if sel_brand and 'brand' in unavail_issues.columns:
+            unavail_issues = unavail_issues[unavail_issues['brand'].isin(sel_brand)]
         
         if not unavail_issues.empty:
-            # 표시할 컬럼 정리
-            unavail_display = unavail_issues[[
-                'division', 'warehouse_name', 'item_code', 'item_name_spec', 
-                'category', 'stock_qty', 'expiration_date', 'exp_status'
-            ]].rename(columns={
+            # 표시할 컬럼 정리 (브랜드 컬럼 포함)
+            disp_cols = ['division', 'warehouse_name', 'item_code', 'item_name_spec']
+            col_rename = {
                 'division': '구분',
                 'warehouse_name': '비가용 창고명',
                 'item_code': '품목코드',
@@ -1166,8 +1182,14 @@ with tab4:
                 'category': '분류',
                 'stock_qty': '비가용 재고 수량',
                 'expiration_date': '유효기간',
-                'exp_status': '유효기간 등급'
-            })
+                'exp_status': '유효기간 등급',
+                'brand': '브랜드'
+            }
+            if 'brand' in unavail_issues.columns:
+                disp_cols.append('brand')
+            disp_cols.extend(['category', 'stock_qty', 'expiration_date', 'exp_status'])
+            
+            unavail_display = unavail_issues[disp_cols].rename(columns=col_rename)
             
             st.dataframe(
                 unavail_display,
