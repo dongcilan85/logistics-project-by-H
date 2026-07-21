@@ -14,6 +14,7 @@ import atexit
 import signal
 from datetime import datetime, timezone, timedelta
 from utils.ecount_rpa import EcountRPA
+import re
 
 # 활성화된 RPA 인스턴스를 관리하기 위한 전역 셋
 active_rpa_instances = set()
@@ -424,9 +425,8 @@ def process_inventory_excel(dl_path, is_hub=False):
                 continue
 
             item_name_spec_val = str(row.get(name_col, '')).strip()
-            if is_hub:
-                import re
-                item_name_spec_val = re.sub(r'\[.*?\]', '', item_name_spec_val).strip()
+            # 💡 [요구사항] 본사 및 허브 구분 없이 품목명 대괄호([]) 및 내부 텍스트 일괄 제거 정제
+            item_name_spec_val = re.sub(r'\[.*?\]', '', item_name_spec_val).strip()
                 
             item_code_val = str(row.get(code_col, '')).strip()
             stock_qty_val = float(row.get('calc_qty', 0))
@@ -661,10 +661,13 @@ def process_warehouse_inventory_files(dl_path, warehouses):
 
                 unit_price = price_map.get(code, 0.0)
                 stock_qty_i = int(float(qty_val))
+                # 💡 [요구사항] 본사 유효기간별 재고 품목명 대괄호([]) 및 내부 텍스트 제거 정제
+                raw_name = str(row.get(name_col, '')).strip() if name_col else ''
+                clean_name = re.sub(r'\[.*?\]', '', raw_name).strip() if raw_name else ''
                 all_upload_data.append({
                     "warehouse_name": wh_name,
                     "item_code": code,
-                    "item_name_spec": str(row.get(name_col, '')).strip() if name_col else '',
+                    "item_name_spec": clean_name,
                     "category": category_map.get(code),
                     "expiration_date": exp_date,
                     "stock_qty": stock_qty_i,
@@ -1007,7 +1010,9 @@ def process_inventory_movement_excel(dl_path, is_hub=False):
             if not date_pattern.match(date_val):
                 continue
 
-            name_val = str(row.get(name_col, '')).strip() if name_col and pd.notna(row.get(name_col)) else ""
+            raw_name_val = str(row.get(name_col, '')).strip() if name_col and pd.notna(row.get(name_col)) else ""
+            # 💡 [요구사항] 본사 변동표 재고 품목명 대괄호([]) 및 내부 텍스트 제거 정제
+            name_val = re.sub(r'\[.*?\]', '', raw_name_val).strip() if raw_name_val else ""
             in_qty = pd.to_numeric(row.get(in_col, 0), errors='coerce') if in_col else 0
             out_qty = pd.to_numeric(row.get(out_col, 0), errors='coerce')
             bal_qty = pd.to_numeric(row.get(bal_col, 0), errors='coerce') if bal_col else 0
