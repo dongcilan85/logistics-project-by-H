@@ -904,25 +904,25 @@ st.markdown("""
 /* 기본 (Secondary) KPI 버튼 */
 div[data-testid="stHorizontalBlock"] button {
     width: 100% !important;
-    padding: 0.6rem 0.6rem !important;
-    min-height: 54px !important;
-    border-radius: 10px !important;
+    padding: 0.35rem 0.4rem !important;
+    min-height: 40px !important;
+    border-radius: 8px !important;
     border: 2px solid transparent !important;
     transition: all 0.2s ease !important;
 }
-/* 버튼 내부 텍스트 크기 확대 및 굵게 */
+/* 버튼 내부 텍스트 폰트 12pt, 굵기 500 */
 div[data-testid="stHorizontalBlock"] button p,
 div[data-testid="stHorizontalBlock"] button span,
 div[data-testid="stHorizontalBlock"] button div {
-    font-size: 1.12rem !important;
-    font-weight: 700 !important;
-    line-height: 1.35 !important;
+    font-size: 12pt !important;
+    font-weight: 500 !important;
+    line-height: 1.25 !important;
     white-space: pre-wrap !important;
 }
 div[data-testid="stHorizontalBlock"] button:hover {
     border-color: #10b981 !important;
-    transform: translateY(-2px) !important;
-    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 3px 10px rgba(16, 185, 129, 0.3) !important;
 }
 /* 활성화된 (Primary) KPI 버튼 녹색(Green) 스타일 */
 div[data-testid="stHorizontalBlock"] button[kind="primary"],
@@ -930,16 +930,15 @@ div[data-testid="stHorizontalBlock"] button[data-testid*="primary"],
 button[kind="primary"],
 button[data-testid*="primary"] {
     width: 100% !important;
-    padding: 0.6rem 0.6rem !important;
-    min-height: 54px !important;
-    border-radius: 10px !important;
+    padding: 0.35rem 0.4rem !important;
+    min-height: 40px !important;
+    border-radius: 8px !important;
     border: 2px solid #34d399 !important;
     background-color: #10b981 !important;
     background-image: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
     color: #ffffff !important;
-    font-weight: bold !important;
-    box-shadow: 0 6px 18px rgba(16, 185, 129, 0.5) !important;
-    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.5) !important;
+    transform: translateY(-1px) !important;
 }
 div[data-testid="stHorizontalBlock"] button[kind="primary"]:hover,
 div[data-testid="stHorizontalBlock"] button[data-testid*="primary"]:hover,
@@ -947,7 +946,7 @@ button[kind="primary"]:hover,
 button[data-testid*="primary"]:hover {
     background-color: #059669 !important;
     border-color: #6ee7b7 !important;
-    box-shadow: 0 8px 22px rgba(16, 185, 129, 0.7) !important;
+    box-shadow: 0 6px 16px rgba(16, 185, 129, 0.7) !important;
 }
 /* 다중 선택(multiselect) 드롭다운 항목 텍스트 줄바꿈 허용 (짤림 방지) */
 div[data-baseweb="select"] ul li {
