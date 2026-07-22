@@ -904,10 +904,20 @@ st.markdown("""
 /* 기본 (Secondary) KPI 버튼 */
 div[data-testid="stHorizontalBlock"] button {
     width: 100% !important;
-    padding: 1.2rem 0.8rem !important;
-    border-radius: 12px !important;
+    padding: 0.6rem 0.6rem !important;
+    min-height: 54px !important;
+    border-radius: 10px !important;
     border: 2px solid transparent !important;
     transition: all 0.2s ease !important;
+}
+/* 버튼 내부 텍스트 크기 확대 및 굵게 */
+div[data-testid="stHorizontalBlock"] button p,
+div[data-testid="stHorizontalBlock"] button span,
+div[data-testid="stHorizontalBlock"] button div {
+    font-size: 1.12rem !important;
+    font-weight: 700 !important;
+    line-height: 1.35 !important;
+    white-space: pre-wrap !important;
 }
 div[data-testid="stHorizontalBlock"] button:hover {
     border-color: #10b981 !important;
@@ -920,8 +930,9 @@ div[data-testid="stHorizontalBlock"] button[data-testid*="primary"],
 button[kind="primary"],
 button[data-testid*="primary"] {
     width: 100% !important;
-    padding: 1.2rem 0.8rem !important;
-    border-radius: 12px !important;
+    padding: 0.6rem 0.6rem !important;
+    min-height: 54px !important;
+    border-radius: 10px !important;
     border: 2px solid #34d399 !important;
     background-color: #10b981 !important;
     background-image: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
