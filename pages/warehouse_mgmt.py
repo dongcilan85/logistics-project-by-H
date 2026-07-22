@@ -901,34 +901,42 @@ total_asset = avail_asset + unavail_asset
 # --- KPI 카드 스타일 ---
 st.markdown("""
 <style>
-div[data-testid="stHorizontalBlock"] > div > div > button[kind="secondary"] {
-    width: 100%;
-    padding: 1.2rem 0.8rem;
-    border-radius: 12px;
-    border: 2px solid transparent;
-    transition: all 0.2s ease;
+/* 기본 (Secondary) KPI 버튼 */
+div[data-testid="stHorizontalBlock"] button {
+    width: 100% !important;
+    padding: 1.2rem 0.8rem !important;
+    border-radius: 12px !important;
+    border: 2px solid transparent !important;
+    transition: all 0.2s ease !important;
 }
-div[data-testid="stHorizontalBlock"] > div > div > button[kind="secondary"]:hover {
-    border-color: #4A90D9;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(74, 144, 217, 0.3);
+div[data-testid="stHorizontalBlock"] button:hover {
+    border-color: #10b981 !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3) !important;
 }
-/* 활성화된 (Primary) KPI 버튼 스타일 */
-div[data-testid="stHorizontalBlock"] > div > div > button[kind="primary"] {
-    width: 100%;
-    padding: 1.2rem 0.8rem;
-    border-radius: 12px;
-    border: 2px solid #4A90D9;
-    background-color: #1f77b4 !important;
-    color: white !important;
-    font-weight: bold;
-    box-shadow: 0 6px 16px rgba(31, 119, 180, 0.4);
-    transform: translateY(-2px);
-    transition: all 0.2s ease;
+/* 활성화된 (Primary) KPI 버튼 녹색(Green) 스타일 */
+div[data-testid="stHorizontalBlock"] button[kind="primary"],
+div[data-testid="stHorizontalBlock"] button[data-testid*="primary"],
+button[kind="primary"],
+button[data-testid*="primary"] {
+    width: 100% !important;
+    padding: 1.2rem 0.8rem !important;
+    border-radius: 12px !important;
+    border: 2px solid #34d399 !important;
+    background-color: #10b981 !important;
+    background-image: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+    color: #ffffff !important;
+    font-weight: bold !important;
+    box-shadow: 0 6px 18px rgba(16, 185, 129, 0.5) !important;
+    transform: translateY(-2px) !important;
 }
-div[data-testid="stHorizontalBlock"] > div > div > button[kind="primary"]:hover {
-    background-color: #1a6296 !important;
-    border-color: #4A90D9;
+div[data-testid="stHorizontalBlock"] button[kind="primary"]:hover,
+div[data-testid="stHorizontalBlock"] button[data-testid*="primary"]:hover,
+button[kind="primary"]:hover,
+button[data-testid*="primary"]:hover {
+    background-color: #059669 !important;
+    border-color: #6ee7b7 !important;
+    box-shadow: 0 8px 22px rgba(16, 185, 129, 0.7) !important;
 }
 /* 다중 선택(multiselect) 드롭다운 항목 텍스트 줄바꿈 허용 (짤림 방지) */
 div[data-baseweb="select"] ul li {
