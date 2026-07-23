@@ -53,10 +53,10 @@ st.markdown("""
 st.markdown("""
 <style>
 .block-container {
-    padding-top: 1rem !important;
+    padding-top: 0.8rem !important;
     padding-bottom: 0rem !important;
-    padding-left: 1.5rem !important;
-    padding-right: 1.5rem !important;
+    padding-left: 1.2rem !important;
+    padding-right: 1.2rem !important;
 }
 .compact-mirror-header {
     display: flex;
@@ -64,11 +64,25 @@ st.markdown("""
     justify-content: space-between;
     background: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 100%);
     color: white;
-    padding: 8px 16px;
-    border-radius: 8px;
-    margin-bottom: 12px;
-    font-size: 15px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    font-size: 14px;
     font-weight: 700;
+}
+/* stExpander 미니 컴팩트화 */
+div[data-testid="stExpander"] {
+    margin-bottom: 6px !important;
+    border-radius: 6px !important;
+    border: 1px solid #e2e8f0 !important;
+}
+div[data-testid="stExpander"] details summary {
+    padding: 3px 8px !important;
+    font-size: 12.5px !important;
+    min-height: 26px !important;
+}
+div[data-testid="stExpander"] details div[data-testid="stExpanderDetails"] {
+    padding: 6px 10px !important;
 }
 </style>
 <div class="compact-mirror-header">
@@ -85,18 +99,17 @@ if not target_url:
 else:
     # 로그인 보조 정보 헤더
     with st.expander("🔑 로그인 정보 및 웹 미러링 안내 팁", expanded=False if target_pw else True):
-        col1, col2 = st.columns([3, 1])
+        col1, col2 = st.columns([3.5, 1])
         with col1:
             if target_pw:
-                st.markdown(f"**설정된 비밀번호:** `{target_pw}`")
-                st.caption("복사하여 사이트 로그인 창의 비밀번호 입력란에 사용하세요.")
+                st.markdown(f"<span style='font-size:12.5px;'><b>설정된 비밀번호:</b> <code>{target_pw}</code> (로그인 창 비밀번호 입력란에 사용)</span>", unsafe_allow_html=True)
             else:
                 st.caption("등록된 비밀번호가 없습니다. 필요시 [재고관리 환경설정]에서 등록하실 수 있습니다.")
         with col2:
-            st.markdown(f'<a href="{target_url}" target="_blank" style="text-decoration:none;"><button style="width:100%; padding:0.4rem; border-radius:6px; border:1px solid #4A90D9; background-color:#1f77b4; color:white; font-size:13px; font-weight:bold; cursor:pointer;">새 창에서 열기 ↗️</button></a>', unsafe_allow_html=True)
+            st.markdown(f'<a href="{target_url}" target="_blank" style="text-decoration:none;"><button style="width:100%; padding:0.25rem 0.5rem; border-radius:4px; border:1px solid #4A90D9; background-color:#1f77b4; color:white; font-size:12px; font-weight:bold; cursor:pointer;">새 창에서 열기 ↗️</button></a>', unsafe_allow_html=True)
 
-    # 웹 미러링 iframe 렌더링 (높이 920px로 확장)
+    # 웹 미러링 iframe 렌더링 (높이 940px로 추가 확장)
     try:
-        components.iframe(target_url, height=920, scrolling=True)
+        components.iframe(target_url, height=940, scrolling=True)
     except Exception as e:
         st.error(f"미러링 화면을 불러오는 도중 오류가 발생했습니다: {e}")
