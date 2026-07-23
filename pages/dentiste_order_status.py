@@ -18,20 +18,33 @@ def get_config(key, default=""):
     except:
         return default
 
-# 💡 페이지 진입 즉시 사이드바 자동 닫기 (Main Frame JS 스크립트 실행)
+# 💡 최신 Streamlit 3대 사이드바 선택자 전수 스캔 및 100% 자동 접기 스크립트
 st.markdown("""
 <img src="x" style="display:none;" onerror="
     (function() {
-        try {
-            var sidebar = window.parent.document.querySelector('[data-testid=\'stSidebar\']');
-            if (sidebar && sidebar.getAttribute('aria-expanded') === 'true') {
-                var btn = window.parent.document.querySelector('[data-testid=\'stSidebarCollapseButton\']') || 
-                          window.parent.document.querySelector('button[aria-label=\'Close sidebar\']') ||
-                          window.parent.document.querySelector('button[aria-label=\'Collapse sidebar\']') ||
-                          sidebar.querySelector('button');
-                if (btn) { btn.click(); }
-            }
-        } catch(e) {}
+        function collapse() {
+            try {
+                var doc = window.parent.document;
+                var sidebar = doc.querySelector('[data-testid=\'stSidebar\']') || doc.querySelector('section[data-testid=\'stSidebar\']');
+                if (sidebar && sidebar.getAttribute('aria-expanded') !== 'false') {
+                    var btns = [
+                        doc.querySelector('[data-testid=\'stSidebarCollapseButton\']'),
+                        doc.querySelector('[data-testid=\'stSidebarHeader\'] button'),
+                        doc.querySelector('button[aria-label=\'Close sidebar\']'),
+                        doc.querySelector('button[aria-label=\'Collapse sidebar\']'),
+                        sidebar.querySelector('button')
+                    ];
+                    for (var i = 0; i < btns.length; i++) {
+                        if (btns[i]) {
+                            btns[i].click();
+                            break;
+                        }
+                    }
+                }
+            } catch(e) {}
+        }
+        setTimeout(collapse, 100);
+        setTimeout(collapse, 500);
     })();
 ">
 """, unsafe_allow_html=True)
