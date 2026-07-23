@@ -1074,17 +1074,21 @@ if st.session_state.kpi_selected:
         )
     
     if kpi_sel == "urgent":
+        st.subheader("🔴 유효기간 임박 재고 내역")
         display_inventory_table(urgent_avail, "kpi_urgent")
     elif kpi_sel == "issue":
+        st.subheader("❌ 품절 / ⚠️ 부족 재고 내역")
         issue_codes = agg_product[agg_product['status'].isin(["❌ 품절", "⚠️ 부족"])]['item_code'].tolist()
         issue_df = avail_product_df[avail_product_df['item_code'].isin(issue_codes)]
-        display_summary_table(issue_df, "❌ 품절 / ⚠️ 부족 재고 내역")
+        display_inventory_table(issue_df, "kpi_issue")
     elif kpi_sel == "excess":
+        st.subheader("📈 과잉 재고 내역")
         excess_codes = agg_product[agg_product['status'] == "📈 과잉"]['item_code'].tolist()
         excess_df = avail_product_df[avail_product_df['item_code'].isin(excess_codes)]
-        display_summary_table(excess_df, "📈 과잉 재고 내역", is_excess=True)
+        display_inventory_table(excess_df, "kpi_excess")
     elif kpi_sel == "reorder_sub":
-        display_summary_table(reorder_sub_df, "🛠️ 발주 필요 부자재 내역")
+        st.subheader("🛠️ 발주 필요 부자재 내역")
+        display_inventory_table(reorder_sub_df, "kpi_reorder")
 
 st.divider()
 
