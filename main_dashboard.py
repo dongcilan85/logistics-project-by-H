@@ -15,6 +15,28 @@ st.set_page_config(page_title="IWP 통합 관제 시스템", layout="wide", init
 # --- [Aesthetics: Premium Style] ---
 apply_premium_style()
 
+# 사이드바 접기 버튼 텍스트 '◀ 사이드바 접기' 라벨 글로벌 추가
+st.markdown("""
+<style>
+div[data-testid="stSidebarHeader"] button::after,
+button[data-testid="stSidebarCollapseButton"]::after,
+button[aria-label="Close sidebar"]::after,
+button[aria-label="Collapse sidebar"]::after {
+    content: " ◀ 사이드바 접기" !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    color: #1f77b4 !important;
+    margin-left: 6px !important;
+    white-space: nowrap !important;
+}
+div[data-testid="stSidebarHeader"] button,
+button[data-testid="stSidebarCollapseButton"] {
+    width: auto !important;
+    padding-right: 12px !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # 2. Supabase 및 시간 설정
 url = st.secrets["supabase"]["url"]
 key = st.secrets["supabase"]["key"]

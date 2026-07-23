@@ -18,38 +18,7 @@ def get_config(key, default=""):
     except:
         return default
 
-# 💡 최신 Streamlit 3대 사이드바 선택자 전수 스캔 및 100% 자동 접기 스크립트
-st.markdown("""
-<img src="x" style="display:none;" onerror="
-    (function() {
-        function collapse() {
-            try {
-                var doc = window.parent.document;
-                var sidebar = doc.querySelector('[data-testid=\'stSidebar\']') || doc.querySelector('section[data-testid=\'stSidebar\']');
-                if (sidebar && sidebar.getAttribute('aria-expanded') !== 'false') {
-                    var btns = [
-                        doc.querySelector('[data-testid=\'stSidebarCollapseButton\']'),
-                        doc.querySelector('[data-testid=\'stSidebarHeader\'] button'),
-                        doc.querySelector('button[aria-label=\'Close sidebar\']'),
-                        doc.querySelector('button[aria-label=\'Collapse sidebar\']'),
-                        sidebar.querySelector('button')
-                    ];
-                    for (var i = 0; i < btns.length; i++) {
-                        if (btns[i]) {
-                            btns[i].click();
-                            break;
-                        }
-                    }
-                }
-            } catch(e) {}
-        }
-        setTimeout(collapse, 100);
-        setTimeout(collapse, 500);
-    })();
-">
-""", unsafe_allow_html=True)
-
-# 💡 상단 패딩 축소 및 컴팩트 레이아웃 스타일
+# 💡 상단 패딩 축소 및 컴팩트 레이아웃 스타일 + 사이드바 접기 라벨
 st.markdown("""
 <style>
 .block-container {
@@ -84,6 +53,23 @@ div[data-testid="stExpander"] details summary {
 }
 div[data-testid="stExpander"] details div[data-testid="stExpanderDetails"] {
     padding: 6px 10px !important;
+}
+/* 사이드바 접기 버튼 텍스트 '◀ 사이드바 접기' 라벨 추가 */
+div[data-testid="stSidebarHeader"] button::after,
+button[data-testid="stSidebarCollapseButton"]::after,
+button[aria-label="Close sidebar"]::after,
+button[aria-label="Collapse sidebar"]::after {
+    content: " ◀ 사이드바 접기" !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    color: #1f77b4 !important;
+    margin-left: 6px !important;
+    white-space: nowrap !important;
+}
+div[data-testid="stSidebarHeader"] button,
+button[data-testid="stSidebarCollapseButton"] {
+    width: auto !important;
+    padding-right: 12px !important;
 }
 </style>
 <div class="compact-mirror-header">
