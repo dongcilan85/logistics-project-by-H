@@ -43,6 +43,9 @@ button[data-testid="stSidebarCollapseButton"] {
     padding-right: 12px !important;
 }
 /* 사이드바가 접혔을 때 펼치기 버튼 '사이드바 펼치기' 라벨 항시 노출 */
+header[data-testid="stHeader"] button[data-testid="stBaseButton-headerNoPadding"],
+header[data-testid="stHeader"] button[aria-label*="sidebar"],
+header[data-testid="stHeader"] button,
 div[data-testid="collapsedControl"] button,
 div[data-testid="collapsedControl"],
 button[data-testid="stSidebarCollapsedControl"],
@@ -52,11 +55,13 @@ button[aria-label="Expand sidebar"] {
     visibility: visible !important;
     width: auto !important;
 }
+header[data-testid="stHeader"] button[data-testid="stBaseButton-headerNoPadding"]::after,
+header[data-testid="stHeader"] button[aria-label*="sidebar"]::after,
 div[data-testid="collapsedControl"] button::after,
 button[data-testid="stSidebarCollapsedControl"]::after,
 button[aria-label="Open sidebar"]::after,
 button[aria-label="Expand sidebar"]::after {
-    content: "사이드바 펼치기" !important;
+    content: " 사이드바 펼치기" !important;
     font-size: 13px !important;
     font-weight: 700 !important;
     color: #1f77b4 !important;
@@ -64,6 +69,7 @@ button[aria-label="Expand sidebar"]::after {
     white-space: nowrap !important;
     opacity: 1 !important;
     visibility: visible !important;
+    display: inline-block !important;
 }
 </style>
 """, unsafe_allow_html=True)
