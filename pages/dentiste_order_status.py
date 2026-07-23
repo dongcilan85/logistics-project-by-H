@@ -53,7 +53,7 @@ st.markdown("""
 st.markdown("""
 <style>
 .block-container {
-    padding-top: 0.8rem !important;
+    padding-top: 2.5rem !important;
     padding-bottom: 0rem !important;
     padding-left: 1.2rem !important;
     padding-right: 1.2rem !important;
@@ -64,8 +64,9 @@ st.markdown("""
     justify-content: space-between;
     background: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 100%);
     color: white;
-    padding: 6px 14px;
+    padding: 8px 14px;
     border-radius: 6px;
+    margin-top: 6px;
     margin-bottom: 8px;
     font-size: 14px;
     font-weight: 700;
