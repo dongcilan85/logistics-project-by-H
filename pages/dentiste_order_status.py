@@ -54,17 +54,25 @@ div[data-testid="stExpander"] details summary {
 div[data-testid="stExpander"] details div[data-testid="stExpanderDetails"] {
     padding: 6px 10px !important;
 }
-/* 사이드바 접기 버튼 텍스트 '◀ 사이드바 접기' 라벨 추가 */
+/* 사이드바 접기 버튼 텍스트 '사이드바 접기' 라벨 항시 노출 고정 (화살표 제거) */
+div[data-testid="stSidebarHeader"],
+div[data-testid="stSidebarHeader"] button,
+button[data-testid="stSidebarCollapseButton"] {
+    opacity: 1 !important;
+    visibility: visible !important;
+}
 div[data-testid="stSidebarHeader"] button::after,
 button[data-testid="stSidebarCollapseButton"]::after,
 button[aria-label="Close sidebar"]::after,
 button[aria-label="Collapse sidebar"]::after {
-    content: " ◀ 사이드바 접기" !important;
+    content: "사이드바 접기" !important;
     font-size: 13px !important;
     font-weight: 700 !important;
     color: #1f77b4 !important;
     margin-left: 6px !important;
     white-space: nowrap !important;
+    opacity: 1 !important;
+    visibility: visible !important;
 }
 div[data-testid="stSidebarHeader"] button,
 button[data-testid="stSidebarCollapseButton"] {
