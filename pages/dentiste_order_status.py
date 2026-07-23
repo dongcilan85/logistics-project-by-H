@@ -18,7 +18,28 @@ def get_config(key, default=""):
     except:
         return default
 
-st.set_page_config(page_title="덴티스테 발주현황", page_icon="🚚", layout="wide", initial_sidebar_state="collapsed")
+# 💡 페이지 진입 즉시 사이드바 자동 닫기 (JS DOM 스크립트 제어)
+components.html(
+    """
+    <script>
+    function closeSidebar() {
+        const sidebar = window.parent.document.querySelector('[data-testid="stSidebar"]');
+        if (sidebar && sidebar.getAttribute('aria-expanded') === 'true') {
+            const toggleBtn = window.parent.document.querySelector('[data-testid="stSidebarCollapseButton"]') || 
+                              window.parent.document.querySelector('button[aria-label="Close sidebar"]') ||
+                              window.parent.document.querySelector('button[data-testid="baseButton-headerNoPadding"]') ||
+                              window.parent.document.querySelector('button[aria-label="Collapse sidebar"]');
+            if (toggleBtn) {
+                toggleBtn.click();
+            }
+        }
+    }
+    setTimeout(closeSidebar, 150);
+    </script>
+    """,
+    height=0,
+    width=0
+)
 
 st.title("🚚 덴티스테 발주현황 미러링")
 
