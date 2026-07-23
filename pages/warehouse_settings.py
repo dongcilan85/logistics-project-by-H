@@ -95,6 +95,23 @@ with st.container(border=True):
 st.divider()
 
 # -------------------------------------------------------------
+# [UI: 덴티스테 발주현황 미러링 연동 설정]
+# -------------------------------------------------------------
+st.subheader("🚚 덴티스테 발주현황 미러링 연동 설정")
+with st.container(border=True):
+    m_url = st.text_input("🔗 발주현황 웹사이트 URL", value=get_config("dentiste_order_url"), placeholder="https://example.com/order")
+    m_pw = st.text_input("🔑 접속 비밀번호", type="password", value=get_config("dentiste_order_pw"), placeholder="접속 비밀번호 입력")
+    
+    if st.button("💾 발주현황 미러링 설정 저장", use_container_width=True):
+        set_config("dentiste_order_url", m_url)
+        set_config("dentiste_order_pw", m_pw)
+        st.success("✅ 덴티스테 발주현황 미러링 정보가 안전하게 저장되었습니다.")
+        time.sleep(1)
+        st.rerun()
+
+st.divider()
+
+# -------------------------------------------------------------
 # [UI: 창고 리스트 관리]
 # -------------------------------------------------------------
 st.subheader("🏢 창고 코드 및 가용성 관리")
