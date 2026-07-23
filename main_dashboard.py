@@ -15,7 +15,7 @@ st.set_page_config(page_title="IWP 통합 관제 시스템", layout="wide", init
 # --- [Aesthetics: Premium Style] ---
 apply_premium_style()
 
-# 사이드바 접기 버튼 텍스트 '사이드바 접기' 라벨 항시 노출 고정 (화살표 제거)
+# 사이드바 접기/펼치기 버튼 텍스트 라벨 항시 노출 고정
 st.markdown("""
 <style>
 div[data-testid="stSidebarHeader"],
@@ -41,6 +41,29 @@ div[data-testid="stSidebarHeader"] button,
 button[data-testid="stSidebarCollapseButton"] {
     width: auto !important;
     padding-right: 12px !important;
+}
+/* 사이드바가 접혔을 때 펼치기 버튼 '사이드바 펼치기' 라벨 항시 노출 */
+div[data-testid="collapsedControl"] button,
+div[data-testid="collapsedControl"],
+button[data-testid="stSidebarCollapsedControl"],
+button[aria-label="Open sidebar"],
+button[aria-label="Expand sidebar"] {
+    opacity: 1 !important;
+    visibility: visible !important;
+    width: auto !important;
+}
+div[data-testid="collapsedControl"] button::after,
+button[data-testid="stSidebarCollapsedControl"]::after,
+button[aria-label="Open sidebar"]::after,
+button[aria-label="Expand sidebar"]::after {
+    content: "사이드바 펼치기" !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    color: #1f77b4 !important;
+    margin-left: 6px !important;
+    white-space: nowrap !important;
+    opacity: 1 !important;
+    visibility: visible !important;
 }
 </style>
 """, unsafe_allow_html=True)
