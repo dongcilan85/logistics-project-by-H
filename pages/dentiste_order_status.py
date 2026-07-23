@@ -18,7 +18,7 @@ def get_config(key, default=""):
     except:
         return default
 
-st.set_page_config(page_title="덴티스테 발주현황", page_icon="🚚", layout="wide")
+st.set_page_config(page_title="덴티스테 발주현황", page_icon="🚚", layout="wide", initial_sidebar_state="collapsed")
 
 st.title("🚚 덴티스테 발주현황 미러링")
 
