@@ -102,7 +102,7 @@ else:
         col1, col2 = st.columns([3.5, 1])
         with col1:
             if target_pw:
-                st.markdown(f"<span style='font-size:12.5px;'><b>설정된 비밀번호:</b> <code>{target_pw}</code> (로그인 창 비밀번호 입력란에 사용)</span>", unsafe_allow_html=True)
+                st.markdown(f"<span style='font-size:12.5px;'><b>PW :</b> <code>{target_pw}</code> (복사하여 로그인 창의 비밀번호 입력란에 사용하세요.)</span>", unsafe_allow_html=True)
             else:
                 st.caption("등록된 비밀번호가 없습니다. 필요시 [재고관리 환경설정]에서 등록하실 수 있습니다.")
         with col2:
