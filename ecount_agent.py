@@ -403,7 +403,6 @@ def process_inventory_excel(dl_path, is_hub=False):
             
             exp_date = None
             if exp_raw and exp_raw.lower() not in ('nan', 'none', ''):
-                import re
                 nums = re.sub(r'[^0-9]', '', exp_raw)
                 if len(nums) == 8: exp_date = f"{nums[:4]}-{nums[4:6]}-{nums[6:8]}"
                 elif len(nums) == 6: exp_date = f"20{nums[:2]}-{nums[2:4]}-{nums[4:6]}"
@@ -563,7 +562,7 @@ def process_warehouse_inventory_files(dl_path, warehouses):
     단가/재고비용은 통합 창고별재고현황 파일에서 (창고, 품목) 매핑으로 보강.
     """
     db_set("rpa_message", "유효기간 상세 데이터 파싱 준비 중...")
-    import re, urllib.parse
+    import urllib.parse
     mmdd = datetime.now().strftime("%m%d")
 
     # item_master에서 (품목코드 → 카테고리/단가) 맵 로드
@@ -784,15 +783,14 @@ def process_item_master_excel(dl_path, is_hub=False):
         upload_data = []
         discontinued_codes = []  # 단종 품목 코드 수집
         excluded_codes = []      # 카테고리 변경 등으로 제외된 품목 코드 수집
-        import re as _re
-        footer_pat = _re.compile(r'^\d{4}[-/]\d{1,2}[-/]\d{1,2}')
+        footer_pat = re.compile(r'^\d{4}[-/]\d{1,2}[-/]\d{1,2}')
         for _, row in df.iterrows():
             code = str(row.get(code_col, '')).strip()
             if not code or code.lower() in ('nan', 'none'): continue
             # 날짜 형태 footer 행 제외
             if footer_pat.match(code): continue
             # 합계/소계 행 제외
-            if _re.search(r'합계|총계|소계|Total', code, _re.IGNORECASE): continue
+            if re.search(r'합계|총계|소계|Total', code, re.IGNORECASE): continue
 
             item_name = str(row.get(name_col, '')).strip()
             # item_name 이 NaN/빈값이면 의미없는 행
