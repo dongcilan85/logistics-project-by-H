@@ -417,12 +417,14 @@ def process_inventory_excel(dl_path, is_hub=False):
                 if wh_code_val and wh_code_val in wh_name_map:
                     wh_name_final = wh_name_map[wh_code_val]
             
-            if is_hub and not wh_name_final.startswith("[HUB]"):
-                wh_name_final = f"[HUB] {wh_name_final}"
-            
-            # 허브 수집 시 '용인 창고' 재고만 업로드
-            if is_hub and wh_name_final != "[HUB] 용인 창고":
-                continue
+            # 💡 [요구사항] 허브 수집 시 띄어쓰기 유연 매칭으로 '용인' 포함 창고만 100% 정밀 선택하고 명칭을 '[HUB] 용인 창고'로 통일
+            if is_hub:
+                clean_wh = re.sub(r'\s+', '', raw_wh_name)
+                if '용인' not in clean_wh:
+                    continue
+                wh_name_final = "[HUB] 용인 창고"
+            elif not wh_name_final.startswith("[HUB]"):
+                pass
 
             item_name_spec_val = str(row.get(name_col, '')).strip()
             # 💡 [요구사항] 본사 및 허브 구분 없이 품목명 대괄호([]) 및 내부 텍스트 일괄 제거 정제
@@ -453,12 +455,18 @@ def process_inventory_excel(dl_path, is_hub=False):
             old_res = requests.get(f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details?select=*", headers=HEADERS)
             old_data = {f"{r['warehouse_name']}_{r['item_code']}": r['stock_qty'] for r in old_res.json()} if old_res.status_code == 200 else {}
 
-            # 먼저 현재 엑셀에 있는 창고의 기존 데이터만 삭제 (다른 창고 데이터는 유지)
-            current_warehouses = list(set([item['warehouse_name'] for item in upload_data]))
+            # 💡 [요구사항] 허브 수집 시 기존 DB의 모든 허브 창고([HUB] 관련 전체 및 용인 포함) 데이터를 싹 DELETE 초기화하여
+            # 옛날 띄어쓰기 오기 데이터로 인한 수량 중복 합산 및 품절/사용중단 품목 잔여를 100% 차단!
             import urllib.parse
-            for wh in current_warehouses:
-                safe_wh = urllib.parse.quote(wh)
-                requests.delete(f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details?warehouse_name=eq.{safe_wh}", headers=HEADERS)
+            if is_hub:
+                log("🗑️ [허브 수집] 기존 DB의 모든 허브 창고 재고 데이터 전면 초기화(DELETE) 진행...")
+                requests.delete(f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details?warehouse_name=like.*HUB*", headers=HEADERS)
+                requests.delete(f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details?warehouse_name=like.*용인*", headers=HEADERS)
+            else:
+                current_warehouses = list(set([item['warehouse_name'] for item in upload_data]))
+                for wh in current_warehouses:
+                    safe_wh = urllib.parse.quote(wh)
+                    requests.delete(f"{SUPABASE_URL}/rest/v1/warehouse_inventory_details?warehouse_name=eq.{safe_wh}", headers=HEADERS)
             
             history_entries = []
             today_str = datetime.now(KST).strftime('%Y-%m-%d')
