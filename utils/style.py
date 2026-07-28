@@ -152,6 +152,73 @@ def apply_premium_style():
             margin: 2rem 0;
         }
 
+        /* --- [사이드바 접힘/펼침 버튼 정밀 전역 스타일] --- */
+        /* 1. 사이드바가 접혔을 때 (Collapsed) -> 좌측 상단 푸른색 '사이드바 펼치기' 텍스트 버튼으로 변환 */
+        div[data-testid="stSidebarCollapsedControl"],
+        button[data-testid="stSidebarCollapsedControl"],
+        div[data-testid="collapsedControl"] button,
+        button[aria-label="Open sidebar"],
+        button[aria-label="Expand sidebar"] {
+            opacity: 1 !important;
+            visibility: visible !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            background-color: #1f77b4 !important;
+            color: #ffffff !important;
+            border-radius: 6px !important;
+            border: 1px solid #1d4ed8 !important;
+            padding: 6px 14px !important;
+            height: auto !important;
+            width: auto !important;
+            min-height: 32px !important;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15) !important;
+            margin-left: 8px !important;
+            margin-top: 4px !important;
+        }
+
+        /* 내부 기존 화살표 SVG 숨김 및 ::after 가상요소로 '사이드바 펼치기' 흰색 텍스트 주입 */
+        div[data-testid="stSidebarCollapsedControl"] svg,
+        button[data-testid="stSidebarCollapsedControl"] svg,
+        div[data-testid="collapsedControl"] button svg,
+        button[aria-label="Open sidebar"] svg,
+        button[aria-label="Expand sidebar"] svg {
+            display: none !important;
+        }
+
+        div[data-testid="stSidebarCollapsedControl"]::after,
+        button[data-testid="stSidebarCollapsedControl"]::after,
+        div[data-testid="collapsedControl"] button::after,
+        button[aria-label="Open sidebar"]::after,
+        button[aria-label="Expand sidebar"]::after {
+            content: "사이드바 펼치기" !important;
+            font-size: 13px !important;
+            font-weight: 700 !important;
+            color: #ffffff !important;
+            white-space: nowrap !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+        }
+
+        /* 2. 사이드바가 펼쳐져 있을 때 (Expanded) -> 사이드바 상단 접기 버튼은 깔끔한 기본 아이콘 형태 유지 (파란색 상자 배경 제거!) */
+        div[data-testid="stSidebarHeader"] button,
+        button[data-testid="stSidebarCollapseButton"],
+        button[aria-label="Close sidebar"],
+        button[aria-label="Collapse sidebar"] {
+            background-color: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            color: var(--sb-txt) !important;
+        }
+
+        div[data-testid="stSidebarHeader"] button svg,
+        button[data-testid="stSidebarCollapseButton"] svg,
+        button[aria-label="Close sidebar"] svg,
+        button[aria-label="Collapse sidebar"] svg {
+            display: inline-block !important;
+            color: var(--sb-txt) !important;
+        }
+
         /* Tab Styling */
         .stTabs [data-baseweb="tab-list"] {
             gap: 24px;
