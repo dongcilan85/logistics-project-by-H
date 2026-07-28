@@ -42,11 +42,14 @@ button[data-testid="stSidebarCollapseButton"] {
     width: auto !important;
     padding-right: 12px !important;
 }
-/* 사이드바가 접혔을 때 오직 좌측 상단 펼치기 버튼에만 '사이드바 펼치기' 라벨 정밀 적용 */
+/* 우측 툴바(stToolbar) 항목은 완벽히 제외(:not)하고 좌측 상단 펼치기 토글 버튼에만 '사이드바 펼치기' 라벨 100% 노출 */
 [data-testid="stSidebarCollapsedControl"],
 [data-testid="stSidebarCollapsedControl"] *,
 div[data-testid="collapsedControl"],
-div[data-testid="collapsedControl"] * {
+div[data-testid="collapsedControl"] *,
+button[aria-label*="sidebar"]:not([data-testid="stToolbar"] *),
+button[aria-label*="Sidebar"]:not([data-testid="stToolbar"] *),
+header[data-testid="stHeader"] button:not([data-testid="stToolbar"] *):first-of-type {
     overflow: visible !important;
 }
 
@@ -54,8 +57,9 @@ div[data-testid="collapsedControl"] * {
 [data-testid="stSidebarCollapsedControl"] button,
 div[data-testid="collapsedControl"],
 div[data-testid="collapsedControl"] button,
-button[aria-label="Open sidebar"],
-button[aria-label="Expand sidebar"] {
+button[aria-label*="sidebar"]:not([data-testid="stToolbar"] *),
+button[aria-label*="Sidebar"]:not([data-testid="stToolbar"] *),
+header[data-testid="stHeader"] button:not([data-testid="stToolbar"] *):first-of-type {
     opacity: 1 !important;
     visibility: visible !important;
     width: auto !important;
@@ -68,8 +72,9 @@ button[aria-label="Expand sidebar"] {
 [data-testid="stSidebarCollapsedControl"] button::after,
 div[data-testid="collapsedControl"]::after,
 div[data-testid="collapsedControl"] button::after,
-button[aria-label="Open sidebar"]::after,
-button[aria-label="Expand sidebar"]::after {
+button[aria-label*="sidebar"]:not([data-testid="stToolbar"] *)::after,
+button[aria-label*="Sidebar"]:not([data-testid="stToolbar"] *)::after,
+header[data-testid="stHeader"] button:not([data-testid="stToolbar"] *):first-of-type::after {
     content: " 사이드바 펼치기" !important;
     font-size: 13px !important;
     font-weight: 700 !important;
