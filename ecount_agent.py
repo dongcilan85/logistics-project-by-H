@@ -237,7 +237,7 @@ def execute_rpa(task="all"):
                         ok_inv, msg_inv = hub_rpa.get_inventory_balance()
                         if ok_inv:
                             log("📊 [동기화] 허브 재고 엑셀 → DB 업로드 중...")
-                            parse_and_upload_excel(dl_path, is_hub=True)
+                            process_inventory_excel(dl_path, is_hub=True)
 
                         if task == "all":
                             log("📦 [허브] 품목 마스터 수집 시작...")
