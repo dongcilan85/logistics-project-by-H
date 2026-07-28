@@ -152,46 +152,53 @@ def apply_premium_style():
             margin: 2rem 0;
         }
 
-        /* --- [사이드바 접힘/펼침 텍스트 버튼 전역 스타일 (DOM 셀렉터 완벽 강화)] --- */
-        /* 1. 사이드바가 접혔을 때 (Collapsed): 첫 번째 이미지의 회색 >> 아이콘을 푸른색 '>> 사이드바 펼치기' 텍스트 버튼으로 변환 */
+        /* --- [사이드바 접힘/펼침 텍스트 버튼 전역 스타일 (최상위 레이어 및 화살표 중복 제거)] --- */
+        /* 1. 사이드바가 접혔을 때 (Collapsed) -> 최상위 레이어 '사이드바 펼치기' 파란색 텍스트 버튼 */
         [data-testid="stSidebarCollapsedControl"],
         [data-testid="stSidebarCollapsedControl"] button,
         [data-testid="collapsedControl"],
         [data-testid="collapsedControl"] button,
         button[aria-label="Open sidebar"],
         button[aria-label="Expand sidebar"] {
+            position: fixed !important;
+            top: 12px !important;
+            left: 14px !important;
+            z-index: 10000005 !important;
             opacity: 1 !important;
             visibility: visible !important;
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
-            background-color: transparent !important;
-            border: none !important;
-            box-shadow: none !important;
-            padding: 4px 8px !important;
-            width: auto !important;
+            background-color: rgba(255, 255, 255, 0.9) !important;
+            border: 1px solid #1f77b4 !important;
+            border-radius: 6px !important;
+            padding: 4px 10px !important;
             height: auto !important;
+            width: auto !important;
+            min-height: 28px !important;
             cursor: pointer !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
         }
 
-        /* 내부 기존 화살표 SVG 완벽 차단 및 숨김 */
-        [data-testid="stSidebarCollapsedControl"] svg,
-        [data-testid="stSidebarCollapsedControl"] button svg,
-        [data-testid="collapsedControl"] svg,
-        [data-testid="collapsedControl"] button svg,
-        button[aria-label="Open sidebar"] svg,
-        button[aria-label="Expand sidebar"] svg {
+        /* 내부 기존 모든 화살표/아이콘 태그 100% 완전 소멸 */
+        [data-testid="stSidebarCollapsedControl"] *,
+        [data-testid="collapsedControl"] *,
+        button[aria-label="Open sidebar"] *,
+        button[aria-label="Expand sidebar"] * {
             display: none !important;
+            font-size: 0 !important;
+            width: 0 !important;
+            height: 0 !important;
         }
 
-        /* 가상 요소 ::after 로 파란색 '>> 사이드바 펼치기' 텍스트 버튼 주입 */
+        /* 파란색 텍스트로 '사이드바 펼치기' 주입 (화살표 중복 기호 제거) */
         [data-testid="stSidebarCollapsedControl"]::after,
         [data-testid="stSidebarCollapsedControl"] button::after,
         [data-testid="collapsedControl"]::after,
         [data-testid="collapsedControl"] button::after,
         button[aria-label="Open sidebar"]::after,
         button[aria-label="Expand sidebar"]::after {
-            content: ">> 사이드바 펼치기" !important;
+            content: "사이드바 펼치기" !important;
             font-size: 13px !important;
             font-weight: 700 !important;
             color: #1f77b4 !important;
@@ -201,7 +208,7 @@ def apply_premium_style():
             display: inline-block !important;
         }
 
-        /* 2. 사이드바가 펼쳐졌을 때 (Expanded): 두 번째 이미지의 '<< 사이드바 접기' 파란색 텍스트 버튼 스타일 유지 */
+        /* 2. 사이드바가 펼쳐졌을 때 (Expanded) -> 사이드바 상단 '사이드바 접기' 파란색 텍스트 버튼 */
         [data-testid="stSidebarHeader"] button,
         button[data-testid="stSidebarCollapseButton"],
         button[aria-label="Close sidebar"],
@@ -220,18 +227,23 @@ def apply_premium_style():
             cursor: pointer !important;
         }
 
-        [data-testid="stSidebarHeader"] button svg,
-        button[data-testid="stSidebarCollapseButton"] svg,
-        button[aria-label="Close sidebar"] svg,
-        button[aria-label="Collapse sidebar"] svg {
+        /* 내부 기존 모든 화살표/아이콘 태그 100% 완전 소멸 */
+        [data-testid="stSidebarHeader"] button *,
+        button[data-testid="stSidebarCollapseButton"] *,
+        button[aria-label="Close sidebar"] *,
+        button[aria-label="Collapse sidebar"] * {
             display: none !important;
+            font-size: 0 !important;
+            width: 0 !important;
+            height: 0 !important;
         }
 
+        /* 파란색 텍스트로 '사이드바 접기' 주입 (화살표 중복 기호 제거) */
         [data-testid="stSidebarHeader"] button::after,
         button[data-testid="stSidebarCollapseButton"]::after,
         button[aria-label="Close sidebar"]::after,
         button[aria-label="Collapse sidebar"]::after {
-            content: "<< 사이드바 접기" !important;
+            content: "사이드바 접기" !important;
             font-size: 13px !important;
             font-weight: 700 !important;
             color: #1f77b4 !important;
