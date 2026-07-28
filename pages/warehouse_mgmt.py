@@ -1044,7 +1044,109 @@ with c4:
 if st.session_state.kpi_selected:
     st.divider()
     kpi_sel = st.session_state.kpi_selected
-    
+
+    def display_reorder_sub_table(src_df, key_suffix="kpi_reorder"):
+        """발주 필요 부자재 전용 품목별 통합 합산 테이블 (창고/유효기간/과잉배수 제외, 안전재고 포함)"""
+        st.subheader("🛠️ 발주 필요 부자재 내역")
+        if src_df.empty:
+            st.info("해당 조건의 데이터가 없습니다.")
+            return
+            
+        summary = src_df.groupby(['item_code', 'item_name_spec']).agg({
+            'stock_qty': 'sum',
+            'planned_qty': 'sum',
+            'actual_stock': 'sum',
+            'safety_stock': 'max',
+            'unit_price': 'max',
+            'inventory_cost': 'sum'
+        }).reset_index()
+        
+        summary['status'] = ("본사_" + summary['item_code']).map(item_status_map).fillna("❌ 품절")
+        summary = summary.sort_values(by='actual_stock')
+        
+        cols_to_show = ['status', 'item_code', 'item_name_spec', 'stock_qty', 'safety_stock', 'planned_qty', 'actual_stock', 'unit_price', 'inventory_cost']
+        col_config = {
+            "status": "상태",
+            "item_code": "품목코드",
+            "item_name_spec": "품목명[규격]",
+            "stock_qty": st.column_config.NumberColumn("ERP 재고", format="%,d"),
+            "safety_stock": st.column_config.NumberColumn("안전재고", format="%,d"),
+            "planned_qty": st.column_config.NumberColumn("사용 예정", format="%,d"),
+            "actual_stock": st.column_config.NumberColumn("실 가용재고", format="%,d"),
+            "unit_price": st.column_config.NumberColumn("입고단가", format="₩%,d"),
+            "inventory_cost": st.column_config.NumberColumn("재고비용", format="₩%,d")
+        }
+        
+        st.markdown("##### 📊 조회 항목 요약")
+        mc1, mc2, mc3, mc4 = st.columns(4)
+        mc1.metric("총 ERP 재고", f"{int(summary['stock_qty'].sum()):,}")
+        mc2.metric("총 사용 예정", f"{int(summary['planned_qty'].sum()):,}")
+        mc3.metric("총 실 가용재고", f"{int(summary['actual_stock'].sum()):,}")
+        mc4.metric("총 재고비용", f"₩{int(summary['inventory_cost'].sum()):,}")
+        
+        disp_df = summary[cols_to_show].copy()
+        
+        def style_row(row):
+            status = row.get('status')
+            if status == "❌ 품절":
+                return ['background-color: rgba(255, 0, 0, 0.15)'] * len(row)
+            elif status == "⚠️ 부족":
+                return ['background-color: rgba(255, 255, 0, 0.15)'] * len(row)
+            return [''] * len(row)
+
+        ver_key = f"df_ver_{key_suffix}"
+        if ver_key not in st.session_state:
+            st.session_state[ver_key] = 0
+
+        sel_event = st.dataframe(
+            disp_df.style.apply(style_row, axis=1),
+            column_config=col_config,
+            use_container_width=True, hide_index=True,
+            on_select="rerun",
+            selection_mode="single-row",
+            key=f"df_{key_suffix}_{st.session_state[ver_key]}"
+        )
+        
+        import io
+        excel_buffer = io.BytesIO()
+        col_rename_excel = {
+            "status": "상태", "item_code": "품목코드", "item_name_spec": "품목명[규격]",
+            "stock_qty": "ERP 재고", "safety_stock": "안전재고", "planned_qty": "사용 예정",
+            "actual_stock": "실 가용재고", "unit_price": "입고단가", "inventory_cost": "재고비용"
+        }
+        export_df_excel = disp_df.rename(columns=col_rename_excel)
+        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+            export_df_excel.to_excel(writer, index=False, sheet_name="발주필요부자재")
+            workbook = writer.book
+            worksheet = writer.sheets["발주필요부자재"]
+            for col in worksheet.columns:
+                max_len = 0
+                col_letter = col[0].column_letter
+                for cell in col:
+                    val = str(cell.value or '')
+                    val_len = len(val.encode('utf-8'))
+                    if val_len > max_len:
+                        max_len = val_len
+                worksheet.column_dimensions[col_letter].width = max(max_len + 3, 12)
+                
+        st.download_button(
+            label="📥 현재 테이블 엑셀 다운로드",
+            data=excel_buffer.getvalue(),
+            file_name=f"IWP_reorder_sub_materials_{datetime.now().strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+            key=f"dl_excel_{key_suffix}"
+        )
+        
+        selected_rows = sel_event.selection.rows if hasattr(sel_event, 'selection') and hasattr(sel_event.selection, 'rows') else []
+        if selected_rows:
+            selected_idx = selected_rows[0]
+            selected_row_data = disp_df.iloc[selected_idx]
+            sel_code = selected_row_data['item_code']
+            sel_name = selected_row_data['item_name_spec']
+            st.session_state[ver_key] += 1
+            render_usage_plan_ui(sel_code, sel_name, key_suffix)
+
     def display_summary_table(src_df, title, is_excess=False):
         """가용 재고 기준 품목별 합산 간소화 테이블 (본사 전용)"""
         st.subheader(title)
@@ -1139,8 +1241,7 @@ if st.session_state.kpi_selected:
         excess_df = avail_product_df[avail_product_df['item_code'].isin(excess_codes)]
         display_inventory_table(excess_df, "kpi_excess")
     elif kpi_sel == "reorder_sub":
-        st.subheader("🛠️ 발주 필요 부자재 내역")
-        display_inventory_table(reorder_sub_df, "kpi_reorder")
+        display_reorder_sub_table(reorder_sub_df, "kpi_reorder")
 
 st.divider()
 
