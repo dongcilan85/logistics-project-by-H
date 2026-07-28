@@ -890,8 +890,11 @@ def display_inventory_table(target_df, key_suffix=""):
             
         render_usage_plan_ui(sel_code, sel_name, key_suffix)
 
-# 발주 필요 부자재 집계 (본사만 대상 - ⚠️ 부족 및 ❌ 품절 상태 품목 + ERP 재고 0인 품목 마스터 전수 포함)
-sub_master_hq = item_df_raw[(item_df_raw['category'] == "부재료") & (item_df_raw['division'] == '본사')] if not item_df_raw.empty else pd.DataFrame()
+# 발주 필요 부자재 집계 (본사만 대상 - ⚠️ 부족 및 ❌ 품절 상태 품목 + ERP 재고 0인 품목 마스터 전수 포함, 단 안전재고 > 0 인 품목만 한정)
+sub_master_hq = pd.DataFrame()
+if not item_df_raw.empty:
+    _safety_ser = pd.to_numeric(item_df_raw['safety_stock'], errors='coerce').fillna(0)
+    sub_master_hq = item_df_raw[(item_df_raw['category'] == "부재료") & (item_df_raw['division'] == '본사') & (_safety_ser > 0)].copy()
 
 reorder_sub_codes_set = set()
 if not agg_df.empty:
@@ -1062,6 +1065,8 @@ if st.session_state.kpi_selected:
         }).reset_index()
         
         summary['status'] = ("본사_" + summary['item_code']).map(item_status_map).fillna("❌ 품절")
+        # 💡 [요구사항] 안전재고가 0인 품목은 사용 종료된 품목이므로 발주 필요 목록에서 배제
+        summary = summary[summary['safety_stock'] > 0]
         summary = summary.sort_values(by='actual_stock')
         
         cols_to_show = ['status', 'item_code', 'item_name_spec', 'stock_qty', 'safety_stock', 'planned_qty', 'actual_stock', 'unit_price', 'inventory_cost']
