@@ -879,6 +879,16 @@ else:
                     set_config("rpa_status", "pending")
                     st.success("전체 수집 명령 전달됨!"); time.sleep(1); st.rerun()
 
+                r1, r2 = st.columns(2)
+                with r1:
+                    if st.button("🏢 본사 전용", use_container_width=True):
+                        set_config("rpa_trigger", "hq_only")
+                        set_config("rpa_status", "pending"); st.rerun()
+                with r2:
+                    if st.button("🚚 허브 전용", use_container_width=True):
+                        set_config("rpa_trigger", "hub_only")
+                        set_config("rpa_status", "pending"); st.rerun()
+
                 if st.button("📦 품목마스터", use_container_width=True):
                     set_config("rpa_trigger", "item_master")
                     set_config("rpa_status", "pending"); st.rerun()

@@ -107,6 +107,8 @@ def db_set(key, value):
 # --- 핵심 RPA 실행 ---
 TASK_LABELS = {
     "all": "전체 데이터 수집",
+    "hq_only": "본사 전용 데이터 수집",
+    "hub_only": "허브 전용 데이터 수집",
     "inventory_balance": "창고별재고현황 수집",
     "warehouse_inventory": "관리항목별재고현황(유효기간) 순회 수집",
     "item_master": "품목 마스터 수집",
@@ -122,20 +124,7 @@ def execute_rpa(task="all"):
     db_set("rpa_message", f"{task_label} 준비 중...")
 
     try:
-        log("🔍 [1단계] 이카운트 설정값 읽는 중...")
-        com_code  = db_get("ecount_com_code")
-        user_id   = db_get("ecount_user_id")
-        user_pw   = db_get("ecount_user_pw")
-
-        log(f"   - 회사코드: {com_code[:2]}***")
-        log(f"   - 아이디: {user_id[:2]}***")
-
-        if com_code in ("NULL", "ERROR") or user_id in ("NULL", "ERROR"):
-            raise Exception("이카운트 계정 정보가 DB에 없습니다. 환경설정에서 입력해 주세요.")
-
-        log("🌐 [2단계] 브라우저 드라이버 설정 중...")
-
-        # 다운로드 경로 및 브라우저 모드 설정 (DB에서 읽기)
+        # 다운로드 경로 설정
         dl_path = db_get("ecount_download_path")
         headless_val = db_get("ecount_headless")
         is_headless = True if str(headless_val).lower() == 'true' else False
@@ -143,7 +132,6 @@ def execute_rpa(task="all"):
         if dl_path in ("NULL", "ERROR", ""):
             dl_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Ecount_stocks")
 
-        # 💡 [요구사항] 네트워크 경로(UNC) 인식 실패(WinError 123 등) 시 로컬 Ecount_stocks 폴더로 안전하게 폴백
         try:
             if not os.path.exists(dl_path):
                 os.makedirs(dl_path, exist_ok=True)
@@ -151,125 +139,126 @@ def execute_rpa(task="all"):
             dl_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Ecount_stocks")
             os.makedirs(dl_path, exist_ok=True)
 
-        log("🖥️ [3단계] 크롬 브라우저를 실행합니다... (잠시만 기다려 주세요)")
-        rpa = EcountRPA(com_code, user_id, user_pw, dl_path, headless=is_headless, status_cb=lambda m: db_set("rpa_message", m[:100]))
-        active_rpa_instances.add(rpa)
+        # -------------------------------------------------------------
+        # 1. 본사(HQ) 계정 수집 루틴 (task != "hub_only" 일 때만 실행)
+        # -------------------------------------------------------------
+        if task != "hub_only":
+            log("🔍 [1단계] 본사 이카운트 설정값 읽는 중...")
+            com_code  = db_get("ecount_com_code")
+            user_id   = db_get("ecount_user_id")
+            user_pw   = db_get("ecount_user_pw")
 
-        try:
-            db_set("rpa_message", "이카운트 로그인 시도 중...")
-            log("[4단계] 이카운트 로그인 시도 중...")
-            success, msg = rpa.login()
+            if com_code in ("NULL", "ERROR") or user_id in ("NULL", "ERROR"):
+                raise Exception("이카운트 계정 정보가 DB에 없습니다. 환경설정에서 입력해 주세요.")
 
-            if not success:
-                raise Exception(f"로그인 실패: {msg}")
+            log("🖥️ [본사] 크롬 브라우저를 실행합니다... (잠시만 기다려 주세요)")
+            rpa = EcountRPA(com_code, user_id, user_pw, dl_path, headless=is_headless, status_cb=lambda m: db_set("rpa_message", m[:100]))
+            active_rpa_instances.add(rpa)
 
-            log(f"[5단계] 로그인 성공! '{task_label}'을(를) 시작합니다.")
-
-            # [요청] 창고별재고현황 (inventory_balance) 수집 중단 (추후 사용을 위해 주석 처리)
-            # if task in ("all", "inventory_balance"):
-            #     log("📊 [작업] 창고별재고현황 수집 시작...")
-            #     db_set("rpa_message", "창고별재고현황 수집 중...")
-            #     ok_inv, msg_inv = rpa.get_inventory_balance()
-            #     if ok_inv:
-            #         log("📊 [동기화] 창고별재고현황 엑셀 → DB 업로드 중...")
-            #         process_inventory_excel(dl_path)
-            # 작업 2: 관리항목별재고현황 (warehouse_inventory) — 유효기간 순회
-            if task in ("all", "warehouse_inventory"):
-                log("🔄 [작업] 관리항목별재고현황(유효기간) 순회 수집 시작...")
-                db_set("rpa_message", "창고별 순회 수집 중...")
-
-                wh_url = f"{SUPABASE_URL}/rest/v1/warehouse_codes?select=warehouse_code,warehouse_name"
-                wh_resp = requests.get(wh_url, headers=HEADERS, timeout=5)
-                warehouses = wh_resp.json()
-
-                if warehouses:
-                    log(f"   - 대상 창고: {len(warehouses)}개")
-                    success_iter, msg_iter = rpa.get_item_inventory_by_warehouse(warehouses)
-                    log(f"   - 결과: {msg_iter}")
-
-                    log("📊 [동기화] 창고별 유효기간 상세 → DB 업로드 중...")
-                    db_set("rpa_message", "유효기간 데이터 DB 동기화 중...")
-                    process_warehouse_inventory_files(dl_path, warehouses)
-                else:
-                    log("⚠️ 등록된 창고 코드가 없어 순회 수집을 건너뜁니다.")
-
-            # 작업 3: 품목 마스터 + 재고변동표 (item_master 트리거에 포함)
-            if task in ("all", "item_master"):
-                log("📦 [작업] 품목 마스터(품목등록) 수집 시작...")
-                db_set("rpa_message", "품목 마스터 수집 중...")
-                success_item, item_file = rpa.get_item_master_excel()
-                if success_item:
-                    log("📊 [동기화] 품목 마스터 → DB 업로드 중...")
-                    process_item_master_excel(dl_path)
-                else:
-                    log(f"⚠️ 품목 마스터 수집 건너뜀: {item_file}")
-
-                # 재고변동표 수집 (품목마스터 트리거에 포함)
-                log("📊 [작업] 재고변동표 수집 시작...")
-                db_set("rpa_message", "재고변동표 수집 중...")
-                success_mv, mv_msg = rpa.get_inventory_movement()
-                if success_mv:
-                    log("📊 [동기화] 재고변동표 → 월평균 사용량 계산 중...")
-                    process_inventory_movement_excel(dl_path)
-                else:
-                    log(f"⚠️ 재고변동표 수집 건너뜀: {mv_msg}")
-
-            db_set("rpa_status", "completed")
-            db_set("rpa_message", f"{task_label} 본사 수집 완료")
-            log(f"[본사 완료] '{task_label}' 작업이 성공적으로 끝났습니다.")
-
-        finally:
-            log("본사 브라우저를 종료합니다.")
-            rpa.close()
-            active_rpa_instances.discard(rpa)
-
-        # --- 허브(Hub) 계정 수집 로직 ---
-        hub_com = db_get("hub_com_code")
-        hub_id  = db_get("hub_user_id")
-        hub_pw  = db_get("hub_user_pw")
-
-        if hub_com and hub_id and hub_com not in ("NULL", "ERROR", ""):
-            log("🏢 [허브] 허브 계정 설정이 확인되어 추가 수집을 시작합니다.")
-            
-            hub_rpa = EcountRPA(hub_com, hub_id, hub_pw, dl_path, headless=is_headless, status_cb=lambda m: db_set("rpa_message", f"[Hub] {m[:80]}"))
-            active_rpa_instances.add(hub_rpa)
-            
             try:
-                db_set("rpa_message", "[Hub] 허브 계정 로그인 시도 중...")
-                success, msg = hub_rpa.login()
+                db_set("rpa_message", "본사 이카운트 로그인 시도 중...")
+                log("[본사] 이카운트 로그인 시도 중...")
+                success, msg = rpa.login()
+
                 if not success:
-                    log(f"⚠️ [허브] 로그인 실패: {msg}", level="warning")
-                else:
-                    log("📊 [허브] 허브 재고 수집 (유효기간 제외 단순 수집) 시작...")
-                    db_set("rpa_message", "[Hub] 창고별재고현황 수집 중...")
-                    ok_inv, msg_inv = hub_rpa.get_inventory_balance()
-                    if ok_inv:
-                        log("📊 [동기화] 허브 재고 엑셀 → DB 업로드 중...")
-                        process_inventory_excel(dl_path, is_hub=True)
+                    raise Exception(f"본사 로그인 실패: {msg}")
 
-                    if task in ("all", "item_master"):
-                        log("📦 [허브] 품목 마스터 수집 시작...")
-                        db_set("rpa_message", "[Hub] 품목 마스터 수집 중...")
-                        success_item, item_file = hub_rpa.get_item_master_excel()
-                        if success_item:
-                            log("📊 [동기화] 허브 품목 마스터 → DB 업로드 중...")
-                            process_item_master_excel(dl_path, is_hub=True)
-                        else:
-                            log(f"⚠️ [허브] 품목 마스터 수집 건너뜀: {item_file}", level="warning")
+                log(f"[본사] 로그인 성공! '{task_label}' 수집을 시작합니다.")
 
-                    log("✅ [허브 완료] 허브 재고 수집 및 동기화가 끝났습니다.")
-                    db_set("rpa_status", "idle")
-                    db_set("rpa_message", "대기 중")
+                # 작업 1: 관리항목별재고현황(유효기간) 순회
+                if task in ("all", "hq_only", "warehouse_inventory"):
+                    log("🔄 [작업] 관리항목별재고현황(유효기간) 순회 수집 시작...")
+                    db_set("rpa_message", "창고별 순회 수집 중...")
+
+                    wh_url = f"{SUPABASE_URL}/rest/v1/warehouse_codes?select=warehouse_code,warehouse_name"
+                    wh_resp = requests.get(wh_url, headers=HEADERS, timeout=5)
+                    warehouses = wh_resp.json()
+
+                    if warehouses:
+                        log(f"   - 대상 창고: {len(warehouses)}개")
+                        success_iter, msg_iter = rpa.get_item_inventory_by_warehouse(warehouses)
+                        log(f"   - 결과: {msg_iter}")
+
+                        log("📊 [동기화] 창고별 유효기간 상세 → DB 업로드 중...")
+                        db_set("rpa_message", "유효기간 데이터 DB 동기화 중...")
+                        process_warehouse_inventory_files(dl_path, warehouses)
+                    else:
+                        log("⚠️ 등록된 창고 코드가 없어 순회 수집을 건너뜁니다.")
+
+                # 작업 2: 품목 마스터 + 재고변동표
+                if task in ("all", "hq_only", "item_master"):
+                    log("📦 [작업] 품목 마스터(품목등록) 수집 시작...")
+                    db_set("rpa_message", "품목 마스터 수집 중...")
+                    success_item, item_file = rpa.get_item_master_excel()
+                    if success_item:
+                        log("📊 [동기화] 품목 마스터 → DB 업로드 중...")
+                        process_item_master_excel(dl_path)
+                    else:
+                        log(f"⚠️ 품목 마스터 수집 건너뜀: {item_file}")
+
+                    log("📊 [작업] 재고변동표 수집 시작...")
+                    db_set("rpa_message", "재고변동표 수집 중...")
+                    success_mv, mv_msg = rpa.get_inventory_movement()
+                    if success_mv:
+                        log("📊 [동기화] 재고변동표 → 월평균 사용량 계산 중...")
+                        process_inventory_movement_excel(dl_path)
+                    else:
+                        log(f"⚠️ 재고변동표 수집 건너뜀: {mv_msg}")
+
+                log(f"✅ [본사 완료] '{task_label}' 작업이 성공적으로 끝났습니다.")
+
             finally:
-                log("허브 브라우저를 종료합니다.")
-                hub_rpa.close()
-                active_rpa_instances.discard(hub_rpa)
-        else:
-            # 허브 계정이 없어서 본사만 수행한 경우에도 idle로 초기화 (잠시 후 상태창 닫히게)
-            import time
-            time.sleep(2)
-            db_set("rpa_status", "idle")
-            db_set("rpa_message", "대기 중")
+                log("본사 브라우저를 종료합니다.")
+                rpa.close()
+                active_rpa_instances.discard(rpa)
+
+        # -------------------------------------------------------------
+        # 2. 허브(Hub) 계정 수집 루틴 (task in ("all", "hub_only") 일 때만 실행)
+        # -------------------------------------------------------------
+        if task in ("all", "hub_only"):
+            hub_com = db_get("hub_com_code")
+            hub_id  = db_get("hub_user_id")
+            hub_pw  = db_get("hub_user_pw")
+
+            if hub_com and hub_id and hub_com not in ("NULL", "ERROR", ""):
+                log("🏢 [허브] 허브 계정 설정이 확인되어 전용 수집을 시작합니다.")
+                
+                hub_rpa = EcountRPA(hub_com, hub_id, hub_pw, dl_path, headless=is_headless, status_cb=lambda m: db_set("rpa_message", f"[Hub] {m[:80]}"))
+                active_rpa_instances.add(hub_rpa)
+                
+                try:
+                    db_set("rpa_message", "[Hub] 허브 계정 로그인 시도 중...")
+                    success, msg = hub_rpa.login()
+                    if not success:
+                        log(f"⚠️ [허브] 로그인 실패: {msg}", level="warning")
+                    else:
+                        log("📊 [허브] 허브 재고 수집 시작...")
+                        db_set("rpa_message", "[Hub] 창고별재고현황 수집 중...")
+                        ok_inv, msg_inv = hub_rpa.get_inventory_balance()
+                        if ok_inv:
+                            log("📊 [동기화] 허브 재고 엑셀 → DB 업로드 중...")
+                            parse_and_upload_excel(dl_path, is_hub=True)
+
+                        if task == "all":
+                            log("📦 [허브] 품목 마스터 수집 시작...")
+                            db_set("rpa_message", "[Hub] 품목 마스터 수집 중...")
+                            success_item, item_file = hub_rpa.get_item_master_excel()
+                            if success_item:
+                                log("📊 [동기화] 허브 품목 마스터 → DB 업로드 중...")
+                                process_item_master_excel(dl_path, is_hub=True)
+
+                        log("✅ [허브 완료] 허브 용인 창고 재고 동기화가 완전히 끝났습니다.")
+                finally:
+                    log("허브 브라우저를 종료합니다.")
+                    hub_rpa.close()
+                    active_rpa_instances.discard(hub_rpa)
+            else:
+                log("⚠️ 허브 계정 정보가 등록되어 있지 않습니다.")
+
+        import time
+        time.sleep(2)
+        db_set("rpa_status", "idle")
+        db_set("rpa_message", "대기 중")
 
     except Exception as e:
         error_msg = str(e)
