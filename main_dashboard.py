@@ -15,7 +15,7 @@ st.set_page_config(page_title="IWP 통합 관제 시스템", layout="wide", init
 # --- [Aesthetics: Premium Style] ---
 apply_premium_style()
 
-# 사이드바 접기/펼치기 버튼 텍스트 라벨 항시 노출 고정
+# 사이드바 접기/펼치기 버튼 텍스트 라벨 및 스타일링
 st.markdown("""
 <style>
 div[data-testid="stSidebarHeader"],
@@ -42,50 +42,25 @@ button[data-testid="stSidebarCollapseButton"] {
     width: auto !important;
     padding-right: 12px !important;
 }
-/* 우측 툴바(stToolbar) 항목은 완벽히 제외(:not)하고 좌측 상단 펼치기 토글 버튼에만 '사이드바 펼치기' 라벨 100% 노출 */
-[data-testid="stSidebarCollapsedControl"],
-[data-testid="stSidebarCollapsedControl"] *,
-div[data-testid="collapsedControl"],
-div[data-testid="collapsedControl"] *,
-button[aria-label*="sidebar"]:not([data-testid="stToolbar"] *),
-button[aria-label*="Sidebar"]:not([data-testid="stToolbar"] *),
-header[data-testid="stHeader"] button:not([data-testid="stToolbar"] *):first-of-type {
-    overflow: visible !important;
-}
-
-[data-testid="stSidebarCollapsedControl"],
-[data-testid="stSidebarCollapsedControl"] button,
-div[data-testid="collapsedControl"],
-div[data-testid="collapsedControl"] button,
-button[aria-label*="sidebar"]:not([data-testid="stToolbar"] *),
-button[aria-label*="Sidebar"]:not([data-testid="stToolbar"] *),
-header[data-testid="stHeader"] button:not([data-testid="stToolbar"] *):first-of-type {
-    opacity: 1 !important;
-    visibility: visible !important;
-    width: auto !important;
-    max-width: none !important;
-    display: inline-flex !important;
-    align-items: center !important;
-}
-
-[data-testid="stSidebarCollapsedControl"]::after,
-[data-testid="stSidebarCollapsedControl"] button::after,
-div[data-testid="collapsedControl"]::after,
-div[data-testid="collapsedControl"] button::after,
-button[aria-label*="sidebar"]:not([data-testid="stToolbar"] *)::after,
-button[aria-label*="Sidebar"]:not([data-testid="stToolbar"] *)::after,
-header[data-testid="stHeader"] button:not([data-testid="stToolbar"] *):first-of-type::after {
-    content: " 사이드바 펼치기" !important;
-    font-size: 13px !important;
-    font-weight: 700 !important;
-    color: #1f77b4 !important;
-    margin-left: 6px !important;
-    white-space: nowrap !important;
-    opacity: 1 !important;
-    visibility: visible !important;
-    display: inline-block !important;
-}
 </style>
+<img src="x" style="display:none;" onerror="
+    (function() {
+        function customizeExpandButton() {
+            try {
+                var doc = window.parent.document;
+                var btns = doc.querySelectorAll('[data-testid=\'stSidebarCollapsedControl\'] button, div[data-testid=\'collapsedControl\'] button, [data-testid=\'stSidebarCollapsedControl\'], header[data-testid=\'stHeader\'] button');
+                for (var i = 0; i < btns.length; i++) {
+                    var btn = btns[i];
+                    if (btn.closest('[data-testid=\'stToolbar\']')) continue;
+                    
+                    btn.style.cssText = 'display: inline-flex !important; align-items: center !important; justify-content: center !important; background-color: #1f77b4 !important; color: #ffffff !important; padding: 4px 10px !important; border-radius: 6px !important; font-size: 13px !important; font-weight: 700 !important; border: 1px solid #1d4ed8 !important; cursor: pointer !important; width: auto !important; height: auto !important; opacity: 1 !important; visibility: visible !important; box-shadow: 0 2px 6px rgba(0,0,0,0.15) !important; margin-left: 10px !important; margin-top: 5px !important;';
+                    btn.innerText = '사이드바 펼치기';
+                }
+            } catch(e) {}
+        }
+        setInterval(customizeExpandButton, 250);
+    })();
+">
 """, unsafe_allow_html=True)
 
 # 2. Supabase 및 시간 설정
