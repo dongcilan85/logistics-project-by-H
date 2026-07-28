@@ -890,11 +890,63 @@ def display_inventory_table(target_df, key_suffix=""):
             
         render_usage_plan_ui(sel_code, sel_name, key_suffix)
 
-# 발주 필요 부자재 집계 (본사만 대상 - ⚠️ 부족 및 ❌ 품절 상태 품목 일괄 포함)
+# 발주 필요 부자재 집계 (본사만 대상 - ⚠️ 부족 및 ❌ 품절 상태 품목 + ERP 재고 0인 품목 마스터 전수 포함)
+sub_master_hq = item_df_raw[(item_df_raw['category'] == "부재료") & (item_df_raw['division'] == '본사')] if not item_df_raw.empty else pd.DataFrame()
+
+reorder_sub_codes_set = set()
+if not agg_df.empty:
+    sub_agg = agg_df[(agg_df['division'] == '본사') & (agg_df['status'].isin(["⚠️ 부족", "❌ 품절"]))]
+    if not sub_master_hq.empty:
+        sub_codes = set(sub_master_hq['item_code'])
+        for code in sub_agg['item_code']:
+            if code in sub_codes:
+                reorder_sub_codes_set.add(code)
+
+existing_hq_codes = set(agg_df[agg_df['division'] == '본사']['item_code']) if not agg_df.empty else set()
+zero_stock_sub_codes = set()
+if not sub_master_hq.empty:
+    zero_stock_sub_codes = set(sub_master_hq['item_code']) - existing_hq_codes
+    for code in zero_stock_sub_codes:
+        reorder_sub_codes_set.add(code)
+
 sub_material_df = avail_df[(avail_df['category'] == "부재료") & (avail_df['division'] == '본사')].copy()
-reorder_sub_codes = agg_df[(agg_df['status'].isin(["⚠️ 부족", "❌ 품절"])) & (agg_df['division'] == '본사')]['item_code']
-reorder_sub_df = sub_material_df[sub_material_df['item_code'].isin(reorder_sub_codes)]
-reorder_sub_count = reorder_sub_df['item_code'].nunique()
+reorder_sub_df_list = []
+if not sub_material_df.empty:
+    reorder_sub_df_list.append(sub_material_df[sub_material_df['item_code'].isin(reorder_sub_codes_set)])
+
+if not sub_master_hq.empty and zero_stock_sub_codes:
+    zero_rows = []
+    for code in zero_stock_sub_codes:
+        m_row = sub_master_hq[sub_master_hq['item_code'] == code].iloc[0]
+        i_name = str(m_row.get('item_name', code) or code)
+        i_spec = str(m_row.get('spec', '') or '')
+        name_spec = f"{i_name} [{i_spec}]" if i_spec else i_name
+        zero_rows.append({
+            'status': '❌ 품절',
+            'exp_status': '🟢 정상',
+            'item_code': code,
+            'item_name': i_name,
+            'spec': i_spec,
+            'item_name_spec': name_spec,
+            'stock_qty': 0,
+            'planned_qty': 0,
+            'actual_stock': 0,
+            'safety_stock': int(float(m_row.get('safety_stock', 0) or 0)),
+            'monthly_avg_usage': int(float(m_row.get('monthly_avg_usage', 0) or 0)),
+            'warehouse_name': '본사 (재고0)',
+            'expiration_date': '해당없음',
+            'category': '부재료',
+            'division': '본사',
+            'excess_threshold': int(float(m_row.get('excess_threshold', 5) or 5)),
+            'unit_price': int(float(m_row.get('unit_price', 0) or 0)),
+            'inventory_cost': 0,
+            'is_available': True
+        })
+    if zero_rows:
+        reorder_sub_df_list.append(pd.DataFrame(zero_rows))
+
+reorder_sub_df = pd.concat(reorder_sub_df_list, ignore_index=True) if reorder_sub_df_list else pd.DataFrame()
+reorder_sub_count = len(reorder_sub_codes_set)
 
 total_asset = avail_asset + unavail_asset
 
