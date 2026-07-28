@@ -79,23 +79,20 @@ button[data-testid="stSidebarCollapseButton"] {
     width: auto !important;
     padding-right: 12px !important;
 }
-/* 사이드바가 접혔을 때 펼치기 버튼 '사이드바 펼치기' 라벨 항시 노출 및 너비 제한 해제 */
-header[data-testid="stHeader"],
-header[data-testid="stHeader"] *,
-[data-testid="stHeader"],
-[data-testid="stHeader"] *,
+/* 사이드바가 접혔을 때 오직 좌측 상단 펼치기 버튼에만 '사이드바 펼치기' 라벨 정밀 적용 */
 [data-testid="stSidebarCollapsedControl"],
-[data-testid="stSidebarCollapsedControl"] * {
+[data-testid="stSidebarCollapsedControl"] *,
+div[data-testid="collapsedControl"],
+div[data-testid="collapsedControl"] * {
     overflow: visible !important;
 }
 
-header[data-testid="stHeader"] button,
-[data-testid="stHeader"] button,
-div[data-testid="collapsedControl"] button,
+[data-testid="stSidebarCollapsedControl"],
+[data-testid="stSidebarCollapsedControl"] button,
 div[data-testid="collapsedControl"],
-button[data-testid="stSidebarCollapsedControl"],
-button[aria-label*="sidebar"],
-button[aria-label*="Sidebar"] {
+div[data-testid="collapsedControl"] button,
+button[aria-label="Open sidebar"],
+button[aria-label="Expand sidebar"] {
     opacity: 1 !important;
     visibility: visible !important;
     width: auto !important;
@@ -104,13 +101,12 @@ button[aria-label*="Sidebar"] {
     align-items: center !important;
 }
 
-header[data-testid="stHeader"] button::after,
-[data-testid="stHeader"] button::after,
-div[data-testid="collapsedControl"] button::after,
+[data-testid="stSidebarCollapsedControl"]::after,
+[data-testid="stSidebarCollapsedControl"] button::after,
 div[data-testid="collapsedControl"]::after,
-button[data-testid="stSidebarCollapsedControl"]::after,
-button[aria-label*="sidebar"]::after,
-button[aria-label*="Sidebar"]::after {
+div[data-testid="collapsedControl"] button::after,
+button[aria-label="Open sidebar"]::after,
+button[aria-label="Expand sidebar"]::after {
     content: " 사이드바 펼치기" !important;
     font-size: 13px !important;
     font-weight: 700 !important;
