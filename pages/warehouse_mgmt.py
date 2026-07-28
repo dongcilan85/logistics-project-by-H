@@ -619,9 +619,42 @@ def render_usage_plan_ui(item_code, item_name, key_suffix):
                         if ver_key not in st.session_state:
                             st.session_state[ver_key] = 0
                         st.session_state[ver_key] += 1
-                        st.rerun()
                     except Exception as e:
                         st.error(f"등록 처리 오류: {e}")
+
+def sort_inventory_df(df):
+    """💡 [통일 정렬 규칙] 1순위: 품목명(오름차순), 2순위: 창고명(오름차순), 3순위: 유통기한(오름차순)"""
+    if df.empty:
+        return df
+    sort_cols = []
+    ascending_flags = []
+    
+    # 1순위: 품목명
+    if 'item_name_spec' in df.columns:
+        sort_cols.append('item_name_spec')
+        ascending_flags.append(True)
+    elif 'item_name' in df.columns:
+        sort_cols.append('item_name')
+        ascending_flags.append(True)
+    elif 'item_code' in df.columns:
+        sort_cols.append('item_code')
+        ascending_flags.append(True)
+        
+    # 2순위: 창고명
+    if 'warehouse_name' in df.columns:
+        sort_cols.append('warehouse_name')
+        ascending_flags.append(True)
+        
+    # 3순위: 유통기한
+    if 'expiration_date' in df.columns:
+        df['_temp_exp_sort'] = pd.to_datetime(df['expiration_date'].replace(['해당없음', 'NONE', 'none', ''], '2099-12-31'), errors='coerce')
+        sort_cols.append('_temp_exp_sort')
+        ascending_flags.append(True)
+        
+    sorted_df = df.sort_values(by=sort_cols, ascending=ascending_flags)
+    if '_temp_exp_sort' in sorted_df.columns:
+        sorted_df = sorted_df.drop(columns=['_temp_exp_sort'])
+    return sorted_df
 
 def display_inventory_table(target_df, key_suffix=""):
     if target_df.empty:
@@ -800,7 +833,7 @@ def display_inventory_table(target_df, key_suffix=""):
     if 'inventory_cost' in res_df.columns:
         mc4.metric("총 재고비용", f"₩{int(res_df['inventory_cost'].sum()):,}")
         
-    disp_df = res_df[cols_to_show].copy()
+    disp_df = sort_inventory_df(res_df[cols_to_show].copy())
 
     def style_row(row):
         status = row.get('status')
@@ -1089,7 +1122,7 @@ if st.session_state.kpi_selected:
         mc3.metric("총 실 가용재고", f"{int(summary['actual_stock'].sum()):,}")
         mc4.metric("총 재고비용", f"₩{int(summary['inventory_cost'].sum()):,}")
         
-        disp_df = summary[cols_to_show].copy()
+        disp_df = sort_inventory_df(summary[cols_to_show].copy())
         
         def style_row(row):
             status = row.get('status')
@@ -1216,7 +1249,7 @@ if st.session_state.kpi_selected:
         mc3.metric("총 실 가용재고", f"{int(summary['actual_stock'].sum()):,}")
         mc4.metric("총 재고비용", f"₩{int(summary['inventory_cost'].sum()):,}")
                 
-        disp_df = summary[cols_to_show].copy()
+        disp_df = sort_inventory_df(summary[cols_to_show].copy())
 
         def style_row(row):
             status = row.get('status')
