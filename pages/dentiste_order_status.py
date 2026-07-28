@@ -80,15 +80,19 @@ button[data-testid="stSidebarCollapseButton"] {
     padding-right: 12px !important;
 }
 </style>
-<img src="x" style="display:none;" onerror="
+""", unsafe_allow_html=True)
+
+components.html(
+    """
+    <script>
     (function() {
         function customizeExpandButton() {
             try {
                 var doc = window.parent.document;
-                var btns = doc.querySelectorAll('[data-testid=\'stSidebarCollapsedControl\'] button, div[data-testid=\'collapsedControl\'] button, [data-testid=\'stSidebarCollapsedControl\'], header[data-testid=\'stHeader\'] button');
+                var btns = doc.querySelectorAll('[data-testid="stSidebarCollapsedControl"] button, div[data-testid="collapsedControl"] button, [data-testid="stSidebarCollapsedControl"], header[data-testid="stHeader"] button');
                 for (var i = 0; i < btns.length; i++) {
                     var btn = btns[i];
-                    if (btn.closest('[data-testid=\'stToolbar\']')) continue;
+                    if (btn.closest('[data-testid="stToolbar"]')) continue;
                     
                     btn.style.cssText = 'display: inline-flex !important; align-items: center !important; justify-content: center !important; background-color: #1f77b4 !important; color: #ffffff !important; padding: 4px 10px !important; border-radius: 6px !important; font-size: 13px !important; font-weight: 700 !important; border: 1px solid #1d4ed8 !important; cursor: pointer !important; width: auto !important; height: auto !important; opacity: 1 !important; visibility: visible !important; box-shadow: 0 2px 6px rgba(0,0,0,0.15) !important; margin-left: 10px !important; margin-top: 5px !important;';
                     btn.innerText = '사이드바 펼치기';
@@ -97,6 +101,13 @@ button[data-testid="stSidebarCollapseButton"] {
         }
         setInterval(customizeExpandButton, 250);
     })();
+    </script>
+    """,
+    height=0,
+    width=0
+)
+
+st.markdown("""
 <div class="compact-mirror-header">
     <span>🚚 덴티스테 발주현황 미러링</span>
 </div>
