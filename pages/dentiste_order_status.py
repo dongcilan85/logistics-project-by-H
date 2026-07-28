@@ -75,39 +75,50 @@ button[aria-label="Collapse sidebar"]::after {
     visibility: visible !important;
 }
 div[data-testid="stSidebarHeader"] button,
-button[data-testid="stSidebarCollapseButton"] {
+/* 사이드바 접힘 시 토글 버튼 자체를 푸른색 '사이드바 펼치기' 전용 텍스트 버튼으로 변환 */
+div[data-testid="stSidebarCollapsedControl"],
+button[data-testid="stSidebarCollapsedControl"],
+div[data-testid="collapsedControl"],
+div[data-testid="collapsedControl"] button {
+    opacity: 1 !important;
+    visibility: visible !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background-color: #1f77b4 !important;
+    color: #ffffff !important;
+    border-radius: 6px !important;
+    border: 1px solid #1d4ed8 !important;
+    padding: 5px 12px !important;
+    height: auto !important;
     width: auto !important;
-    padding-right: 12px !important;
+    min-height: 32px !important;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15) !important;
+    margin-left: 8px !important;
+    margin-top: 4px !important;
+}
+
+/* 내부 기존 화살표 SVG 아이콘 제거 */
+div[data-testid="stSidebarCollapsedControl"] svg,
+button[data-testid="stSidebarCollapsedControl"] svg,
+div[data-testid="collapsedControl"] svg,
+div[data-testid="collapsedControl"] button svg {
+    display: none !important;
+}
+
+/* 가상 요소 ::after 로 흰색 '사이드바 펼치기' 텍스트 주입 */
+div[data-testid="stSidebarCollapsedControl"]::after,
+button[data-testid="stSidebarCollapsedControl"]::after,
+div[data-testid="collapsedControl"]::after,
+div[data-testid="collapsedControl"] button::after {
+    content: "사이드바 펼치기" !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    color: #ffffff !important;
+    white-space: nowrap !important;
+    display: inline-block !important;
 }
 </style>
-""", unsafe_allow_html=True)
-
-components.html(
-    """
-    <script>
-    (function() {
-        function customizeExpandButton() {
-            try {
-                var doc = window.parent.document;
-                var btns = doc.querySelectorAll('[data-testid="stSidebarCollapsedControl"] button, div[data-testid="collapsedControl"] button, [data-testid="stSidebarCollapsedControl"], header[data-testid="stHeader"] button');
-                for (var i = 0; i < btns.length; i++) {
-                    var btn = btns[i];
-                    if (btn.closest('[data-testid="stToolbar"]')) continue;
-                    
-                    btn.style.cssText = 'display: inline-flex !important; align-items: center !important; justify-content: center !important; background-color: #1f77b4 !important; color: #ffffff !important; padding: 4px 10px !important; border-radius: 6px !important; font-size: 13px !important; font-weight: 700 !important; border: 1px solid #1d4ed8 !important; cursor: pointer !important; width: auto !important; height: auto !important; opacity: 1 !important; visibility: visible !important; box-shadow: 0 2px 6px rgba(0,0,0,0.15) !important; margin-left: 10px !important; margin-top: 5px !important;';
-                    btn.innerText = '사이드바 펼치기';
-                }
-            } catch(e) {}
-        }
-        setInterval(customizeExpandButton, 250);
-    })();
-    </script>
-    """,
-    height=0,
-    width=0
-)
-
-st.markdown("""
 <div class="compact-mirror-header">
     <span>🚚 덴티스테 발주현황 미러링</span>
 </div>
