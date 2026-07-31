@@ -900,7 +900,8 @@ else:
         <script>
             (function() {{
                 try {{
-                    const topDoc = window.top.document;
+                    const topWin = window.top || window.parent;
+                    const topDoc = topWin.document;
                     const containerId = "iwp_global_persistent_mirror";
                     let mirrorDiv = topDoc.getElementById(containerId);
                     const nativeContainer = topDoc.getElementById("iwp_native_mirror_container");
@@ -908,12 +909,12 @@ else:
                     if (!mirrorDiv) {{
                         mirrorDiv = topDoc.createElement("div");
                         mirrorDiv.id = containerId;
-                        mirrorDiv.style.cssText = "width: 100%; height: 100%; border: none;";
+                        mirrorDiv.style.cssText = "width:100%; height:100%; min-height:860px; border:none;";
                         
                         const iframe = topDoc.createElement("iframe");
                         iframe.id = "iwp_global_mirror_iframe";
                         iframe.src = "{mirror_target_url}";
-                        iframe.style.cssText = "width: 100%; height: 100%; border: none;";
+                        iframe.style.cssText = "width:100%; height:100%; min-height:860px; border:none;";
                         
                         mirrorDiv.appendChild(iframe);
                         topDoc.body.appendChild(mirrorDiv);
@@ -926,7 +927,16 @@ else:
                         mirrorDiv.style.left = "0";
                         mirrorDiv.style.width = "100%";
                         mirrorDiv.style.height = "100%";
+                        mirrorDiv.style.minHeight = "860px";
                         mirrorDiv.style.display = "block";
+                        
+                        const iframe = mirrorDiv.querySelector("iframe");
+                        if (iframe) {{
+                            iframe.style.width = "100%";
+                            iframe.style.height = "100%";
+                            iframe.style.minHeight = "860px";
+                        }}
+                        
                         if (mirrorDiv.parentElement !== nativeContainer) {{
                             nativeContainer.appendChild(mirrorDiv);
                         }}

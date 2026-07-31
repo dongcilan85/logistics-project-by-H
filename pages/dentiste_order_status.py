@@ -79,35 +79,59 @@ else:
             st.markdown(f'<a href="{target_url}" target="_blank" style="text-decoration:none;"><button style="width:100%; padding:0.25rem 0.5rem; border-radius:4px; border:1px solid #4A90D9; background-color:#1f77b4; color:white; font-size:12px; font-weight:bold; cursor:pointer;">새 창에서 열기 ↗️</button></a>', unsafe_allow_html=True)
 
     # 💡 [Native Seamless Mirror] IWP 본문 틀과 100% 일체화되는 네이티브 미러링 컨테이너
-    st.markdown('<div id="iwp_native_mirror_container" style="width:100%; height:calc(100vh - 150px); min-height:840px; border:1px solid #cbd5e1; border-radius:8px; overflow:hidden; background:#ffffff; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-top:8px;"></div>', unsafe_allow_html=True)
+    st.markdown('<div id="iwp_native_mirror_container" style="width:100%; height:860px; min-height:860px; border:1px solid #cbd5e1; border-radius:8px; overflow:hidden; background:#ffffff; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-top:8px;"></div>', unsafe_allow_html=True)
     
     # 탭 진입 시 전역 미러링 iframe을 IWP 본문 틀 안으로 네이티브 텔레포트 결합하는 트리거 JS
-    st.components.v1.html("""
+    st.components.v1.html(f"""
     <script>
-        (function() {
-            try {
-                const topDoc = window.top.document;
-                const mirrorFrame = topDoc.getElementById("iwp_global_mirror_iframe");
-                const mirrorDiv = topDoc.getElementById("iwp_global_persistent_mirror");
-                const nativeContainer = topDoc.getElementById("iwp_native_mirror_container");
-                
-                if (mirrorDiv && nativeContainer) {
-                    // 팝업 fixed 스타일 제거 -> IWP 본문 카드 내부 밀착 유동 스타일 적용
-                    mirrorDiv.style.position = "relative";
-                    mirrorDiv.style.top = "0";
-                    mirrorDiv.style.left = "0";
-                    mirrorDiv.style.width = "100%";
-                    mirrorDiv.style.height = "100%";
-                    mirrorDiv.style.border = "none";
-                    mirrorDiv.style.boxShadow = "none";
-                    mirrorDiv.style.borderRadius = "0";
-                    mirrorDiv.style.display = "block";
+        (function() {{
+            function attachMirror() {{
+                try {{
+                    const topWin = window.top || window.parent;
+                    const topDoc = topWin.document;
                     
-                    if (mirrorDiv.parentElement !== nativeContainer) {
-                        nativeContainer.appendChild(mirrorDiv);
-                    }
-                }
-            } catch(e) {}
-        })();
+                    let mirrorDiv = topDoc.getElementById("iwp_global_persistent_mirror");
+                    if (!mirrorDiv) {{
+                        mirrorDiv = topDoc.createElement("div");
+                        mirrorDiv.id = "iwp_global_persistent_mirror";
+                        mirrorDiv.style.cssText = "width:100%; height:100%; min-height:860px; border:none;";
+                        
+                        const iframe = topDoc.createElement("iframe");
+                        iframe.id = "iwp_global_mirror_iframe";
+                        iframe.src = "{target_url}";
+                        iframe.style.cssText = "width:100%; height:100%; min-height:860px; border:none;";
+                        
+                        mirrorDiv.appendChild(iframe);
+                        topDoc.body.appendChild(mirrorDiv);
+                    }}
+                    
+                    const nativeContainer = topDoc.getElementById("iwp_native_mirror_container");
+                    if (nativeContainer) {{
+                        mirrorDiv.style.position = "relative";
+                        mirrorDiv.style.top = "0";
+                        mirrorDiv.style.left = "0";
+                        mirrorDiv.style.width = "100%";
+                        mirrorDiv.style.height = "100%";
+                        mirrorDiv.style.minHeight = "860px";
+                        mirrorDiv.style.display = "block";
+                        
+                        const iframe = mirrorDiv.querySelector("iframe");
+                        if (iframe) {{
+                            iframe.style.width = "100%";
+                            iframe.style.height = "100%";
+                            iframe.style.minHeight = "860px";
+                        }}
+                        
+                        if (mirrorDiv.parentElement !== nativeContainer) {{
+                            nativeContainer.appendChild(mirrorDiv);
+                        }}
+                    }}
+                }} catch(e) {{}}
+            }}
+            
+            attachMirror();
+            setTimeout(attachMirror, 100);
+            setTimeout(attachMirror, 300);
+        }})();
     </script>
     """, height=0)
