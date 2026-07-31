@@ -21,8 +21,13 @@ key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 KST = timezone(timedelta(hours=9))
 
-if "role" not in st.session_state:
-    st.session_state.role = None
+# 💡 [Persistent Session] 브라우저 URL Query Params 기반 로그인 세션 자동 보존 및 복원
+if "role" not in st.session_state or st.session_state.role is None:
+    saved_role = st.query_params.get("role", None)
+    if saved_role in ("Admin", "Staff", "Guest"):
+        st.session_state.role = saved_role
+    else:
+        st.session_state.role = None
 
 # --- [시스템 유틸리티 로직] ---
 def get_config(key, default):
@@ -740,12 +745,15 @@ def login_screen():
                 if st.form_submit_button("접속", use_container_width=True, type="primary"):
                     if pw == get_admin_password(): 
                         st.session_state.role = "Admin"
+                        st.query_params["role"] = "Admin"
                         st.rerun()
                     elif pw == get_staff_password(): 
                         st.session_state.role = "Staff"
+                        st.query_params["role"] = "Staff"
                         st.rerun()
                     elif pw == "": 
                         st.session_state.role = "Guest"
+                        st.query_params["role"] = "Guest"
                         st.rerun()
                     else: 
                         st.error("비밀번호 불일치")
@@ -831,7 +839,10 @@ else:
 
     st.sidebar.divider()
     sc1, sc2 = st.sidebar.columns(2)
-    if sc1.button("🔓 로그아웃", use_container_width=True): st.session_state.role = None; st.rerun()
+    if sc1.button("🔓 로그아웃", use_container_width=True):
+        st.session_state.role = None
+        st.query_params.clear()
+        st.rerun()
     if sc2.button("🔑 PW변경", use_container_width=True): change_password_dialog()
 
     if st.session_state.role == "Admin":
