@@ -893,7 +893,7 @@ else:
         })
     pg.run()
 
-    # 💡 [Global Persistent Mirror] 최상위 브라우저 캔버스(window.top.document.body) 영구 상주 미러링 레이어
+    # 💡 [Native Seamless Mirror] IWP 본문 틀 밀착 결합 및 네이티브 세션 보존 매니저
     mirror_target_url = get_config("dentiste_order_url", "").strip()
     if mirror_target_url and st.session_state.role in ("Admin", "Staff"):
         st.components.v1.html(f"""
@@ -903,13 +903,12 @@ else:
                     const topDoc = window.top.document;
                     const containerId = "iwp_global_persistent_mirror";
                     let mirrorDiv = topDoc.getElementById(containerId);
-                    
-                    const isMirrorTab = topDoc.location.href.includes("dentiste_order") || topDoc.location.pathname.includes("dentiste_order");
+                    const nativeContainer = topDoc.getElementById("iwp_native_mirror_container");
                     
                     if (!mirrorDiv) {{
                         mirrorDiv = topDoc.createElement("div");
                         mirrorDiv.id = containerId;
-                        mirrorDiv.style.cssText = "position: fixed; z-index: 9998; border: 1px solid #1d4ed8; border-radius: 8px; overflow: hidden; background: #ffffff; box-shadow: 0 4px 20px rgba(0,0,0,0.15); transition: all 0.2s ease;";
+                        mirrorDiv.style.cssText = "width: 100%; height: 100%; border: none;";
                         
                         const iframe = topDoc.createElement("iframe");
                         iframe.id = "iwp_global_mirror_iframe";
@@ -918,20 +917,24 @@ else:
                         
                         mirrorDiv.appendChild(iframe);
                         topDoc.body.appendChild(mirrorDiv);
+                        mirrorDiv.style.display = "none";
                     }}
                     
-                    if (isMirrorTab) {{
-                        const sb = topDoc.querySelector('section[data-testid="stSidebar"]');
-                        const isSbCollapsed = topDoc.querySelector('[data-testid="stSidebarCollapsedControl"]') && (!sb || sb.offsetWidth < 50);
-                        const leftPos = isSbCollapsed ? 20 : (sb ? sb.offsetWidth + 20 : 320);
-                        
+                    if (nativeContainer) {{
+                        mirrorDiv.style.position = "relative";
+                        mirrorDiv.style.top = "0";
+                        mirrorDiv.style.left = "0";
+                        mirrorDiv.style.width = "100%";
+                        mirrorDiv.style.height = "100%";
                         mirrorDiv.style.display = "block";
-                        mirrorDiv.style.top = "110px";
-                        mirrorDiv.style.left = leftPos + "px";
-                        mirrorDiv.style.width = "calc(100vw - " + (leftPos + 35) + "px)";
-                        mirrorDiv.style.height = "calc(100vh - 130px)";
+                        if (mirrorDiv.parentElement !== nativeContainer) {{
+                            nativeContainer.appendChild(mirrorDiv);
+                        }}
                     }} else {{
                         mirrorDiv.style.display = "none";
+                        if (mirrorDiv.parentElement !== topDoc.body) {{
+                            topDoc.body.appendChild(mirrorDiv);
+                        }}
                     }}
                 }} catch(e) {{}}
             }})();
