@@ -78,50 +78,42 @@ else:
         with col2:
             st.markdown(f'<a href="{target_url}" target="_blank" style="text-decoration:none;"><button style="width:100%; padding:0.25rem 0.5rem; border-radius:4px; border:1px solid #4A90D9; background-color:#1f77b4; color:white; font-size:12px; font-weight:bold; cursor:pointer;">새 창에서 열기 ↗️</button></a>', unsafe_allow_html=True)
 
-    # 💡 [Seamless Rect Tracking] IWP 본문 틀 실시간 밀착 결합 앵커
-    st.markdown('<div id="iwp_native_mirror_anchor" style="width:100%; height:calc(100vh - 150px); min-height:840px; border:1px solid #cbd5e1; border-radius:8px; background:#ffffff; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-top:8px;"></div>', unsafe_allow_html=True)
-    
-    # 탭 진입 시 전역 미러링 iframe의 좌표를 IWP 본문 앵커로 100% 밀착 추적하는 실시간 관측 JS
+    # 💡 [Direct Native Mount + In-Place Keep-Alive] 100% 즉시 표출 및 세션 지속 보존 미러링
     st.components.v1.html(f"""
+    <div id="iwp_mirror_display_wrapper" style="width:100%; height:870px; min-height:870px; margin-top:6px;">
+        <iframe id="iwp_active_mirror_iframe" src="{target_url}" style="width:100%; height:100%; min-height:870px; border:1px solid #cbd5e1; border-radius:8px; background:#ffffff; box-shadow: 0 2px 10px rgba(0,0,0,0.05);"></iframe>
+    </div>
     <script>
         (function() {{
-            function updateMirrorPosition() {{
+            function syncPersistentMirror() {{
                 try {{
                     const topWin = window.top || window.parent;
                     const topDoc = topWin.document;
+                    const wrapper = document.getElementById("iwp_mirror_display_wrapper");
+                    let keeper = topDoc.getElementById("iwp_global_mirror_keeper");
                     
-                    let mirrorDiv = topDoc.getElementById("iwp_global_persistent_mirror");
-                    if (!mirrorDiv) {{
-                        mirrorDiv = topDoc.createElement("div");
-                        mirrorDiv.id = "iwp_global_persistent_mirror";
-                        mirrorDiv.style.cssText = "position: fixed; z-index: 9998; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden; background: #ffffff; box-shadow: 0 2px 10px rgba(0,0,0,0.05); transition: opacity 0.15s ease;";
-                        
-                        const iframe = topDoc.createElement("iframe");
-                        iframe.id = "iwp_global_mirror_iframe";
-                        iframe.src = "{target_url}";
-                        iframe.style.cssText = "width: 100%; height: 100%; border: none;";
-                        
-                        mirrorDiv.appendChild(iframe);
-                        topDoc.body.appendChild(mirrorDiv);
-                    }}
-                    
-                    const anchor = topDoc.getElementById("iwp_native_mirror_anchor");
-                    if (anchor) {{
-                        const rect = anchor.getBoundingClientRect();
-                        if (rect.width > 0 && rect.height > 0) {{
-                            mirrorDiv.style.display = "block";
-                            mirrorDiv.style.top = rect.top + "px";
-                            mirrorDiv.style.left = rect.left + "px";
-                            mirrorDiv.style.width = rect.width + "px";
-                            mirrorDiv.style.height = rect.height + "px";
-                            mirrorDiv.style.opacity = "1";
+                    if (keeper && wrapper) {{
+                        wrapper.innerHTML = "";
+                        keeper.style.display = "block";
+                        keeper.style.width = "100%";
+                        keeper.style.height = "100%";
+                        keeper.style.minHeight = "870px";
+                        keeper.style.border = "1px solid #cbd5e1";
+                        keeper.style.borderRadius = "8px";
+                        wrapper.appendChild(keeper);
+                    }} else {{
+                        const iframe = document.getElementById("iwp_active_mirror_iframe");
+                        if (iframe) {{
+                            iframe.id = "iwp_global_mirror_keeper";
+                            topDoc.body.appendChild(iframe);
+                            wrapper.appendChild(iframe);
                         }}
                     }}
                 }} catch(e) {{}}
             }}
             
-            updateMirrorPosition();
-            setInterval(updateMirrorPosition, 100);
+            syncPersistentMirror();
+            setTimeout(syncPersistentMirror, 50);
         }})();
     </script>
-    """, height=0)
+    """, height=880)
