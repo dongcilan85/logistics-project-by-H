@@ -853,7 +853,7 @@ else:
         })
     pg.run()
 
-    # 💡 [Direct Native Mount + In-Place Keep-Alive] 미러링 사내 시스템 로그인 세션 영구 보존 매니저
+    # 💡 [Single Lifetime Persistent Mirror] 단일 영구 상주 미러링 매니저
     mirror_target_url = get_config("dentiste_order_url", "").strip()
     if mirror_target_url and st.session_state.role in ("Admin", "Staff"):
         st.components.v1.html(f"""
@@ -862,13 +862,22 @@ else:
                 try {{
                     const topWin = window.top || window.parent;
                     const topDoc = topWin.document;
+                    const iframeId = "iwp_single_persistent_iframe";
+                    let persistentFrame = topDoc.getElementById(iframeId);
                     const isMirrorTab = topWin.location.href.includes("dentiste_order") || topWin.location.search.includes("dentiste_order");
-                    let keeper = topDoc.getElementById("iwp_global_mirror_keeper");
                     
-                    if (keeper && !isMirrorTab) {{
-                        keeper.style.display = "none";
-                        if (keeper.parentElement !== topDoc.body) {{
-                            topDoc.body.appendChild(keeper);
+                    if (!persistentFrame) {{
+                        persistentFrame = topDoc.createElement("iframe");
+                        persistentFrame.id = iframeId;
+                        persistentFrame.src = "{mirror_target_url}";
+                        persistentFrame.style.cssText = "width:100%; height:100%; min-height:870px; border:1px solid #cbd5e1; border-radius:8px; background:#ffffff; box-shadow:0 2px 10px rgba(0,0,0,0.05); display:none;";
+                        topDoc.body.appendChild(persistentFrame);
+                    }}
+                    
+                    if (!isMirrorTab && persistentFrame) {{
+                        persistentFrame.style.display = "none";
+                        if (persistentFrame.parentElement !== topDoc.body) {{
+                            topDoc.body.appendChild(persistentFrame);
                         }}
                     }}
                 }} catch(e) {{}}
