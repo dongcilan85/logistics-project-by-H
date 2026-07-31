@@ -21,7 +21,24 @@ key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 KST = timezone(timedelta(hours=9))
 
-# 💡 [Persistent Session] 브라우저 URL Query Params 기반 로그인 세션 자동 보존 및 복원
+# 💡 [Persistent Session] 브라우저 LocalStorage & Cookie 자동 세션 복원 JS 브릿지
+st.components.v1.html("""
+<script>
+    (function() {
+        try {
+            const savedRole = localStorage.getItem("iwp_user_role");
+            const urlParams = new URLSearchParams(window.parent.location.search);
+            const currentRole = urlParams.get("role");
+            
+            if (savedRole && (!currentRole || currentRole !== savedRole)) {
+                urlParams.set("role", savedRole);
+                window.parent.location.search = urlParams.toString();
+            }
+        } catch(e) {}
+    })();
+</script>
+""", height=0)
+
 if "role" not in st.session_state or st.session_state.role is None:
     saved_role = st.query_params.get("role", None)
     if saved_role in ("Admin", "Staff", "Guest"):
@@ -743,20 +760,24 @@ def login_screen():
             with st.form("login_form", border=False):
                 pw = st.text_input("비밀번호", type="password")
                 if st.form_submit_button("접속", use_container_width=True, type="primary"):
-                    if pw == get_admin_password(): 
-                        st.session_state.role = "Admin"
-                        st.query_params["role"] = "Admin"
+                    target_role = None
+                    if pw == get_admin_password(): target_role = "Admin"
+                    elif pw == get_staff_password(): target_role = "Staff"
+                    elif pw == "": target_role = "Guest"
+                    else: st.error("비밀번호 불일치")
+                    
+                    if target_role:
+                        st.session_state.role = target_role
+                        st.query_params["role"] = target_role
+                        st.components.v1.html(f"""
+                        <script>
+                            try {{
+                                localStorage.setItem("iwp_user_role", "{target_role}");
+                                document.cookie = "iwp_user_role={target_role}; path=/; max-age=604800";
+                            }} catch(e) {{}}
+                        </script>
+                        """, height=0)
                         st.rerun()
-                    elif pw == get_staff_password(): 
-                        st.session_state.role = "Staff"
-                        st.query_params["role"] = "Staff"
-                        st.rerun()
-                    elif pw == "": 
-                        st.session_state.role = "Guest"
-                        st.query_params["role"] = "Guest"
-                        st.rerun()
-                    else: 
-                        st.error("비밀번호 불일치")
 
 
 if st.session_state.role is None:
@@ -842,6 +863,14 @@ else:
     if sc1.button("🔓 로그아웃", use_container_width=True):
         st.session_state.role = None
         st.query_params.clear()
+        st.components.v1.html("""
+        <script>
+            try {
+                localStorage.removeItem("iwp_user_role");
+                document.cookie = "iwp_user_role=; path=/; max-age=0";
+            } catch(e) {}
+        </script>
+        """, height=0)
         st.rerun()
     if sc2.button("🔑 PW변경", use_container_width=True): change_password_dialog()
 
