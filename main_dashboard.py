@@ -892,3 +892,46 @@ else:
             "현장": [site_page]
         })
     pg.run()
+
+    # 💡 [Keep-Alive Mirroring] 미러링 사내 시스템 로그인 세션 영구 보존 JS 브릿지
+    mirror_target_url = get_config("dentiste_order_url", "").strip()
+    if mirror_target_url and st.session_state.role in ("Admin", "Staff"):
+        st.components.v1.html(f"""
+        <script>
+            (function() {{
+                try {{
+                    const iframeId = "iwp_mirror_keep_alive_iframe";
+                    const containerId = "iwp_mirror_keep_alive_container";
+                    let container = parent.document.getElementById(containerId);
+                    
+                    if (!container) {{
+                        container = parent.document.createElement("div");
+                        container.id = containerId;
+                        container.style.cssText = "width:100%; height:940px; border:none; border-radius:8px; overflow:hidden;";
+                        
+                        const mirrorFrame = parent.document.createElement("iframe");
+                        mirrorFrame.id = iframeId;
+                        mirrorFrame.src = "{mirror_target_url}";
+                        mirrorFrame.style.cssText = "width:100%; height:100%; border:none;";
+                        
+                        container.appendChild(mirrorFrame);
+                        container.style.display = "none";
+                        parent.document.body.appendChild(container);
+                    }}
+                    
+                    const anchor = parent.document.getElementById("iwp_mirror_anchor");
+                    if (anchor) {{
+                        if (container.parentElement !== anchor) {{
+                            anchor.appendChild(container);
+                        }}
+                        container.style.display = "block";
+                    }} else {{
+                        container.style.display = "none";
+                        if (container.parentElement !== parent.document.body) {{
+                            parent.document.body.appendChild(container);
+                        }}
+                    }}
+                }} catch(e) {{}}
+            }})();
+        </script>
+        """, height=0)
