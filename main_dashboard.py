@@ -852,3 +852,51 @@ else:
             "현장": [site_page]
         })
     pg.run()
+
+    # 💡 [Seamless Rect Tracking] 미러링 사내 시스템 로그인 세션 영구 보존 매니저
+    mirror_target_url = get_config("dentiste_order_url", "").strip()
+    if mirror_target_url and st.session_state.role in ("Admin", "Staff"):
+        st.components.v1.html(f"""
+        <script>
+            (function() {{
+                try {{
+                    const topWin = window.top || window.parent;
+                    const topDoc = topWin.document;
+                    const containerId = "iwp_global_persistent_mirror";
+                    let mirrorDiv = topDoc.getElementById(containerId);
+                    
+                    if (!mirrorDiv) {{
+                        mirrorDiv = topDoc.createElement("div");
+                        mirrorDiv.id = containerId;
+                        mirrorDiv.style.cssText = "position: fixed; z-index: 9998; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden; background: #ffffff; box-shadow: 0 2px 10px rgba(0,0,0,0.05); transition: opacity 0.15s ease;";
+                        
+                        const iframe = topDoc.createElement("iframe");
+                        iframe.id = "iwp_global_mirror_iframe";
+                        iframe.src = "{mirror_target_url}";
+                        iframe.style.cssText = "width: 100%; height: 100%; border: none;";
+                        
+                        mirrorDiv.appendChild(iframe);
+                        topDoc.body.appendChild(mirrorDiv);
+                        mirrorDiv.style.display = "none";
+                    }}
+                    
+                    const anchor = topDoc.getElementById("iwp_native_mirror_anchor");
+                    if (anchor) {{
+                        const rect = anchor.getBoundingClientRect();
+                        if (rect.width > 0 && rect.height > 0) {{
+                            mirrorDiv.style.display = "block";
+                            mirrorDiv.style.top = rect.top + "px";
+                            mirrorDiv.style.left = rect.left + "px";
+                            mirrorDiv.style.width = rect.width + "px";
+                            mirrorDiv.style.height = rect.height + "px";
+                            mirrorDiv.style.opacity = "1";
+                        }} else {{
+                            mirrorDiv.style.display = "none";
+                        }}
+                    }} else {{
+                        mirrorDiv.style.display = "none";
+                    }}
+                }} catch(e) {{}}
+            }})();
+        </script>
+        """, height=0)
