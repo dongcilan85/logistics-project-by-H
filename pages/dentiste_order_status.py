@@ -78,21 +78,28 @@ else:
         with col2:
             st.markdown(f'<a href="{target_url}" target="_blank" style="text-decoration:none;"><button style="width:100%; padding:0.25rem 0.5rem; border-radius:4px; border:1px solid #4A90D9; background-color:#1f77b4; color:white; font-size:12px; font-weight:bold; cursor:pointer;">새 창에서 열기 ↗️</button></a>', unsafe_allow_html=True)
 
-    # 💡 [Keep-Alive] 미러링 세션 영구 보존용 HTML 앵커 지점
-    st.markdown('<div id="iwp_mirror_anchor" style="width:100%; min-height:940px;"></div>', unsafe_allow_html=True)
+    # 💡 [Global Persistent Mirror] 최상위 레이어 영구 상주 미러링 뷰어 공간 확보
+    st.markdown('<div style="width:100%; height:calc(100vh - 140px); min-height:850px;"></div>', unsafe_allow_html=True)
     
-    # 폴백용 iframe (JS 적용 전 방어용)
-    st.components.v1.html(f"""
+    # 탭 진입 시 전역 미러링 레이어를 화면에 노출시키는 트리거 JS
+    st.components.v1.html("""
     <script>
-        (function() {{
-            setTimeout(function() {{
-                const anchor = parent.document.getElementById("iwp_mirror_anchor");
-                const keepFrame = parent.document.getElementById("iwp_mirror_keep_alive_container");
-                if (anchor && keepFrame) {{
-                    anchor.appendChild(keepFrame);
-                    keepFrame.style.display = "block";
-                }}
-            }}, 50);
-        }})();
+        (function() {
+            try {
+                const topDoc = window.top.document;
+                const mirrorDiv = topDoc.getElementById("iwp_global_persistent_mirror");
+                if (mirrorDiv) {
+                    const sb = topDoc.querySelector('section[data-testid="stSidebar"]');
+                    const isSbCollapsed = topDoc.querySelector('[data-testid="stSidebarCollapsedControl"]') && (!sb || sb.offsetWidth < 50);
+                    const leftPos = isSbCollapsed ? 20 : (sb ? sb.offsetWidth + 20 : 320);
+                    
+                    mirrorDiv.style.display = "block";
+                    mirrorDiv.style.top = "110px";
+                    mirrorDiv.style.left = leftPos + "px";
+                    mirrorDiv.style.width = "calc(100vw - " + (leftPos + 35) + "px)";
+                    mirrorDiv.style.height = "calc(100vh - 130px)";
+                }
+            } catch(e) {}
+        })();
     </script>
     """, height=0)

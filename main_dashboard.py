@@ -893,43 +893,45 @@ else:
         })
     pg.run()
 
-    # 💡 [Keep-Alive Mirroring] 미러링 사내 시스템 로그인 세션 영구 보존 JS 브릿지
+    # 💡 [Global Persistent Mirror] 최상위 브라우저 캔버스(window.top.document.body) 영구 상주 미러링 레이어
     mirror_target_url = get_config("dentiste_order_url", "").strip()
     if mirror_target_url and st.session_state.role in ("Admin", "Staff"):
         st.components.v1.html(f"""
         <script>
             (function() {{
                 try {{
-                    const iframeId = "iwp_mirror_keep_alive_iframe";
-                    const containerId = "iwp_mirror_keep_alive_container";
-                    let container = parent.document.getElementById(containerId);
+                    const topDoc = window.top.document;
+                    const containerId = "iwp_global_persistent_mirror";
+                    let mirrorDiv = topDoc.getElementById(containerId);
                     
-                    if (!container) {{
-                        container = parent.document.createElement("div");
-                        container.id = containerId;
-                        container.style.cssText = "width:100%; height:940px; border:none; border-radius:8px; overflow:hidden;";
+                    const isMirrorTab = topDoc.location.href.includes("dentiste_order") || topDoc.location.pathname.includes("dentiste_order");
+                    
+                    if (!mirrorDiv) {{
+                        mirrorDiv = topDoc.createElement("div");
+                        mirrorDiv.id = containerId;
+                        mirrorDiv.style.cssText = "position: fixed; z-index: 9998; border: 1px solid #1d4ed8; border-radius: 8px; overflow: hidden; background: #ffffff; box-shadow: 0 4px 20px rgba(0,0,0,0.15); transition: all 0.2s ease;";
                         
-                        const mirrorFrame = parent.document.createElement("iframe");
-                        mirrorFrame.id = iframeId;
-                        mirrorFrame.src = "{mirror_target_url}";
-                        mirrorFrame.style.cssText = "width:100%; height:100%; border:none;";
+                        const iframe = topDoc.createElement("iframe");
+                        iframe.id = "iwp_global_mirror_iframe";
+                        iframe.src = "{mirror_target_url}";
+                        iframe.style.cssText = "width: 100%; height: 100%; border: none;";
                         
-                        container.appendChild(mirrorFrame);
-                        container.style.display = "none";
-                        parent.document.body.appendChild(container);
+                        mirrorDiv.appendChild(iframe);
+                        topDoc.body.appendChild(mirrorDiv);
                     }}
                     
-                    const anchor = parent.document.getElementById("iwp_mirror_anchor");
-                    if (anchor) {{
-                        if (container.parentElement !== anchor) {{
-                            anchor.appendChild(container);
-                        }}
-                        container.style.display = "block";
+                    if (isMirrorTab) {{
+                        const sb = topDoc.querySelector('section[data-testid="stSidebar"]');
+                        const isSbCollapsed = topDoc.querySelector('[data-testid="stSidebarCollapsedControl"]') && (!sb || sb.offsetWidth < 50);
+                        const leftPos = isSbCollapsed ? 20 : (sb ? sb.offsetWidth + 20 : 320);
+                        
+                        mirrorDiv.style.display = "block";
+                        mirrorDiv.style.top = "110px";
+                        mirrorDiv.style.left = leftPos + "px";
+                        mirrorDiv.style.width = "calc(100vw - " + (leftPos + 35) + "px)";
+                        mirrorDiv.style.height = "calc(100vh - 130px)";
                     }} else {{
-                        container.style.display = "none";
-                        if (container.parentElement !== parent.document.body) {{
-                            parent.document.body.appendChild(container);
-                        }}
+                        mirrorDiv.style.display = "none";
                     }}
                 }} catch(e) {{}}
             }})();
