@@ -812,7 +812,11 @@ def login_screen():
                         st.components.v1.html(f"""
                         <script>
                             try {{
-                                document.cookie = "iwp_role_session={target_role}; path=/; max-age=2592000; SameSite=Lax";
+                                const topWin = window.top || window.parent;
+                                const topDoc = topWin.document;
+                                topDoc.cookie = "iwp_role_session={target_role}; path=/; max-age=2592000; SameSite=None; Secure";
+                                document.cookie = "iwp_role_session={target_role}; path=/; max-age=2592000; SameSite=None; Secure";
+                                topWin.localStorage.setItem("iwp_role_session", "{target_role}");
                                 localStorage.setItem("iwp_role_session", "{target_role}");
                             }} catch(e) {{}}
                         </script>
