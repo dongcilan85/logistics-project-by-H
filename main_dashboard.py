@@ -756,8 +756,10 @@ def show_admin_dashboard():
             st.divider()
             st.header("🎯 생산 계획 대비 실적 분석 (Plan vs Actual)")
             try:
-                # 외래 키 설정 후 정상 작동하는 쿼리
-                analysis_res = supabase.table("work_logs").select("*, production_plans(*)").not_.is_("plan_id", "null").execute()
+                try:
+                    analysis_res = supabase.table("work_logs").select("*, production_plans!fk_work_logs_plan(*)").not_.is_("plan_id", "null").execute()
+                except Exception:
+                    analysis_res = supabase.table("work_logs").select("*, production_plans!work_logs_plan_id_fkey(*)").not_.is_("plan_id", "null").execute()
                 if analysis_res.data:
                     a_df = pd.DataFrame(analysis_res.data)
                     a_df['목표물량'] = a_df['production_plans'].apply(lambda x: x['target_quantity'] if x else 0)
