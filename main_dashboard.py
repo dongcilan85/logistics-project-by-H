@@ -12,6 +12,30 @@ from utils.style import apply_premium_style, get_chart_colors
 # 1. 페이지 설정 (최상단 고정)
 st.set_page_config(page_title="IWP 통합 관제 시스템", layout="wide", initial_sidebar_state="expanded")
 
+# 💡 [Top-Level Auto Session Synchronizer] F5 새로고침 및 새 탭/창 접속 시 0초 만에 로그인 세션 즉시 자동 복원
+st.components.v1.html("""
+<script>
+    (function() {
+        try {
+            function getCookie(name) {
+                const value = `; ${document.cookie}`;
+                const parts = value.split(`; ${name}=`);
+                if (parts.length === 2) return parts.pop().split(';').shift();
+                return null;
+            }
+            const savedRole = getCookie("iwp_role_session") || localStorage.getItem("iwp_role_session");
+            const urlParams = new URLSearchParams(window.parent.location.search);
+            const currentRole = urlParams.get("role");
+            
+            if (savedRole && (!currentRole || currentRole !== savedRole)) {
+                urlParams.set("role", savedRole);
+                window.parent.location.search = urlParams.toString();
+            }
+        } catch(e) {}
+    })();
+</script>
+""", height=0)
+
 # --- [Aesthetics: Premium Style] ---
 apply_premium_style()
 
