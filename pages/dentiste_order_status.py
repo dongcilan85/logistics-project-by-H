@@ -60,25 +60,32 @@ div[data-testid="stExpander"] details div[data-testid="stExpanderDetails"] {
 </div>
 """, unsafe_allow_html=True)
 
-target_url = get_config("dentiste_order_url", "").strip()
-target_pw = get_config("dentiste_order_pw", "").strip()
-
 if not target_url:
     st.warning("⚠️ 등록된 덴티스테 발주현황 웹사이트 URL이 없습니다.")
     st.info("💡 **[재고관리 환경설정]** 메뉴로 이동하여 연동할 **URL 주소**와 **접속 비밀번호**를 등록해 주세요.")
 else:
     # 로그인 보조 정보 헤더
-    with st.expander("🔑 로그인 정보 및 웹 미러링 안내 팁", expanded=False if target_pw else True):
-        col1, col2 = st.columns([3.5, 1])
-        with col1:
+    with st.expander("🔑 로그인 1초 원터치 비밀번호 지원 & 안내 팁", expanded=True if not target_pw else False):
+        c1, c2, c3 = st.columns([2.5, 1.2, 1])
+        with c1:
             if target_pw:
-                st.markdown(f"<span style='font-size:12.5px;'><b>PW :</b> <code>{target_pw}</code> (복사하여 로그인 창의 비밀번호 입력란에 사용하세요.)</span>", unsafe_allow_html=True)
+                st.markdown(f"<span style='font-size:13px;'><b>저장된 PW:</b> <code>{target_pw}</code></span>", unsafe_allow_html=True)
             else:
-                st.caption("등록된 비밀번호가 없습니다. 필요시 [재고관리 환경설정]에서 등록하실 수 있습니다.")
-        with col2:
+                st.caption("등록된 비밀번호가 없습니다. [재고관리 환경설정]에서 등록하실 수 있습니다.")
+        with c2:
+            if target_pw:
+                # 1초 비밀번호 클립보드 복사 JS 트리거
+                copy_js = f"""
+                <button onclick="navigator.clipboard.writeText('{target_pw}'); alert('✅ 비밀번호가 복사되었습니다!\\n로그인 창에서 Ctrl+V 를 누른 후 Enter를 치세요.');" 
+                        style="width:100%; padding:0.25rem 0.5rem; border-radius:4px; border:1px solid #2ecc71; background-color:#27ae60; color:white; font-size:12px; font-weight:bold; cursor:pointer;">
+                    📋 PW 1초 복사
+                </button>
+                """
+                st.markdown(copy_js, unsafe_allow_html=True)
+        with c3:
             st.markdown(f'<a href="{target_url}" target="_blank" style="text-decoration:none;"><button style="width:100%; padding:0.25rem 0.5rem; border-radius:4px; border:1px solid #4A90D9; background-color:#1f77b4; color:white; font-size:12px; font-weight:bold; cursor:pointer;">새 창에서 열기 ↗️</button></a>', unsafe_allow_html=True)
 
-    # 웹 미러링 iframe 렌더링 (구글 OAuth 튕김 차단 & 표준 스마트 미러링)
+    # 웹 미러링 iframe 렌더링 (높이 940px)
     try:
         components.iframe(target_url, height=940, scrolling=True)
     except Exception as e:
