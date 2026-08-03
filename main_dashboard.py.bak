@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 import time
 import io
 import os
-from utils.style import apply_premium_style, ensure_authenticated_session, get_chart_colors
+from utils.style import apply_premium_style, get_chart_colors
 
 # 1. 페이지 설정 (최상단 고정)
 st.set_page_config(page_title="IWP 통합 관제 시스템", layout="wide", initial_sidebar_state="expanded")
@@ -21,13 +21,8 @@ key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 KST = timezone(timedelta(hours=9))
 
-# 💡 [Session Restore] st.query_params 기반 로그인 세션 복원 (100% 서버사이드)
-if "role" not in st.session_state or st.session_state.role is None:
-    q_role = st.query_params.get("role", None)
-    if q_role in ("Admin", "Staff", "Guest"):
-        st.session_state.role = q_role
-    else:
-        st.session_state.role = None
+if "role" not in st.session_state:
+    st.session_state.role = None
 
 # --- [시스템 유틸리티 로직] ---
 def get_config(key, default):
@@ -701,10 +696,8 @@ def show_admin_dashboard():
             st.divider()
             st.header("🎯 생산 계획 대비 실적 분석 (Plan vs Actual)")
             try:
-                try:
-                    analysis_res = supabase.table("work_logs").select("*, production_plans!fk_work_logs_plan(*)").not_.is_("plan_id", "null").execute()
-                except Exception:
-                    analysis_res = supabase.table("work_logs").select("*, production_plans!work_logs_plan_id_fkey(*)").not_.is_("plan_id", "null").execute()
+                # 외래 키 설정 후 정상 작동하는 쿼리
+                analysis_res = supabase.table("work_logs").select("*, production_plans(*)").not_.is_("plan_id", "null").execute()
                 if analysis_res.data:
                     a_df = pd.DataFrame(analysis_res.data)
                     a_df['목표물량'] = a_df['production_plans'].apply(lambda x: x['target_quantity'] if x else 0)
@@ -745,29 +738,27 @@ def login_screen():
             with st.form("login_form", border=False):
                 pw = st.text_input("비밀번호", type="password")
                 if st.form_submit_button("접속", use_container_width=True, type="primary"):
-                    target_role = None
-                    if pw == get_admin_password(): target_role = "Admin"
-                    elif pw == get_staff_password(): target_role = "Staff"
-                    elif pw == "": target_role = "Guest"
-                    else: st.error("비밀번호 불일치")
-                    
-                    if target_role:
-                        st.session_state.role = target_role
-                        st.query_params["role"] = target_role
+                    if pw == get_admin_password(): 
+                        st.session_state.role = "Admin"
                         st.rerun()
+                    elif pw == get_staff_password(): 
+                        st.session_state.role = "Staff"
+                        st.rerun()
+                    elif pw == "": 
+                        st.session_state.role = "Guest"
+                        st.rerun()
+                    else: 
+                        st.error("비밀번호 불일치")
 
-
-# 💡 세션 0.001초 최우선 검증 및 Page not found 방어
-ensure_authenticated_session()
 
 if st.session_state.role is None:
     st.navigation([st.Page(login_screen, title="로그인", icon="🔒", url_path="login")]).run()
 else:
     # 💡 메뉴 통합: 생산 예측과 계획 관리를 하나로 합침
-    admin_main = st.Page(show_admin_dashboard, title="통합 대시보드", icon="📊", url_path="dashboard", default=(st.session_state.role in ("Admin", "Staff")))
+    admin_main = st.Page(show_admin_dashboard, title="통합 대시보드", icon="📊", url_path="dashboard")
     plan_mgmt_page = st.Page("pages/planning_mgmt.py", title="생산 계획 관리", icon="📅", url_path="planning")
     cat_page = st.Page("pages/category_mgmt.py", title="카테고리 관리", icon="📁", url_path="category")
-    site_page = st.Page("pages/field_input.py", title="현장 기록", icon="🚩", url_path="field", default=(st.session_state.role == "Guest"))
+    site_page = st.Page("pages/field_input.py", title="현장 기록", icon="🚩", url_path="field")
     warehouse_page = st.Page("pages/warehouse_mgmt.py", title="재고관리", icon="📦", url_path="warehouse")
     warehouse_settings_page = st.Page("pages/warehouse_settings.py", title="재고관리 환경설정", icon="⚙️", url_path="warehouse_settings")
     dentiste_order_page = st.Page("pages/dentiste_order_status.py", title="덴티스테 발주현황", icon="🚚", url_path="dentiste_order")
@@ -840,10 +831,7 @@ else:
 
     st.sidebar.divider()
     sc1, sc2 = st.sidebar.columns(2)
-    if sc1.button("🔓 로그아웃", use_container_width=True):
-        st.session_state.role = None
-        st.query_params.clear()
-        st.rerun()
+    if sc1.button("🔓 로그아웃", use_container_width=True): st.session_state.role = None; st.rerun()
     if sc2.button("🔑 PW변경", use_container_width=True): change_password_dialog()
 
     if st.session_state.role == "Admin":
