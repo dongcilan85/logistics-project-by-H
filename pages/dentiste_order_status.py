@@ -83,7 +83,7 @@ else:
         with c2:
             if target_pw:
                 # 100% 클립보드 복사 성공 이중 호환 엔진 (json.dumps 이스케이프 + execCommand 폴백)
-                safe_pw_js = json.dumps(target_pw)
+                safe_pw_js = json.dumps(target_pw).replace('"', '&quot;')
                 copy_js = f"""
                 <button onclick="
                     (function() {{
