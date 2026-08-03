@@ -78,41 +78,8 @@ else:
         with col2:
             st.markdown(f'<a href="{target_url}" target="_blank" style="text-decoration:none;"><button style="width:100%; padding:0.25rem 0.5rem; border-radius:4px; border:1px solid #4A90D9; background-color:#1f77b4; color:white; font-size:12px; font-weight:bold; cursor:pointer;">새 창에서 열기 ↗️</button></a>', unsafe_allow_html=True)
 
-    # 💡 [Single Lifetime Persistent Mirror] 단일 영구 상주 미러링 바인딩 슬롯
-    st.components.v1.html(f"""
-    <div id="iwp_mirror_slot" style="width:100%; height:870px; min-height:870px; margin-top:6px;"></div>
-    <script>
-        (function() {{
-            function mountPersistentMirror() {{
-                try {{
-                    const topWin = window.top || window.parent;
-                    const topDoc = topWin.document;
-                    const iframeId = "iwp_single_persistent_iframe";
-                    const slot = document.getElementById("iwp_mirror_slot");
-                    let persistentFrame = topDoc.getElementById(iframeId);
-                    
-                    if (!persistentFrame) {{
-                        persistentFrame = topDoc.createElement("iframe");
-                        persistentFrame.id = iframeId;
-                        persistentFrame.src = "{target_url}";
-                        persistentFrame.style.cssText = "width:100%; height:100%; min-height:870px; border:1px solid #cbd5e1; border-radius:8px; background:#ffffff; box-shadow:0 2px 10px rgba(0,0,0,0.05); display:block;";
-                        topDoc.body.appendChild(persistentFrame);
-                    }}
-                    
-                    if (slot && persistentFrame) {{
-                        slot.innerHTML = "";
-                        persistentFrame.style.display = "block";
-                        persistentFrame.style.width = "100%";
-                        persistentFrame.style.height = "100%";
-                        persistentFrame.style.minHeight = "870px";
-                        slot.appendChild(persistentFrame);
-                    }}
-                }} catch(e) {{}}
-            }}
-            
-            mountPersistentMirror();
-            setTimeout(mountPersistentMirror, 50);
-            setTimeout(mountPersistentMirror, 200);
-        }})();
-    </script>
-    """, height=880)
+    # 웹 미러링 iframe 렌더링 (높이 940px로 추가 확장)
+    try:
+        components.iframe(target_url, height=940, scrolling=True)
+    except Exception as e:
+        st.error(f"미러링 화면을 불러오는 도중 오류가 발생했습니다: {e}")

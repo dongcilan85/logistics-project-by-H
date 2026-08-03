@@ -852,35 +852,3 @@ else:
             "현장": [site_page]
         })
     pg.run()
-
-    # 💡 [Single Lifetime Persistent Mirror] 단일 영구 상주 미러링 매니저
-    mirror_target_url = get_config("dentiste_order_url", "").strip()
-    if mirror_target_url and st.session_state.role in ("Admin", "Staff"):
-        st.components.v1.html(f"""
-        <script>
-            (function() {{
-                try {{
-                    const topWin = window.top || window.parent;
-                    const topDoc = topWin.document;
-                    const iframeId = "iwp_single_persistent_iframe";
-                    let persistentFrame = topDoc.getElementById(iframeId);
-                    const isMirrorTab = topWin.location.href.includes("dentiste_order") || topWin.location.search.includes("dentiste_order");
-                    
-                    if (!persistentFrame) {{
-                        persistentFrame = topDoc.createElement("iframe");
-                        persistentFrame.id = iframeId;
-                        persistentFrame.src = "{mirror_target_url}";
-                        persistentFrame.style.cssText = "width:100%; height:100%; min-height:870px; border:1px solid #cbd5e1; border-radius:8px; background:#ffffff; box-shadow:0 2px 10px rgba(0,0,0,0.05); display:none;";
-                        topDoc.body.appendChild(persistentFrame);
-                    }}
-                    
-                    if (!isMirrorTab && persistentFrame) {{
-                        persistentFrame.style.display = "none";
-                        if (persistentFrame.parentElement !== topDoc.body) {{
-                            topDoc.body.appendChild(persistentFrame);
-                        }}
-                    }}
-                }} catch(e) {{}}
-            }})();
-        </script>
-        """, height=0)
