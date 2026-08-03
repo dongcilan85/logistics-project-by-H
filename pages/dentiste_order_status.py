@@ -60,6 +60,9 @@ div[data-testid="stExpander"] details div[data-testid="stExpanderDetails"] {
 </div>
 """, unsafe_allow_html=True)
 
+target_url = get_config("dentiste_order_url", "").strip()
+target_pw = get_config("dentiste_order_pw", "").strip()
+
 if not target_url:
     st.warning("⚠️ 등록된 덴티스테 발주현황 웹사이트 URL이 없습니다.")
     st.info("💡 **[재고관리 환경설정]** 메뉴로 이동하여 연동할 **URL 주소**와 **접속 비밀번호**를 등록해 주세요.")
