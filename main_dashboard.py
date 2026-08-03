@@ -7,6 +7,8 @@ from datetime import datetime, timedelta, timezone
 import time
 import io
 import os
+import uuid
+import json
 from utils.style import apply_premium_style, ensure_authenticated_session, get_chart_colors
 
 # 1. 페이지 설정 (최상단 고정)
@@ -21,16 +23,11 @@ key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 KST = timezone(timedelta(hours=9))
 
-# 💡 [Session Restore] st.query_params 기반 로그인 세션 복원 + 동기화
+# 💡 [Session Restore] DB 토큰 기반 로그인 세션 복원 + 동기화
 if "role" not in st.session_state or st.session_state.role is None:
-    q_role = st.query_params.get("role", None)
-    if q_role in ("Admin", "Staff", "Guest"):
-        st.session_state.role = q_role
-    else:
+    # ensure_authenticated_session()에서 이미 처리되지만, 메인 진입점에서도 한번 더 보장
+    if st.session_state.get("role") is None:
         st.session_state.role = None
-elif st.session_state.role in ("Admin", "Staff", "Guest"):
-    if st.query_params.get("role") != st.session_state.role:
-        st.query_params["role"] = st.session_state.role
 
 # --- [시스템 유틸리티 로직] ---
 def get_config(key, default):
@@ -755,8 +752,12 @@ def login_screen():
                     else: st.error("비밀번호 불일치")
                     
                     if target_role:
+                        token = str(uuid.uuid4())
+                        session_data = json.dumps({"role": target_role, "created_at": datetime.now(KST).isoformat()})
+                        set_config(f"session_{token}", session_data)
                         st.session_state.role = target_role
-                        st.query_params["role"] = target_role
+                        st.session_state._session_token = token
+                        st.query_params["token"] = token
                         st.rerun()
 
 
@@ -844,8 +845,16 @@ else:
     st.sidebar.divider()
     sc1, sc2 = st.sidebar.columns(2)
     if sc1.button("🔓 로그아웃", use_container_width=True):
+        token = st.session_state.get("_session_token")
+        if token:
+            try:
+                supabase.table("system_config").delete().eq("key", f"session_{token}").execute()
+            except Exception:
+                pass
         st.session_state.role = None
+        st.session_state._session_token = None
         st.query_params.clear()
+        st.components.v1.html("""<script>document.cookie="iwp_token=;path=/;max-age=0";</script>""", height=0)
         st.rerun()
     if sc2.button("🔑 PW변경", use_container_width=True): change_password_dialog()
 
