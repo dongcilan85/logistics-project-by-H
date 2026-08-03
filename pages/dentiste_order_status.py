@@ -83,10 +83,13 @@ else:
         with c2:
             if target_pw:
                 # 100% 클립보드 복사 성공 이중 호환 엔진 (json.dumps 이스케이프 + execCommand 폴백)
-                safe_pw_js = json.dumps(target_pw).replace('"', '&quot;')
-                copy_js = f"""
-                <button onclick="
-                    (function() {{
+                safe_pw_js = json.dumps(target_pw)
+                copy_html = f"""
+                <button id="copyBtn" style="width:100%; padding:0.25rem 0.5rem; border-radius:4px; border:1px solid #2ecc71; background-color:#27ae60; color:white; font-size:12px; font-weight:bold; cursor:pointer;">
+                    📋 PW 1초 복사
+                </button>
+                <script>
+                    document.getElementById('copyBtn').addEventListener('click', function() {{
                         const text = {safe_pw_js};
                         function doCopyFallback(val) {{
                             const ta = document.createElement('textarea');
@@ -103,7 +106,6 @@ else:
                             }}
                             document.body.removeChild(ta);
                         }}
-                        
                         if (navigator.clipboard && window.isSecureContext) {{
                             navigator.clipboard.writeText(text).then(function() {{
                                 alert('✅ 비밀번호가 복사되었습니다!\\n로그인 창에서 Ctrl+V 를 누른 후 Enter를 치세요.');
@@ -113,12 +115,10 @@ else:
                         }} else {{
                             doCopyFallback(text);
                         }}
-                    }})();
-                " style="width:100%; padding:0.25rem 0.5rem; border-radius:4px; border:1px solid #2ecc71; background-color:#27ae60; color:white; font-size:12px; font-weight:bold; cursor:pointer;">
-                    📋 PW 1초 복사
-                </button>
+                    }});
+                </script>
                 """
-                st.markdown(copy_js, unsafe_allow_html=True)
+                st.components.v1.html(copy_html, height=35)
         with c3:
             st.markdown(f'<a href="{target_url}" target="_blank" style="text-decoration:none;"><button style="width:100%; padding:0.25rem 0.5rem; border-radius:4px; border:1px solid #4A90D9; background-color:#1f77b4; color:white; font-size:12px; font-weight:bold; cursor:pointer;">새 창에서 열기 ↗️</button></a>', unsafe_allow_html=True)
 
