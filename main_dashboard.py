@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 import time
 import io
 import os
-from utils.style import apply_premium_style, get_chart_colors
+from utils.style import apply_premium_style, ensure_authenticated_session, get_chart_colors
 
 # 1. 페이지 설정 (최상단 고정)
 st.set_page_config(page_title="IWP 통합 관제 시스템", layout="wide", initial_sidebar_state="expanded")
@@ -820,37 +820,17 @@ def login_screen():
                         st.rerun()
 
 
+# 💡 세션 0.001초 최우선 검증 및 Page not found 방어
+ensure_authenticated_session()
+
 if st.session_state.role is None:
-    # 로그인 스크립트 실행 시 세션 자동 복원 보조 스크립트
-    st.components.v1.html("""
-    <script>
-        (function() {
-            try {
-                function getCookie(name) {
-                    const value = `; ${document.cookie}`;
-                    const parts = value.split(`; ${name}=`);
-                    if (parts.length === 2) return parts.pop().split(';').shift();
-                    return null;
-                }
-                const savedRole = getCookie("iwp_role_session") || localStorage.getItem("iwp_role_session");
-                const urlParams = new URLSearchParams(window.parent.location.search);
-                const currentRole = urlParams.get("role");
-                
-                if (savedRole && (!currentRole || currentRole !== savedRole)) {
-                    urlParams.set("role", savedRole);
-                    window.parent.location.search = urlParams.toString();
-                }
-            } catch(e) {}
-        })();
-    </script>
-    """, height=0)
     st.navigation([st.Page(login_screen, title="로그인", icon="🔒", url_path="login")]).run()
 else:
     # 💡 메뉴 통합: 생산 예측과 계획 관리를 하나로 합침
-    admin_main = st.Page(show_admin_dashboard, title="통합 대시보드", icon="📊", url_path="dashboard")
+    admin_main = st.Page(show_admin_dashboard, title="통합 대시보드", icon="📊", url_path="dashboard", default=(st.session_state.role in ("Admin", "Staff")))
     plan_mgmt_page = st.Page("pages/planning_mgmt.py", title="생산 계획 관리", icon="📅", url_path="planning")
     cat_page = st.Page("pages/category_mgmt.py", title="카테고리 관리", icon="📁", url_path="category")
-    site_page = st.Page("pages/field_input.py", title="현장 기록", icon="🚩", url_path="field")
+    site_page = st.Page("pages/field_input.py", title="현장 기록", icon="🚩", url_path="field", default=(st.session_state.role == "Guest"))
     warehouse_page = st.Page("pages/warehouse_mgmt.py", title="재고관리", icon="📦", url_path="warehouse")
     warehouse_settings_page = st.Page("pages/warehouse_settings.py", title="재고관리 환경설정", icon="⚙️", url_path="warehouse_settings")
     dentiste_order_page = st.Page("pages/dentiste_order_status.py", title="덴티스테 발주현황", icon="🚚", url_path="dentiste_order")
