@@ -3,6 +3,9 @@ import pandas as pd
 import time
 from datetime import datetime
 from supabase import create_client, Client
+from utils.style import apply_premium_style
+
+apply_premium_style()
 
 # --- Supabase 설정 ---
 @st.cache_resource

@@ -1,6 +1,78 @@
 import streamlit as st
 
+def ensure_authenticated_session():
+    """모든 서브페이지(pages/*.py) 및 메인 대시보드 공통 브라우저 쿠키/세션 100% 영구 복원 인터셉터"""
+    if "role" not in st.session_state or st.session_state.role is None:
+        role_val = None
+        # 1. Streamlit 1.37+ st.context.cookies 감지
+        try:
+            cookies = st.context.cookies
+            if cookies and "iwp_role_session" in cookies:
+                c_val = cookies.get("iwp_role_session")
+                if c_val in ("Admin", "Staff", "Guest"):
+                    role_val = c_val
+        except Exception:
+            pass
+            
+        # 2. st.context.headers Cookie 헤더 파싱
+        if not role_val:
+            try:
+                headers = st.context.headers
+                if headers and "cookie" in headers:
+                    cookie_str = headers.get("cookie", "")
+                    for item in cookie_str.split(";"):
+                        if "=" in item:
+                            k, v = item.strip().split("=", 1)
+                            if k == "iwp_role_session" and v in ("Admin", "Staff", "Guest"):
+                                role_val = v
+                                break
+            except Exception:
+                pass
+                
+        # 3. st.query_params 감지
+        if not role_val:
+            q_val = st.query_params.get("role", None)
+            if q_val in ("Admin", "Staff", "Guest"):
+                role_val = q_val
+                
+        if role_val:
+            st.session_state.role = role_val
+            st.query_params["role"] = role_val
+
 def apply_premium_style():
+    ensure_authenticated_session()
+    
+    # 최상위 Window JS 자동 세션 복원 동기화
+    try:
+        st.components.v1.html("""
+        <script>
+            (function() {
+                try {
+                    const topWin = window.top || window.parent;
+                    const topDoc = topWin.document;
+                    
+                    function getCookie(name) {
+                        const value = `; ${topDoc.cookie}`;
+                        const parts = value.split(`; ${name}=`);
+                        if (parts.length === 2) return parts.pop().split(';').shift();
+                        return null;
+                    }
+                    
+                    const savedRole = getCookie("iwp_role_session") || topWin.localStorage.getItem("iwp_role_session");
+                    const urlParams = new URLSearchParams(topWin.location.search);
+                    const currentRole = urlParams.get("role");
+                    
+                    if (savedRole && (!currentRole || currentRole !== savedRole)) {
+                        urlParams.set("role", savedRole);
+                        topWin.location.search = urlParams.toString();
+                    }
+                } catch(e) {}
+            })();
+        </script>
+        """, height=0)
+    except Exception:
+        pass
+
     st.markdown("""
         <style>
         @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');

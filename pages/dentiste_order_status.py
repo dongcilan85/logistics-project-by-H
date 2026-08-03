@@ -1,6 +1,9 @@
 import streamlit as st
 import streamlit.components.v1 as components
 from supabase import create_client
+from utils.style import apply_premium_style
+
+apply_premium_style()
 
 # --- Supabase 설정 ---
 @st.cache_resource
