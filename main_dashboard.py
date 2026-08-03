@@ -12,24 +12,28 @@ from utils.style import apply_premium_style, get_chart_colors
 # 1. 페이지 설정 (최상단 고정)
 st.set_page_config(page_title="IWP 통합 관제 시스템", layout="wide", initial_sidebar_state="expanded")
 
-# 💡 [Top-Level Auto Session Synchronizer] F5 새로고침 및 새 탭/창 접속 시 0초 만에 로그인 세션 즉시 자동 복원
+# 💡 [Top-Level Window & Cookie Sync] 최상위 윈도우 동기화
 st.components.v1.html("""
 <script>
     (function() {
         try {
+            const topWin = window.top || window.parent;
+            const topDoc = topWin.document;
+            
             function getCookie(name) {
-                const value = `; ${document.cookie}`;
+                const value = `; ${topDoc.cookie}`;
                 const parts = value.split(`; ${name}=`);
                 if (parts.length === 2) return parts.pop().split(';').shift();
                 return null;
             }
-            const savedRole = getCookie("iwp_role_session") || localStorage.getItem("iwp_role_session");
-            const urlParams = new URLSearchParams(window.parent.location.search);
+            
+            const savedRole = getCookie("iwp_role_session") || topWin.localStorage.getItem("iwp_role_session");
+            const urlParams = new URLSearchParams(topWin.location.search);
             const currentRole = urlParams.get("role");
             
             if (savedRole && (!currentRole || currentRole !== savedRole)) {
                 urlParams.set("role", savedRole);
-                window.parent.location.search = urlParams.toString();
+                topWin.location.search = urlParams.toString();
             }
         } catch(e) {}
     })();
@@ -45,19 +49,40 @@ key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 KST = timezone(timedelta(hours=9))
 
-# 💡 [Persistent Session] IWP 새로고침(F5) 및 브라우저 세션 자동 복원
+# 💡 [HTTP Header Cookie Direct Restore] 파이썬 백엔드 0초 직접 쿠키 감지 및 세션 자동 복원
+def get_browser_cookie_role():
+    try:
+        cookies = st.context.cookies
+        if cookies and "iwp_role_session" in cookies:
+            role_val = cookies.get("iwp_role_session")
+            if role_val in ("Admin", "Staff", "Guest"):
+                return role_val
+    except Exception:
+        pass
+        
+    try:
+        headers = st.context.headers
+        if headers and "cookie" in headers:
+            cookie_str = headers.get("cookie", "")
+            for item in cookie_str.split(";"):
+                if "=" in item:
+                    k, v = item.strip().split("=", 1)
+                    if k == "iwp_role_session" and v in ("Admin", "Staff", "Guest"):
+                        return v
+    except Exception:
+        pass
+    return None
+
 if "role" not in st.session_state or st.session_state.role is None:
-    saved_role = st.query_params.get("role", None)
-    if not saved_role:
-        try:
-            saved_role = st.context.cookies.get("iwp_role_session", None)
-        except Exception:
-            saved_role = None
-            
-    if saved_role in ("Admin", "Staff", "Guest"):
-        st.session_state.role = saved_role
+    direct_role = get_browser_cookie_role()
+    if direct_role:
+        st.session_state.role = direct_role
     else:
-        st.session_state.role = None
+        query_role = st.query_params.get("role", None)
+        if query_role in ("Admin", "Staff", "Guest"):
+            st.session_state.role = query_role
+        else:
+            st.session_state.role = None
 
 # --- [시스템 유틸리티 로직] ---
 def get_config(key, default):
