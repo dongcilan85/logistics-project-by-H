@@ -60,6 +60,8 @@ div[data-testid="stExpander"] details div[data-testid="stExpanderDetails"] {
 </div>
 """, unsafe_allow_html=True)
 
+import json
+
 target_url = get_config("dentiste_order_url", "").strip()
 target_pw = get_config("dentiste_order_pw", "").strip()
 
@@ -77,10 +79,39 @@ else:
                 st.caption("등록된 비밀번호가 없습니다. [재고관리 환경설정]에서 등록하실 수 있습니다.")
         with c2:
             if target_pw:
-                # 1초 비밀번호 클립보드 복사 JS 트리거
+                # 100% 클립보드 복사 성공 이중 호환 엔진 (json.dumps 이스케이프 + execCommand 폴백)
+                safe_pw_js = json.dumps(target_pw)
                 copy_js = f"""
-                <button onclick="navigator.clipboard.writeText('{target_pw}'); alert('✅ 비밀번호가 복사되었습니다!\\n로그인 창에서 Ctrl+V 를 누른 후 Enter를 치세요.');" 
-                        style="width:100%; padding:0.25rem 0.5rem; border-radius:4px; border:1px solid #2ecc71; background-color:#27ae60; color:white; font-size:12px; font-weight:bold; cursor:pointer;">
+                <button onclick="
+                    (function() {{
+                        const text = {safe_pw_js};
+                        function doCopyFallback(val) {{
+                            const ta = document.createElement('textarea');
+                            ta.value = val;
+                            ta.style.position = 'fixed';
+                            ta.style.left = '-9999px';
+                            document.body.appendChild(ta);
+                            ta.select();
+                            try {{
+                                document.execCommand('copy');
+                                alert('✅ 비밀번호가 복사되었습니다!\\n로그인 창에서 Ctrl+V 를 누른 후 Enter를 치세요.');
+                            }} catch(err) {{
+                                alert('복사 실패: ' + err);
+                            }}
+                            document.body.removeChild(ta);
+                        }}
+                        
+                        if (navigator.clipboard && window.isSecureContext) {{
+                            navigator.clipboard.writeText(text).then(function() {{
+                                alert('✅ 비밀번호가 복사되었습니다!\\n로그인 창에서 Ctrl+V 를 누른 후 Enter를 치세요.');
+                            }}).catch(function() {{
+                                doCopyFallback(text);
+                            }});
+                        }} else {{
+                            doCopyFallback(text);
+                        }}
+                    }})();
+                " style="width:100%; padding:0.25rem 0.5rem; border-radius:4px; border:1px solid #2ecc71; background-color:#27ae60; color:white; font-size:12px; font-weight:bold; cursor:pointer;">
                     📋 PW 1초 복사
                 </button>
                 """
