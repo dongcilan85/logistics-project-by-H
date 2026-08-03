@@ -21,8 +21,19 @@ key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 KST = timezone(timedelta(hours=9))
 
-if "role" not in st.session_state:
-    st.session_state.role = None
+# 💡 [Persistent Session] IWP 새로고침(F5) 및 브라우저 세션 자동 복원
+if "role" not in st.session_state or st.session_state.role is None:
+    saved_role = st.query_params.get("role", None)
+    if not saved_role:
+        try:
+            saved_role = st.context.cookies.get("iwp_role_session", None)
+        except Exception:
+            saved_role = None
+            
+    if saved_role in ("Admin", "Staff", "Guest"):
+        st.session_state.role = saved_role
+    else:
+        st.session_state.role = None
 
 # --- [시스템 유틸리티 로직] ---
 def get_config(key, default):
@@ -738,20 +749,50 @@ def login_screen():
             with st.form("login_form", border=False):
                 pw = st.text_input("비밀번호", type="password")
                 if st.form_submit_button("접속", use_container_width=True, type="primary"):
-                    if pw == get_admin_password(): 
-                        st.session_state.role = "Admin"
+                    target_role = None
+                    if pw == get_admin_password(): target_role = "Admin"
+                    elif pw == get_staff_password(): target_role = "Staff"
+                    elif pw == "": target_role = "Guest"
+                    else: st.error("비밀번호 불일치")
+                    
+                    if target_role:
+                        st.session_state.role = target_role
+                        st.query_params["role"] = target_role
+                        st.components.v1.html(f"""
+                        <script>
+                            try {{
+                                document.cookie = "iwp_role_session={target_role}; path=/; max-age=2592000; SameSite=Lax";
+                                localStorage.setItem("iwp_role_session", "{target_role}");
+                            }} catch(e) {{}}
+                        </script>
+                        """, height=0)
                         st.rerun()
-                    elif pw == get_staff_password(): 
-                        st.session_state.role = "Staff"
-                        st.rerun()
-                    elif pw == "": 
-                        st.session_state.role = "Guest"
-                        st.rerun()
-                    else: 
-                        st.error("비밀번호 불일치")
 
 
 if st.session_state.role is None:
+    # 로그인 스크립트 실행 시 세션 자동 복원 보조 스크립트
+    st.components.v1.html("""
+    <script>
+        (function() {
+            try {
+                function getCookie(name) {
+                    const value = `; ${document.cookie}`;
+                    const parts = value.split(`; ${name}=`);
+                    if (parts.length === 2) return parts.pop().split(';').shift();
+                    return null;
+                }
+                const savedRole = getCookie("iwp_role_session") || localStorage.getItem("iwp_role_session");
+                const urlParams = new URLSearchParams(window.parent.location.search);
+                const currentRole = urlParams.get("role");
+                
+                if (savedRole && (!currentRole || currentRole !== savedRole)) {
+                    urlParams.set("role", savedRole);
+                    window.parent.location.search = urlParams.toString();
+                }
+            } catch(e) {}
+        })();
+    </script>
+    """, height=0)
     st.navigation([st.Page(login_screen, title="로그인", icon="🔒", url_path="login")]).run()
 else:
     # 💡 메뉴 통합: 생산 예측과 계획 관리를 하나로 합침
@@ -831,7 +872,18 @@ else:
 
     st.sidebar.divider()
     sc1, sc2 = st.sidebar.columns(2)
-    if sc1.button("🔓 로그아웃", use_container_width=True): st.session_state.role = None; st.rerun()
+    if sc1.button("🔓 로그아웃", use_container_width=True):
+        st.session_state.role = None
+        st.query_params.clear()
+        st.components.v1.html("""
+        <script>
+            try {
+                document.cookie = "iwp_role_session=; path=/; max-age=0";
+                localStorage.removeItem("iwp_role_session");
+            } catch(e) {}
+        </script>
+        """, height=0)
+        st.rerun()
     if sc2.button("🔑 PW변경", use_container_width=True): change_password_dialog()
 
     if st.session_state.role == "Admin":
