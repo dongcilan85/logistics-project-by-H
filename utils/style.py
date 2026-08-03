@@ -1,11 +1,15 @@
 import streamlit as st
 
 def ensure_authenticated_session():
-    """st.query_params 기반 세션 복원 (100% 서버사이드, JS 불필요)"""
+    """st.query_params 기반 세션 복원 + 페이지 전환 시 동기화"""
     if "role" not in st.session_state or st.session_state.role is None:
         q_val = st.query_params.get("role", None)
         if q_val in ("Admin", "Staff", "Guest"):
             st.session_state.role = q_val
+    elif st.session_state.role in ("Admin", "Staff", "Guest"):
+        # 페이지 전환 시 query_params가 사라지면 다시 동기화
+        if st.query_params.get("role") != st.session_state.role:
+            st.query_params["role"] = st.session_state.role
 
 def apply_premium_style():
     ensure_authenticated_session()

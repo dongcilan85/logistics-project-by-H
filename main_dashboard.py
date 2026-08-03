@@ -21,13 +21,16 @@ key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 KST = timezone(timedelta(hours=9))
 
-# 💡 [Session Restore] st.query_params 기반 로그인 세션 복원 (100% 서버사이드)
+# 💡 [Session Restore] st.query_params 기반 로그인 세션 복원 + 동기화
 if "role" not in st.session_state or st.session_state.role is None:
     q_role = st.query_params.get("role", None)
     if q_role in ("Admin", "Staff", "Guest"):
         st.session_state.role = q_role
     else:
         st.session_state.role = None
+elif st.session_state.role in ("Admin", "Staff", "Guest"):
+    if st.query_params.get("role") != st.session_state.role:
+        st.query_params["role"] = st.session_state.role
 
 # --- [시스템 유틸리티 로직] ---
 def get_config(key, default):
