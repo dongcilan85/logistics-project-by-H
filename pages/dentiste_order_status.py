@@ -78,31 +78,8 @@ else:
         with col2:
             st.markdown(f'<a href="{target_url}" target="_blank" style="text-decoration:none;"><button style="width:100%; padding:0.25rem 0.5rem; border-radius:4px; border:1px solid #4A90D9; background-color:#1f77b4; color:white; font-size:12px; font-weight:bold; cursor:pointer;">새 창에서 열기 ↗️</button></a>', unsafe_allow_html=True)
 
-    # 💡 [IWP Reverse Proxy Engine] 사내 시스템 세션 영구 보존 및 서드파티 쿠키 차단 완벽 우회
-    import requests
-    from urllib.parse import urlparse
-
-    if "mirror_proxy_session" not in st.session_state:
-        st.session_state.mirror_proxy_session = requests.Session()
-        st.session_state.mirror_proxy_session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        })
-
+    # 웹 미러링 iframe 렌더링 (구글 OAuth 튕김 차단 & 표준 스마트 미러링)
     try:
-        # 프록시 세션을 통한 사내 시스템 접속 및 세션 쿠키 동기화
-        res = st.session_state.mirror_proxy_session.get(target_url, timeout=5)
-        parsed_url = urlparse(target_url)
-        base_origin = f"{parsed_url.scheme}://{parsed_url.netloc}"
-        
-        # HTML 렌더링 및 Base URL 주입 (경로 깨짐 방지)
-        raw_html = res.text
-        if "<head>" in raw_html:
-            inject_head = f'<head><base href="{base_origin}/">'
-            rendered_html = raw_html.replace("<head>", inject_head, 1)
-        else:
-            rendered_html = f'<base href="{base_origin}/">' + raw_html
-
-        st.components.v1.html(rendered_html, height=940, scrolling=True)
-    except Exception as e:
-        # 접속 타임아웃 또는 일반 예외 발생 시 표준 이중 보호 렌더링으로 자동 폴백
         components.iframe(target_url, height=940, scrolling=True)
+    except Exception as e:
+        st.error(f"미러링 화면을 불러오는 도중 오류가 발생했습니다: {e}")
