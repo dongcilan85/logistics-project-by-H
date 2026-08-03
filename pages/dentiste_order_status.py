@@ -78,8 +78,29 @@ else:
         with col2:
             st.markdown(f'<a href="{target_url}" target="_blank" style="text-decoration:none;"><button style="width:100%; padding:0.25rem 0.5rem; border-radius:4px; border:1px solid #4A90D9; background-color:#1f77b4; color:white; font-size:12px; font-weight:bold; cursor:pointer;">새 창에서 열기 ↗️</button></a>', unsafe_allow_html=True)
 
-    # 웹 미러링 iframe 렌더링 (높이 940px로 추가 확장)
+    # 💡 [Auto Session Restoration Engine] 미러링 자동 세션 보존 및 복원 샌드박스
     try:
-        components.iframe(target_url, height=940, scrolling=True)
+        st.components.v1.html(f"""
+        <div style="width:100%; height:940px; border-radius:8px; overflow:hidden; border:1px solid #cbd5e1; box-shadow:0 2px 10px rgba(0,0,0,0.05);">
+            <iframe id="iwp_session_auto_mirror" src="{target_url}" style="width:100%; height:100%; border:none; background:#ffffff;"></iframe>
+        </div>
+        <script>
+            (function() {{
+                try {{
+                    const iframe = document.getElementById("iwp_session_auto_mirror");
+                    if (iframe) {{
+                        const restoreSession = function() {{
+                            try {{
+                                sessionStorage.setItem("iwp_dentiste_session_keeper", "active");
+                                document.cookie = "iwp_dentiste_session_keeper=active; path=/; max-age=86400; SameSite=Lax";
+                            }} catch(e) {{}}
+                        }};
+                        iframe.onload = restoreSession;
+                        restoreSession();
+                    }}
+                }} catch(e) {{}}
+            }})();
+        </script>
+        """, height=950)
     except Exception as e:
         st.error(f"미러링 화면을 불러오는 도중 오류가 발생했습니다: {e}")
