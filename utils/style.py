@@ -20,14 +20,17 @@ def _validate_session_token(token):
     return None
 
 def ensure_authenticated_session():
-    """DB 토큰 기반 세션 복원 + 페이지 전환 시 동기화"""
+    """DB 토큰 기반 세션 복원 + 자동 로그인"""
     if "role" not in st.session_state or st.session_state.role is None:
         # 1. query_params에서 토큰 확인
         token = st.query_params.get("token", None)
-        # 2. 없으면 브라우저 쿠키에서 토큰 확인 (새 탭/새 창용)
+        # 2. 없으면 DB에서 자동 로그인 세션 조회 (새 탭/새 창용)
         if not token:
             try:
-                token = st.context.cookies.get("iwp_token")
+                sb = _get_supabase()
+                res = sb.table("system_config").select("value").eq("key", "auto_session").execute()
+                if res.data:
+                    token = res.data[0]['value']
             except Exception:
                 pass
         # 3. 토큰이 있으면 DB에서 role 조회
@@ -47,12 +50,6 @@ def ensure_authenticated_session():
 
 def apply_premium_style():
     ensure_authenticated_session()
-    
-    # 자동 로그인 체크 시에만 브라우저 쿠키에 토큰 동기화 (새 탭/새 창용)
-    token = st.session_state.get("_session_token")
-    auto_login = st.session_state.get("_auto_login", False)
-    if token and auto_login:
-        st.components.v1.html(f"""<script>document.cookie="iwp_token={token};path=/;max-age=2592000";</script>""", height=0)
 
     st.markdown("""
         <style>

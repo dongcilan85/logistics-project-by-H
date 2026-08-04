@@ -756,9 +756,10 @@ def login_screen():
                         token = str(uuid.uuid4())
                         session_data = json.dumps({"role": target_role, "created_at": datetime.now(KST).isoformat()})
                         set_config(f"session_{token}", session_data)
+                        if auto_login:
+                            set_config("auto_session", token)
                         st.session_state.role = target_role
                         st.session_state._session_token = token
-                        st.session_state._auto_login = auto_login
                         st.query_params["token"] = token
                         st.rerun()
 
@@ -851,12 +852,12 @@ else:
         if token:
             try:
                 supabase.table("system_config").delete().eq("key", f"session_{token}").execute()
+                supabase.table("system_config").delete().eq("key", "auto_session").execute()
             except Exception:
                 pass
         st.session_state.role = None
         st.session_state._session_token = None
         st.query_params.clear()
-        st.components.v1.html("""<script>document.cookie="iwp_token=;path=/;max-age=0";</script>""", height=0)
         st.rerun()
     if sc2.button("🔑 PW변경", use_container_width=True): change_password_dialog()
 
