@@ -453,24 +453,24 @@ class EcountRPA:
                     body.press("Enter")
                     time.sleep(0.3)
                     self._click_output_type(frame, "(종)")
-                    # +4일 버튼 클릭으로 조회
+                    time.sleep(0.5)
+                    # +4일 버튼 클릭으로 조회 (최근 1년 클릭 방식과 동일)
+                    self._log("  📅 '+4일' 버튼 클릭...")
                     clicked_4day = False
-                    seen = set()
                     for f in [frame, self.page.main_frame] + list(self.page.frames):
-                        if f.is_detached() or id(f) in seen:
+                        if f.is_detached():
                             continue
-                        seen.add(id(f))
                         try:
                             loc = f.get_by_text("+4일", exact=True).first
                             if loc.count() > 0:
                                 loc.click(force=True)
-                                self._log("  ✅ '+4일' 버튼 클릭 완료")
+                                self._log("  ✅ '+4일' 클릭 성공")
                                 clicked_4day = True
                                 break
                         except Exception:
-                            pass
+                            continue
                     if not clicked_4day:
-                        self._log("  ⚠️ '+4일' 버튼을 찾지 못해 F8 폴백")
+                        self._log("  ⚠️ '+4일' 텍스트 못 찾음 - F8 폴백")
                         body.press("F8")
                 else:
                     self._log("  ⌨️ 다음 창고 시퀀스")
