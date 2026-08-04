@@ -1367,7 +1367,7 @@ with tab4:
         # 비가용 재고 중 이슈 품목에 해당하고 재고가 존재하는 행 필터링
         unavail_issues = unavail_df[
             (unavail_df['item_code'].isin(issue_item_codes)) & 
-            (unavail_df['stock_qty'] > 0)
+            (unavail_df['stock_qty'] != 0)
         ].copy()
         
         # 💡 [요구사항] 상단 가용재고 필터 조작 시 비가용 테이블도 연동 필터링 처리
