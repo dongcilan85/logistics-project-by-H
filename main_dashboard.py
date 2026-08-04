@@ -9,6 +9,7 @@ import io
 import os
 import uuid
 import json
+import extra_streamlit_components as stx
 from utils.style import apply_premium_style, ensure_authenticated_session, get_chart_colors
 
 # 1. 페이지 설정 (최상단 고정)
@@ -23,11 +24,44 @@ key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 KST = timezone(timedelta(hours=9))
 
-# 💡 [Session Restore] DB 토큰 기반 로그인 세션 복원 + 동기화
+# 💡 [Cookie Manager] 브라우저별 자동 로그인용 쿠키 매니저
+cookie_manager = stx.CookieManager(key="iwp_cm")
+
+# 로그인 후 pending 쿠키 설정 처리
+if "_pending_auto_token" in st.session_state:
+    cookie_manager.set("iwp_token", st.session_state._pending_auto_token, expires_at=datetime.now() + timedelta(days=30))
+    del st.session_state._pending_auto_token
+
+# 로그아웃 후 pending 쿠키 삭제 처리
+if "_pending_delete_cookie" in st.session_state:
+    cookie_manager.delete("iwp_token")
+    del st.session_state._pending_delete_cookie
+
+# 💡 [Session Restore] 쿠키 기반 자동 로그인 (새 탭/새 창용)
 if "role" not in st.session_state or st.session_state.role is None:
-    # ensure_authenticated_session()에서 이미 처리되지만, 메인 진입점에서도 한번 더 보장
+    token = st.query_params.get("token", None)
+    # query_params에 토큰이 없으면 쿠키에서 확인
+    if not token:
+        token = cookie_manager.get("iwp_token")
+    if token:
+        try:
+            res = supabase.table("system_config").select("value").eq("key", f"session_{token}").execute()
+            if res.data:
+                data = json.loads(res.data[0]['value'])
+                role = data.get('role')
+                if role in ("Admin", "Staff", "Guest"):
+                    st.session_state.role = role
+                    st.session_state._session_token = token
+                    if st.query_params.get("token") != token:
+                        st.query_params["token"] = token
+        except Exception:
+            pass
     if st.session_state.get("role") is None:
         st.session_state.role = None
+elif st.session_state.role in ("Admin", "Staff", "Guest"):
+    token = st.session_state.get("_session_token")
+    if token and st.query_params.get("token") != token:
+        st.query_params["token"] = token
 
 # --- [시스템 유틸리티 로직] ---
 def get_config(key, default):
@@ -756,11 +790,11 @@ def login_screen():
                         token = str(uuid.uuid4())
                         session_data = json.dumps({"role": target_role, "created_at": datetime.now(KST).isoformat()})
                         set_config(f"session_{token}", session_data)
-                        if auto_login:
-                            set_config("auto_session", token)
                         st.session_state.role = target_role
                         st.session_state._session_token = token
                         st.query_params["token"] = token
+                        if auto_login:
+                            st.session_state._pending_auto_token = token
                         st.rerun()
 
 
@@ -852,11 +886,11 @@ else:
         if token:
             try:
                 supabase.table("system_config").delete().eq("key", f"session_{token}").execute()
-                supabase.table("system_config").delete().eq("key", "auto_session").execute()
             except Exception:
                 pass
         st.session_state.role = None
         st.session_state._session_token = None
+        st.session_state._pending_delete_cookie = True
         st.query_params.clear()
         st.rerun()
     if sc2.button("🔑 PW변경", use_container_width=True): change_password_dialog()

@@ -20,28 +20,14 @@ def _validate_session_token(token):
     return None
 
 def ensure_authenticated_session():
-    """DB 토큰 기반 세션 복원 + 자동 로그인"""
+    """query_params 토큰 기반 세션 복원 + 페이지 전환 시 동기화"""
     if "role" not in st.session_state or st.session_state.role is None:
-        # 1. query_params에서 토큰 확인
         token = st.query_params.get("token", None)
-        # 2. 없으면 DB에서 자동 로그인 세션 조회 (새 탭/새 창용)
-        if not token:
-            try:
-                sb = _get_supabase()
-                res = sb.table("system_config").select("value").eq("key", "auto_session").execute()
-                if res.data:
-                    token = res.data[0]['value']
-            except Exception:
-                pass
-        # 3. 토큰이 있으면 DB에서 role 조회
         if token:
             role = _validate_session_token(token)
             if role:
                 st.session_state.role = role
                 st.session_state._session_token = token
-                st.session_state._auto_login = True
-                if st.query_params.get("token") != token:
-                    st.query_params["token"] = token
     elif st.session_state.role in ("Admin", "Staff", "Guest"):
         # 페이지 전환 시 query_params 동기화
         token = st.session_state.get("_session_token")
