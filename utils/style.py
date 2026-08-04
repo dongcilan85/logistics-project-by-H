@@ -36,6 +36,7 @@ def ensure_authenticated_session():
             if role:
                 st.session_state.role = role
                 st.session_state._session_token = token
+                st.session_state._auto_login = True
                 if st.query_params.get("token") != token:
                     st.query_params["token"] = token
     elif st.session_state.role in ("Admin", "Staff", "Guest"):
@@ -47,9 +48,10 @@ def ensure_authenticated_session():
 def apply_premium_style():
     ensure_authenticated_session()
     
-    # 세션 토큰이 있으면 브라우저 쿠키에 동기화 (새 탭/새 창용)
+    # 자동 로그인 체크 시에만 브라우저 쿠키에 토큰 동기화 (새 탭/새 창용)
     token = st.session_state.get("_session_token")
-    if token:
+    auto_login = st.session_state.get("_auto_login", False)
+    if token and auto_login:
         st.components.v1.html(f"""<script>document.cookie="iwp_token={token};path=/;max-age=2592000";</script>""", height=0)
 
     st.markdown("""

@@ -744,6 +744,7 @@ def login_screen():
         with st.container(border=True):
             with st.form("login_form", border=False):
                 pw = st.text_input("비밀번호", type="password")
+                auto_login = st.checkbox("☑ 자동 로그인", value=True)
                 if st.form_submit_button("접속", use_container_width=True, type="primary"):
                     target_role = None
                     if pw == get_admin_password(): target_role = "Admin"
@@ -757,6 +758,7 @@ def login_screen():
                         set_config(f"session_{token}", session_data)
                         st.session_state.role = target_role
                         st.session_state._session_token = token
+                        st.session_state._auto_login = auto_login
                         st.query_params["token"] = token
                         st.rerun()
 
