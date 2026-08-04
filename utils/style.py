@@ -1,38 +1,15 @@
 import streamlit as st
-import json
-
-def _get_supabase():
-    from supabase import create_client
-    return create_client(st.secrets["supabase"]["url"], st.secrets["supabase"]["key"])
-
-def _validate_session_token(token):
-    """DB에서 세션 토큰을 검증하고 role 반환"""
-    try:
-        sb = _get_supabase()
-        res = sb.table("system_config").select("value").eq("key", f"session_{token}").execute()
-        if res.data:
-            data = json.loads(res.data[0]['value'])
-            role = data.get('role')
-            if role in ("Admin", "Staff", "Guest"):
-                return role
-    except Exception:
-        pass
-    return None
 
 def ensure_authenticated_session():
-    """query_params 토큰 기반 세션 복원 + 페이지 전환 시 동기화"""
+    """st.query_params 기반 세션 복원 + 페이지 전환 시 동기화"""
     if "role" not in st.session_state or st.session_state.role is None:
-        token = st.query_params.get("token", None)
-        if token:
-            role = _validate_session_token(token)
-            if role:
-                st.session_state.role = role
-                st.session_state._session_token = token
+        q_val = st.query_params.get("role", None)
+        if q_val in ("Admin", "Staff", "Guest"):
+            st.session_state.role = q_val
     elif st.session_state.role in ("Admin", "Staff", "Guest"):
-        # 페이지 전환 시 query_params 동기화
-        token = st.session_state.get("_session_token")
-        if token and st.query_params.get("token") != token:
-            st.query_params["token"] = token
+        # 페이지 전환 시 query_params가 사라지면 다시 동기화
+        if st.query_params.get("role") != st.session_state.role:
+            st.query_params["role"] = st.session_state.role
 
 def apply_premium_style():
     ensure_authenticated_session()
