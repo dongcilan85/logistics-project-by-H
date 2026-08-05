@@ -77,7 +77,7 @@ else:
         c1, c2, c3 = st.columns([2.5, 1.2, 1])
         with c1:
             if target_pw:
-                st.markdown(f"<span style='font-size:13px;'><b>저장된 PW:</b> <code>{target_pw}</code></span>", unsafe_allow_html=True)
+                st.markdown("<span style='font-size:13px;'><b>저장된 PW:</b> <code>••••••••</code> (클립보드 복사 지원)</span>", unsafe_allow_html=True)
             else:
                 st.caption("등록된 비밀번호가 없습니다. [재고관리 환경설정]에서 등록하실 수 있습니다.")
         with c2:

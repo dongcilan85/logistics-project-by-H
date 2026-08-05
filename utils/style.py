@@ -1,15 +1,45 @@
 import streamlit as st
 
+import json
+
+def _validate_session_token(token):
+    """DB에서 세션 토큰을 검증하고 role 반환"""
+    if not token or len(token) < 16:
+        return None
+    try:
+        from supabase import create_client
+        sb = create_client(st.secrets["supabase"]["url"], st.secrets["supabase"]["key"])
+        res = sb.table("system_config").select("value").eq("key", f"session_{token}").execute()
+        if res.data:
+            data = json.loads(res.data[0]['value'])
+            role = data.get('role')
+            if role in ("Admin", "Staff", "Guest"):
+                return role
+    except Exception:
+        pass
+    return None
+
 def ensure_authenticated_session():
-    """st.query_params 기반 세션 복원 + 페이지 전환 시 동기화"""
+    """난수 세션 토큰(?s=...) 기반 세션 복원 및 ?role=Admin URL 우회 강제 차단"""
+    # 💡 URL query_params에 role이 노출되거나 직접 입력된 경우 즉시 제거 (보안 강화)
+    if "role" in st.query_params:
+        del st.query_params["role"]
+
     if "role" not in st.session_state or st.session_state.role is None:
-        q_val = st.query_params.get("role", None)
-        if q_val in ("Admin", "Staff", "Guest"):
-            st.session_state.role = q_val
+        s_token = st.query_params.get("s", None)
+        if s_token:
+            role = _validate_session_token(s_token)
+            if role:
+                st.session_state.role = role
+                st.session_state._session_token = s_token
+            else:
+                st.session_state.role = None
+                if "s" in st.query_params:
+                    del st.query_params["s"]
     elif st.session_state.role in ("Admin", "Staff", "Guest"):
-        # 페이지 전환 시 query_params가 사라지면 다시 동기화
-        if st.query_params.get("role") != st.session_state.role:
-            st.query_params["role"] = st.session_state.role
+        s_token = st.session_state.get("_session_token")
+        if s_token and st.query_params.get("s") != s_token:
+            st.query_params["s"] = s_token
 
 def apply_premium_style():
     ensure_authenticated_session()

@@ -21,23 +21,43 @@ key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 KST = timezone(timedelta(hours=9))
 
-# 💡 [Session Restore] st.query_params 기반 로그인 세션 복원 + 동기화
+import secrets
+import json
+
+# 💡 [Session Restore] st.query_params ?role= 우회 차단 및 난수 세션 토큰(?s=...) 기반 검증
+if "role" in st.query_params:
+    del st.query_params["role"]
+
 if "role" not in st.session_state or st.session_state.role is None:
-    q_role = st.query_params.get("role", None)
-    if q_role in ("Admin", "Staff", "Guest"):
-        st.session_state.role = q_role
-    else:
+    s_token = st.query_params.get("s", None)
+    if s_token:
+        try:
+            res = supabase.table("system_config").select("value").eq("key", f"session_{s_token}").execute()
+            if res.data:
+                data = json.loads(res.data[0]['value'])
+                role = data.get('role')
+                if role in ("Admin", "Staff", "Guest"):
+                    st.session_state.role = role
+                    st.session_state._session_token = s_token
+        except Exception:
+            pass
+    if st.session_state.get("role") is None:
         st.session_state.role = None
 elif st.session_state.role in ("Admin", "Staff", "Guest"):
-    if st.query_params.get("role") != st.session_state.role:
-        st.query_params["role"] = st.session_state.role
+    s_token = st.session_state.get("_session_token")
+    if s_token and st.query_params.get("s") != s_token:
+        st.query_params["s"] = s_token
 
 # --- [시스템 유틸리티 로직] ---
-def get_config(key, default):
+def get_config(key, default=None):
+    """Fail-Closed: DB 통신 에러 발생 시 예외를 무시하지 않고 None을 반환하여 기본값 우회 차단"""
     try:
         res = supabase.table("system_config").select("value").eq("key", key).execute()
-        return res.data[0]['value'] if res.data else default
-    except: return default
+        if res.data:
+            return res.data[0]['value']
+        return default
+    except Exception:
+        return None
 
 def set_config(key, value):
     try:
@@ -46,10 +66,12 @@ def set_config(key, value):
         st.error(f"설정 저장 실패: {e}")
 
 def get_admin_password():
-    return get_config("admin_password", "admin123")
+    pw = get_config("admin_password", "admin123")
+    return pw
 
 def get_staff_password():
-    return get_config("staff_password", "staff123")
+    pw = get_config("staff_password", "staff123")
+    return pw
 
 @st.dialog("🔐 PW 변경")
 def change_password_dialog():
@@ -748,16 +770,29 @@ def login_screen():
             with st.form("login_form", border=False):
                 pw = st.text_input("비밀번호", type="password")
                 if st.form_submit_button("접속", use_container_width=True, type="primary"):
-                    target_role = None
-                    if pw == get_admin_password(): target_role = "Admin"
-                    elif pw == get_staff_password(): target_role = "Staff"
-                    elif pw == "": target_role = "Guest"
-                    else: st.error("비밀번호 불일치")
+                    admin_pw = get_admin_password()
+                    staff_pw = get_staff_password()
                     
-                    if target_role:
-                        st.session_state.role = target_role
-                        st.query_params["role"] = target_role
-                        st.rerun()
+                    if admin_pw is None or staff_pw is None:
+                        st.error("🚨 DB 통신 오류로 로그인 검증을 진행할 수 없습니다. 잠시 후 다시 시도해 주세요.")
+                    else:
+                        target_role = None
+                        if pw == admin_pw: target_role = "Admin"
+                        elif pw == staff_pw: target_role = "Staff"
+                        elif pw == "": target_role = "Guest"
+                        else: st.error("비밀번호가 일치하지 않습니다.")
+                        
+                        if target_role:
+                            s_token = secrets.token_hex(16)
+                            session_payload = json.dumps({
+                                "role": target_role,
+                                "created_at": datetime.now(KST).isoformat()
+                            })
+                            set_config(f"session_{s_token}", session_payload)
+                            st.session_state.role = target_role
+                            st.session_state._session_token = s_token
+                            st.query_params["s"] = s_token
+                            st.rerun()
 
 
 # 💡 세션 0.001초 최우선 검증 및 Page not found 방어
@@ -844,7 +879,14 @@ else:
     st.sidebar.divider()
     sc1, sc2 = st.sidebar.columns(2)
     if sc1.button("🔓 로그아웃", use_container_width=True):
+        s_token = st.session_state.get("_session_token")
+        if s_token:
+            try:
+                supabase.table("system_config").delete().eq("key", f"session_{s_token}").execute()
+            except Exception:
+                pass
         st.session_state.role = None
+        st.session_state._session_token = None
         st.query_params.clear()
         st.rerun()
     if sc2.button("🔑 PW변경", use_container_width=True): change_password_dialog()
