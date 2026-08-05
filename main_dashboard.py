@@ -198,7 +198,7 @@ def show_admin_dashboard():
     # [B] 실시간 모니터링 및 원격 종료
     st.header("🕵️ 실시간 현장 작업 현황")
     
-    @st.fragment(run_every=1)
+    @st.fragment(run_every=3)
     def show_active_tasks():
         st.subheader("🚀 실시간 현황 (v2)")
         
@@ -815,7 +815,7 @@ else:
         st.sidebar.divider()
         st.sidebar.subheader("🔄 ERP 동기화")
 
-        @st.fragment(run_every=1)
+        @st.fragment(run_every=5)
         def show_rpa_controls():
             rpa_status = get_config("rpa_status", "idle")
             rpa_msg = get_config("rpa_message", "대기 중")

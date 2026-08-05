@@ -41,33 +41,37 @@ st.title("⚙️ 재고 및 RPA 환경설정")
 st.subheader("🔑 이카운트 계정 설정")
 
 st.markdown("#### 🏢 본사 (HQ) 계정")
+saved_hq_pw = get_config("ecount_user_pw", "")
 with st.container(border=True):
     col1, col2, col3 = st.columns(3)
     with col1:
-        com_code = st.text_input("회사 코드", value=get_config("ecount_com_code"), key="hq_com")
+        com_code = st.text_input("회사 코드", value=get_config("ecount_com_code", ""), key="hq_com")
     with col2:
-        user_id = st.text_input("아이디", value=get_config("ecount_user_id"), key="hq_id")
+        user_id = st.text_input("아이디", value=get_config("ecount_user_id", ""), key="hq_id")
     with col3:
-        user_pw = st.text_input("비밀번호", type="password", value=get_config("ecount_user_pw"), key="hq_pw")
+        user_pw = st.text_input("비밀번호", type="password", value="", placeholder="•••••••• (저장됨)" if saved_hq_pw else "비밀번호 입력", key="hq_pw")
 
 st.markdown("#### 🏭 허브 (Hub) 계정 (선택사항)")
 st.caption("허브 계정 정보를 입력하시면, RPA 수집 시 본사 재고와 허브 재고(단순재고)를 함께 수집합니다.")
+saved_hub_pw = get_config("hub_user_pw", "")
 with st.container(border=True):
     hc1, hc2, hc3 = st.columns(3)
     with hc1:
-        hub_com = st.text_input("허브 회사 코드", value=get_config("hub_com_code"), key="hub_com")
+        hub_com = st.text_input("허브 회사 코드", value=get_config("hub_com_code", ""), key="hub_com")
     with hc2:
-        hub_id = st.text_input("허브 아이디", value=get_config("hub_user_id"), key="hub_id")
+        hub_id = st.text_input("허브 아이디", value=get_config("hub_user_id", ""), key="hub_id")
     with hc3:
-        hub_pw = st.text_input("허브 비밀번호", type="password", value=get_config("hub_user_pw"), key="hub_pw")
+        hub_pw = st.text_input("허브 비밀번호", type="password", value="", placeholder="•••••••• (저장됨)" if saved_hub_pw else "비밀번호 입력", key="hub_pw")
         
 if st.button("💾 계정 정보 일괄 저장", use_container_width=True, type="primary"):
     set_config("ecount_com_code", com_code)
     set_config("ecount_user_id", user_id)
-    set_config("ecount_user_pw", user_pw)
+    if user_pw.strip():
+        set_config("ecount_user_pw", user_pw.strip())
     set_config("hub_com_code", hub_com)
     set_config("hub_user_id", hub_id)
-    set_config("hub_user_pw", hub_pw)
+    if hub_pw.strip():
+        set_config("hub_user_pw", hub_pw.strip())
     st.success("✅ 본사 및 허브 계정 정보가 안전하게 저장되었습니다.")
     time.sleep(1)
     st.rerun()
@@ -101,13 +105,15 @@ st.divider()
 # [UI: 덴티스테 발주현황 미러링 연동 설정]
 # -------------------------------------------------------------
 st.subheader("🚚 덴티스테 발주현황 미러링 연동 설정")
+saved_den_pw = get_config("dentiste_order_pw", "")
 with st.container(border=True):
-    m_url = st.text_input("🔗 발주현황 웹사이트 URL", value=get_config("dentiste_order_url"), placeholder="https://example.com/order")
-    m_pw = st.text_input("🔑 접속 비밀번호", type="password", value=get_config("dentiste_order_pw"), placeholder="접속 비밀번호 입력")
+    m_url = st.text_input("🔗 발주현황 웹사이트 URL", value=get_config("dentiste_order_url", ""), placeholder="https://example.com/order")
+    m_pw = st.text_input("🔑 접속 비밀번호", type="password", value="", placeholder="•••••••• (저장됨)" if saved_den_pw else "접속 비밀번호 입력")
     
     if st.button("💾 발주현황 미러링 설정 저장", use_container_width=True):
         set_config("dentiste_order_url", m_url)
-        set_config("dentiste_order_pw", m_pw)
+        if m_pw.strip():
+            set_config("dentiste_order_pw", m_pw.strip())
         st.success("✅ 덴티스테 발주현황 미러링 정보가 안전하게 저장되었습니다.")
         time.sleep(1)
         st.rerun()
