@@ -1,3 +1,4 @@
+streamlit
 pandas
 supabase
 plotly
@@ -7,4 +8,4 @@ kaleido==0.2.1
 playwright
 # 아래는 백업용 (utils/ecount_rpa_selenium.py)
 selenium
-webdriver-manager
+webdriver-manager
