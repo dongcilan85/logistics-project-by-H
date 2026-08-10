@@ -808,7 +808,7 @@ else:
     site_page = st.Page("pages/field_input.py", title="현장 기록", icon="🚩", url_path="field", default=(st.session_state.role == "Guest"))
     warehouse_page = st.Page("pages/warehouse_mgmt.py", title="재고관리", icon="📦", url_path="warehouse")
     warehouse_settings_page = st.Page("pages/warehouse_settings.py", title="재고관리 환경설정", icon="⚙️", url_path="warehouse_settings")
-    dentiste_order_page = st.Page("pages/dentiste_order_status.py", title="덴티스테 발주현황", icon="🚚", url_path="dentiste_order")
+    dentiste_order_page = st.Page("pages/dentiste_order_status.py", title="덴티스테 수입운영시스템", icon="🚚", url_path="dentiste_order")
     
     # --- [사이드바: RPA 제어 섹션 - Admin 전용] ---
     if st.session_state.role == "Admin":

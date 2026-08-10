@@ -59,7 +59,7 @@ div[data-testid="stExpander"] details div[data-testid="stExpanderDetails"] {
 }
 </style>
 <div class="compact-mirror-header">
-    <span>🚚 덴티스테 발주현황 미러링</span>
+    <span>🚚 덴티스테 수입운영시스템 미러링</span>
 </div>
 """, unsafe_allow_html=True)
 
