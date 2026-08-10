@@ -1356,18 +1356,20 @@ with tab4:
     issue_df = avail_df[avail_df['item_code'].isin(agg_df[agg_df['status'].isin(["❌ 품절", "⚠️ 부족"])]['item_code'])]
     display_inventory_table(issue_df, "issue")
     
-    # 💡 [요구사항] 가용창고에 품절/부족이 발생한 품목에 대해, 비가용창고(불량, 보류 등)에 잠겨 있는 재고 내역을 별도로 매핑 표기
+    # 💡 [요구사항] 가용창고에 품절/부족이 발생한 품목에 대해, 비가용창고(불량, 보류 등) 및 허브창고 재고 내역을 별도로 매핑 표기
     st.markdown("---")
-    st.markdown("### 🚨 비가용창고 재고현황 (사용 필요시 담당자와 협의 필수)")
+    st.markdown("### 🚨 비가용창고 및 허브 재고현황 (사용 필요시 담당자와 협의 필수)")
     
-    if not issue_df.empty and not unavail_df.empty:
+    if not issue_df.empty:
         # 가용 품절/부족이 난 품목 코드셋
         issue_item_codes = issue_df['item_code'].unique()
         
-        # 비가용 재고 중 이슈 품목에 해당하고 재고가 존재하는 행 필터링
-        unavail_issues = unavail_df[
-            (unavail_df['item_code'].isin(issue_item_codes)) & 
-            (unavail_df['stock_qty'] != 0)
+        # 비가용 재고(is_available == False) 및 허브 재고(division == '허브') 중 이슈 품목 대상 필터링
+        target_unavail_df = df[(df['is_available'] == False) | (df['division'] == '허브')].copy()
+        
+        unavail_issues = target_unavail_df[
+            (target_unavail_df['item_code'].isin(issue_item_codes)) & 
+            (target_unavail_df['stock_qty'] != 0)
         ].copy()
         
         # 💡 [요구사항] 상단 가용재고 필터 조작 시 비가용 테이블도 연동 필터링 처리
@@ -1405,7 +1407,7 @@ with tab4:
             unavail_issues = unavail_issues[unavail_issues['brand'].isin(sel_brand)]
         
         if not unavail_issues.empty:
-            # 표시할 컬럼 정리 (브랜드 컬럼 포함)
+            # 표시할 컬럼 정리 (기존 컬럼명 100% 유지)
             disp_cols = ['division', 'warehouse_name', 'item_code', 'item_name_spec']
             col_rename = {
                 'division': '구분',
@@ -1434,9 +1436,9 @@ with tab4:
                 hide_index=True
             )
         else:
-            st.info("💡 현재 품절/부족 상태인 품목 중 비가용창고에 보관된 재고가 없습니다.")
+            st.info("💡 현재 품절/부족 상태인 품목 중 비가용창고 또는 허브창고에 보관된 재고가 없습니다.")
     else:
-        st.info("💡 현재 품절/부족 상태인 품목 중 비가용창고에 보관된 재고가 없습니다.")
+        st.info("💡 현재 품절/부족 상태인 품목 중 비가용창고 또는 허브창고에 보관된 재고가 없습니다.")
 with tab5:
     # 💡 [요구사항] 과잉재고 테이블 표출 시 본사 재고만 한정 필터링 (허브 재고 원천 차단)
     excess_df = avail_df[
