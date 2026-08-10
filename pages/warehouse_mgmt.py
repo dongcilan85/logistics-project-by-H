@@ -992,8 +992,8 @@ total_asset = avail_asset + unavail_asset
 # --- KPI 카드 스타일 ---
 st.markdown("""
 <style>
-/* 기본 (Secondary) KPI 버튼 */
-div[data-testid="stHorizontalBlock"] button {
+/* 기본 (Secondary) KPI 버튼 - KPI 영역으로 타겟팅 스코프 한정 */
+div[data-testid="stVerticalBlock"]:has(.kpi-buttons-container) div[data-testid="stHorizontalBlock"] .stButton > button {
     width: 100% !important;
     padding: 0.35rem 0.4rem !important;
     min-height: 40px !important;
@@ -1002,24 +1002,22 @@ div[data-testid="stHorizontalBlock"] button {
     transition: all 0.2s ease !important;
 }
 /* 버튼 내부 텍스트 폰트 12pt, 굵기 500 */
-div[data-testid="stHorizontalBlock"] button p,
-div[data-testid="stHorizontalBlock"] button span,
-div[data-testid="stHorizontalBlock"] button div {
+div[data-testid="stVerticalBlock"]:has(.kpi-buttons-container) div[data-testid="stHorizontalBlock"] .stButton > button p,
+div[data-testid="stVerticalBlock"]:has(.kpi-buttons-container) div[data-testid="stHorizontalBlock"] .stButton > button span,
+div[data-testid="stVerticalBlock"]:has(.kpi-buttons-container) div[data-testid="stHorizontalBlock"] .stButton > button div {
     font-size: 12pt !important;
     font-weight: 500 !important;
     line-height: 1.25 !important;
     white-space: pre-wrap !important;
 }
-div[data-testid="stHorizontalBlock"] button:hover {
+div[data-testid="stVerticalBlock"]:has(.kpi-buttons-container) div[data-testid="stHorizontalBlock"] .stButton > button:hover {
     border-color: #10b981 !important;
     transform: translateY(-1px) !important;
     box-shadow: 0 3px 10px rgba(16, 185, 129, 0.3) !important;
 }
 /* 활성화된 (Primary) KPI 버튼 녹색(Green) 스타일 */
-div[data-testid="stHorizontalBlock"] button[kind="primary"],
-div[data-testid="stHorizontalBlock"] button[data-testid*="primary"],
-button[kind="primary"],
-button[data-testid*="primary"] {
+div[data-testid="stVerticalBlock"]:has(.kpi-buttons-container) div[data-testid="stHorizontalBlock"] .stButton > button[kind="primary"],
+div[data-testid="stVerticalBlock"]:has(.kpi-buttons-container) div[data-testid="stHorizontalBlock"] .stButton > button[data-testid*="primary"] {
     width: 100% !important;
     padding: 0.35rem 0.4rem !important;
     min-height: 40px !important;
@@ -1031,10 +1029,8 @@ button[data-testid*="primary"] {
     box-shadow: 0 4px 14px rgba(16, 185, 129, 0.5) !important;
     transform: translateY(-1px) !important;
 }
-div[data-testid="stHorizontalBlock"] button[kind="primary"]:hover,
-div[data-testid="stHorizontalBlock"] button[data-testid*="primary"]:hover,
-button[kind="primary"]:hover,
-button[data-testid*="primary"]:hover {
+div[data-testid="stVerticalBlock"]:has(.kpi-buttons-container) div[data-testid="stHorizontalBlock"] .stButton > button[kind="primary"]:hover,
+div[data-testid="stVerticalBlock"]:has(.kpi-buttons-container) div[data-testid="stHorizontalBlock"] .stButton > button[data-testid*="primary"]:hover {
     background-color: #059669 !important;
     border-color: #6ee7b7 !important;
     box-shadow: 0 6px 16px rgba(16, 185, 129, 0.7) !important;
@@ -1061,6 +1057,7 @@ span[data-baseweb="tag"] span {
 if 'kpi_selected' not in st.session_state:
     st.session_state.kpi_selected = None
 
+st.markdown('<div class="kpi-buttons-container"></div>', unsafe_allow_html=True)
 c1, c2, c3, c4 = st.columns(4)
 with c1:
     if st.button(f"🔴 유효기간 임박\n{urgent_count} 건", use_container_width=True, type="primary" if st.session_state.kpi_selected == "urgent" else "secondary"):
