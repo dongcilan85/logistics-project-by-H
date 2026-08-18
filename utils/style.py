@@ -53,29 +53,6 @@ def apply_premium_style():
             transition: background-color 0.4s ease, color 0.4s ease;
         }
 
-        /* --- [Streamlit 깃허브 아이콘 및 툴바 메뉴 정밀 차단 (사이드바 펼치기 버튼 보존)] --- */
-        [data-testid="stToolbar"],
-        [data-testid="stStatusWidget"],
-        [data-testid="stMainMenu"],
-        [data-testid="stDecoration"],
-        button[title*="View code"],
-        a[title*="View code"],
-        a[href*="github.com"] {
-            display: none !important;
-            visibility: hidden !important;
-            opacity: 0 !important;
-            pointer-events: none !important;
-        }
-
-        /* 사이드바 펼치기/접기 버튼 100% 정상 가시성 보장 */
-        [data-testid="stSidebarCollapsedControl"],
-        [data-testid="collapsedControl"] {
-            display: inline-flex !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-            z-index: 10000005 !important;
-        }
-
         /* --- [Sidebar Hybrid Sync: Solid Background + Theme Compliance] --- */
         :root {
             --sb-bg: #FFFFFF;
