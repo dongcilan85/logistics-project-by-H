@@ -53,6 +53,15 @@ def apply_premium_style():
             transition: background-color 0.4s ease, color 0.4s ease;
         }
 
+        /* --- [Streamlit 상단 헤더 툴바 및 깃허브 아이콘 전면 차단] --- */
+        header[data-testid="stHeader"],
+        [data-testid="stHeader"],
+        .stAppHeader {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0 !important;
+        }
+
         /* --- [Sidebar Hybrid Sync: Solid Background + Theme Compliance] --- */
         :root {
             --sb-bg: #FFFFFF;
