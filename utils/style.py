@@ -53,6 +53,23 @@ def apply_premium_style():
             transition: background-color 0.4s ease, color 0.4s ease;
         }
 
+        /* --- [우측 상단 깃허브 아이콘 및 배포/툴바 액션 버튼 정밀 은닉 (사이드바 버튼 제외)] --- */
+        [data-testid="stToolbarAction"],
+        [data-testid="stAppDeployButton"],
+        [data-testid="stToolbarActionButton"],
+        [data-testid="stActionButtonIcon"],
+        div[class*="viewerBadge"],
+        div[class*="toolbarActions"],
+        a[href*="github.com"],
+        button[title*="GitHub"],
+        button[title*="View code"],
+        a[title*="View code"] {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+
         /* --- [Sidebar Hybrid Sync: Solid Background + Theme Compliance] --- */
         :root {
             --sb-bg: #FFFFFF;
