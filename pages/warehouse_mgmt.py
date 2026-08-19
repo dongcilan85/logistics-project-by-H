@@ -700,6 +700,8 @@ def display_inventory_table(target_df, key_suffix=""):
     res_df = target_df.copy()
     if 'division' in res_df.columns:
         res_df['division'] = res_df['division'].fillna("본사").astype(str)
+    else:
+        res_df['division'] = "본사"
         
     # 브랜드 필터 적용
     if 'brand' in res_df.columns and sel_brand:
@@ -721,16 +723,20 @@ def display_inventory_table(target_df, key_suffix=""):
             'inventory_cost': 'sum'
         }).reset_index()
     
-    # 상태: 품목별 합산 기준 상태 매핑 (유효기간별 개별 판단 X, 복합 키 적용)
-    div_col = res_df['division'] if 'division' in res_df.columns else pd.Series("본사", index=res_df.index)
-    res_df['status'] = (div_col + "_" + res_df['item_code']).map(item_status_map).fillna("✅ 정상")
-    
     # 다중 품목 필터 적용
     if selected_items:
         res_df = res_df[res_df['item_name_spec'].isin(selected_items)]
+        
+    # 조건에 일치하는 재고가 없는 경우 즉시 안내 메시지 출력 및 반환
+    if res_df.empty:
+        st.info("해당 조건의 데이터가 없습니다.")
+        return
+
+    # 상태: 품목별 합산 기준 상태 매핑 (유효기간별 개별 판단 X, 복합 키 적용)
+    res_df['status'] = (res_df['division'] + "_" + res_df['item_code']).map(item_status_map).fillna("✅ 정상")
     
     # 품목별 총 사용예정을 가져옴 (복합 키 적용)
-    res_df['total_planned'] = (div_col + "_" + res_df['item_code']).map(item_planned_map).fillna(0).astype(int)
+    res_df['total_planned'] = (res_df['division'] + "_" + res_df['item_code']).map(item_planned_map).fillna(0).astype(int)
     
     # 순차적 할당 (FIFO) 로직
     # 유효기간이 빠른 순(혹은 데이터 순)으로 planned_qty를 stock_qty에서 차감
@@ -797,27 +803,29 @@ def display_inventory_table(target_df, key_suffix=""):
     if sel_cat:
         res_df = res_df[res_df['category'].isin(sel_cat)]
         
+    if res_df.empty:
+        st.info("해당 조건의 데이터가 없습니다.")
+        return
+
     # 💡 [요구사항] 마스터 단가를 복합 키(소속_품목코드)로 정확히 매핑하여 unit_price 컬럼 신설 및 inventory_cost 재계산
     item_price_map = {}
     if not item_df_raw.empty:
         item_price_map = {f"{row['division']}_{row['item_code']}": int(float(row.get('unit_price', 0) or 0)) for _, row in item_df_raw.iterrows()}
-    div_col = res_df['division'] if 'division' in res_df.columns else pd.Series("본사", index=res_df.index)
-    res_df['unit_price'] = (div_col + "_" + res_df['item_code']).map(item_price_map).fillna(0).astype(int)
+    res_df['unit_price'] = (res_df['division'] + "_" + res_df['item_code']).map(item_price_map).fillna(0).astype(int)
     res_df['inventory_cost'] = res_df['stock_qty'] * res_df['unit_price']
     
     # 💡 [요구사항] 마스터 월평균사용량을 복합 키(소속_품목코드)로 정확히 매핑하여 monthly_avg_usage 컬럼 신설
     item_usage_map = {}
     if not item_df_raw.empty:
         item_usage_map = {f"{row['division']}_{row['item_code']}": int(float(row.get('monthly_avg_usage', 0) or 0)) for _, row in item_df_raw.iterrows()}
-    res_df['monthly_avg_usage'] = (div_col + "_" + res_df['item_code']).map(item_usage_map).fillna(0).astype(int)
+    res_df['monthly_avg_usage'] = (res_df['division'] + "_" + res_df['item_code']).map(item_usage_map).fillna(0).astype(int)
     
     # 💡 [방어 코드] 만약 res_df 에 excess_threshold 컬럼이 유실된 경우 품목 마스터에서 복합 키(소속_품목코드) 기준으로 안전하게 매핑 주입
     if 'excess_threshold' not in res_df.columns:
         excess_map = {}
         if not item_df_raw.empty:
             excess_map = {f"{row['division']}_{row['item_code']}": int(float(row.get('excess_threshold', 5) or 5)) for _, row in item_df_raw.iterrows()}
-        div_col = res_df['division'] if 'division' in res_df.columns else pd.Series("본사", index=res_df.index)
-        res_df['excess_threshold'] = (div_col + "_" + res_df['item_code']).map(excess_map).fillna(5).astype(int)
+        res_df['excess_threshold'] = (res_df['division'] + "_" + res_df['item_code']).map(excess_map).fillna(5).astype(int)
     else:
         # 💡 [요구사항] 절대수량 오염 방지 및 과잉배수(int) 20배 이하 한정 연동 (DB integer 타입 호환용)
         res_df['excess_threshold'] = res_df['excess_threshold'].apply(lambda x: int(float(x or 5.0)) if float(x or 5.0) <= 20.0 else 5)
