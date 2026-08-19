@@ -663,13 +663,13 @@ def display_inventory_table(target_df, key_suffix=""):
     if target_df.empty:
         st.info("해당 조건의 데이터가 없습니다.")
         return
-    wh_list = ["전체"] + sorted(target_df['warehouse_name'].unique().tolist())
     
     # 💡 [요구사항] 창고, 품목검색 및 교차 필터를 하나의 접이식 패널로 통합하여 UI 공간 극대화
     with st.expander("🔍 재고 조건 필터링 (창고 ｜ 품목 ｜ 상태 ｜ 유효기간 ｜ 분류)", expanded=False):
         f1, f2 = st.columns([1, 3])
         with f1:
-            sel_wh = st.selectbox("🏢 창고 필터", wh_list, key=f"wh_{key_suffix}")
+            wh_options = sorted(target_df['warehouse_name'].unique().tolist())
+            sel_wh = st.multiselect("🏢 창고 필터", wh_options, default=[], key=f"wh_{key_suffix}", placeholder="전체")
         with f2:
             # 품목 목록 생성 (코드 + 품목명 조합으로 검색 편의성 확보)
             item_options = sorted(target_df['item_name_spec'].dropna().unique().tolist())
@@ -705,8 +705,8 @@ def display_inventory_table(target_df, key_suffix=""):
     if 'brand' in res_df.columns and sel_brand:
         res_df = res_df[res_df['brand'].isin(sel_brand)]
         
-    if sel_wh != "전체":
-        res_df = res_df[res_df['warehouse_name'] == sel_wh]
+    if sel_wh:
+        res_df = res_df[res_df['warehouse_name'].isin(sel_wh)]
     else:
         group_cols = ['warehouse_name', 'item_code', 'item_name_spec', 'category', 'expiration_date', 'exp_status']
         if 'division' in res_df.columns:
@@ -1369,7 +1369,7 @@ with tab4:
         ].copy()
         
         # 💡 [요구사항] 상단 가용재고 필터 조작 시 비가용 테이블도 연동 필터링 처리
-        sel_wh = st.session_state.get("wh_issue", "전체")
+        sel_wh = st.session_state.get("wh_issue", [])
         selected_items = st.session_state.get("ms_issue", [])
         sel_status = st.session_state.get("status_issue", [])
         sel_exp = st.session_state.get("exp_issue", [])
@@ -1377,8 +1377,8 @@ with tab4:
         sel_brand = st.session_state.get("brand_issue", [])
         
         # 1. 창고 필터링
-        if sel_wh != "전체":
-            unavail_issues = unavail_issues[unavail_issues['warehouse_name'] == sel_wh]
+        if sel_wh:
+            unavail_issues = unavail_issues[unavail_issues['warehouse_name'].isin(sel_wh)]
             
         # 2. 품목 검색 필터링
         if selected_items:
